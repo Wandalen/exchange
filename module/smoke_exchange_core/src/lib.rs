@@ -32,13 +32,51 @@
 //! `src/main.rs` is now the process entry point and nothing else, and
 //! `tests/lane_test.rs` drives what moved.
 
-use exchange_core::{ AccountId, Exchange, Money, Quantity, Side, verify };
+use exchange_core::
+{
+  AccountId, Consumer, Exchange, ExchangeError, InboundCmd, InstrumentId, Money, Order, OrderId, Producer, Quantity,
+  Receipt, Resting, SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
+};
 
 /// Both traders start with this much of everything, so the arithmetic in the
 /// printed output is easy to follow by hand.
 pub const OPENING_CASH : &str = "1000";
 /// And this much of the asset.
 pub const OPENING_ASSET : i64 = 100;
+/// The one instrument every arm trades — this lane never needed a second one
+/// to make its point, same as `exchange_core`'s own `submission_test.rs`.
+const INSTRUMENT : InstrumentId = InstrumentId( 1 );
+
+/// The ring-fed equivalent of the deleted `Exchange::submit( account, side,
+/// price, quantity )` — see `exchange_core`'s own module doc, "`exchange_step`
+/// replaces `submit`". `remaining`/`arrival` on the pushed [`Resting`] are
+/// never read by [`Exchange::exchange_step`] (it only extracts `.order` from
+/// a drained [`InboundCmd::Place`]), so both are placeholders; [`Tif::Gtc`]
+/// and [`SelfMatchPolicy::CancelIncoming`] match the old hardcoded
+/// submission semantics exactly, so every assertion below keeps its original
+/// meaning.
+fn submit
+(
+  exchange : &mut Exchange,
+  producer : &mut Producer< '_, InboundCmd >,
+  consumer : &mut Consumer< '_, InboundCmd >,
+  account : AccountId,
+  side : Side,
+  price : Money,
+  quantity : Quantity,
+) -> Result< Receipt, ExchangeError >
+{
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc };
+  let resting = Resting { order, remaining : quantity, arrival : Sequence( 0 ) };
+  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
+
+  match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
+  {
+    Some( StepOutcome::Placed( result ) ) => result,
+    other => panic!( "submit() only ever pushes Place — got {other:?}" ),
+  }
+}
 
 /// A [`Money`] from one of this lane's own literals.
 ///
@@ -81,14 +119,15 @@ pub fn crossing_arm() -> ( usize, Money, Money )
   let buyer = AccountId( 2 );
   exchange.open_account( seller, money( OPENING_CASH ), units( OPENING_ASSET ) ).expect( "fresh account, first deposit cannot overflow" );
   exchange.open_account( buyer, money( OPENING_CASH ), units( OPENING_ASSET ) ).expect( "fresh account, first deposit cannot overflow" );
+  let mut ring = inbound_ring( 8 ).expect( "a small power-of-two capacity is always valid" );
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  let resting = exchange
-  .submit( seller, Side::Sell, money( "2.50" ), units( 10 ) )
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, seller, Side::Sell, money( "2.50" ), units( 10 ) )
   .expect( "a funded sell rests" );
   assert!( resting.trades.is_empty(), "nothing was on the other side yet" );
 
-  let taking = exchange
-  .submit( buyer, Side::Buy, money( "2.50" ), units( 4 ) )
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, buyer, Side::Buy, money( "2.50" ), units( 4 ) )
   .expect( "a funded buy at the ask crosses" );
 
   assert_eq!( taking.trades.len(), 1, "the bid should have taken the one resting ask" );
@@ -128,13 +167,14 @@ pub fn control_arm() -> usize
   let buyer = AccountId( 2 );
   exchange.open_account( seller, money( OPENING_CASH ), units( OPENING_ASSET ) ).expect( "fresh account, first deposit cannot overflow" );
   exchange.open_account( buyer, money( OPENING_CASH ), units( OPENING_ASSET ) ).expect( "fresh account, first deposit cannot overflow" );
+  let mut ring = inbound_ring( 8 ).expect( "a small power-of-two capacity is always valid" );
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  exchange
-  .submit( seller, Side::Sell, money( "2.50" ), units( 10 ) )
+  submit( &mut exchange, &mut producer, &mut consumer, seller, Side::Sell, money( "2.50" ), units( 10 ) )
   .expect( "a funded sell rests" );
 
-  let through = exchange
-  .submit( buyer, Side::Buy, money( "2.49" ), units( 4 ) )
+  let through = submit( &mut exchange, &mut producer, &mut consumer, buyer, Side::Buy, money( "2.49" ), units( 4 ) )
   .expect( "a bid below the ask is accepted, it simply does not cross" );
 
   assert_eq!( through.trades.len(), 0, "a bid one minor unit below the ask must not cross it" );
@@ -161,9 +201,11 @@ pub fn cancel_arm() -> Money
   let mut exchange = Exchange::new();
   let buyer = AccountId( 1 );
   exchange.open_account( buyer, money( OPENING_CASH ), units( OPENING_ASSET ) ).expect( "fresh account, first deposit cannot overflow" );
+  let mut ring = inbound_ring( 8 ).expect( "a small power-of-two capacity is always valid" );
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  let resting = exchange
-  .submit( buyer, Side::Buy, money( "2.50" ), units( 10 ) )
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, buyer, Side::Buy, money( "2.50" ), units( 10 ) )
   .expect( "a funded buy rests" );
 
   let held = exchange.escrow().account( buyer ).expect( "the buyer is open" ).cash;

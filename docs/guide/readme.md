@@ -13,7 +13,7 @@
 
 | ID | Name | Purpose | Status |
 |----|------|---------|--------|
-| 001 | [The Exchange Crate Family](001_crate_family_guide.md) | Purpose, usage, and dependency tier for all 25 real crates/lanes | ✅ |
+| 001 | [The Exchange Crate Family](001_crate_family_guide.md) | Purpose, usage, and dependency tier for all 26 real crates/lanes | ✅ |
 
 ### Why this collection exists, alongside `research/`
 

@@ -73,7 +73,7 @@ standalone only with respect to `exchange_core`, not every caller.
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_id` |
 | [`src/lib.rs`](src/lib.rs) | `rest_place`, `rest_cancel`, `rest_replace`, `RestReplaceError` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
-| `docs/pitfall/` | The 1 "Book" pitfall (replace leaving the old rest in place) this crate's `rest_replace` ordering avoids |
+| `docs/pitfall/` | The central "Book" pitfall `rest_replace`'s ordering avoids, plus one open gap it does not yet guard against |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
 | [`tests/exchange_rest_test.rs`](tests/exchange_rest_test.rs) | Test Matrix — place/cancel forwarding, replace success and both refusal paths with rollback |

@@ -44,13 +44,15 @@ This crate's own `pub` surface, indexed against
 |------|------|----------|----------------|
 | `Receipt` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `ExchangeError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `StepOutcome` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Exchange` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
-Everything else `exchange_core` exports is a re-export from the crates it
-faces (`exchange_types`, `exchange_book`, `exchange_match`,
-`exchange_escrow`, `exchange_id`, `exact_arith`) — see
-[`../item/readme.md`](../item/readme.md)'s own Re-exported surface table
-rather than duplicating it here.
+Everything else `exchange_core` exports is a re-export from the thirteen
+crates it now faces (`exchange_types`, `exchange_book`, `exchange_match`,
+`exchange_escrow`, `exchange_id`, `exchange_depth`, `exchange_halt`,
+`exchange_inbound`, `exchange_snap`, `exchange_spec`, `exchange_stats`,
+`exchange_tif`, `exact_arith`) — see [`../item/readme.md`](../item/readme.md)'s
+own Re-exported surface table rather than duplicating it here.
 
 No `format/` directory exists. The 2026-08-30 implementation chose a sorted
 `Vec` per side (→ [Price-Time Priority Matching](../algorithm/001_price_time_priority_matching.md)),

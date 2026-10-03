@@ -108,8 +108,9 @@ its matching algorithm or order-book data flow (→ external design corpus
   (→ [Fee Assessment Point](004_fee_assessment_point.md)). Nothing is charged
   while the schedule is open.
 - **Time-in-Force disposition.** Step 5's `{ FOK, IOC, GTC }` branch is
-  specified and not implemented; every order currently behaves GTC. This is a
-  gap in coverage of a decided rule, not an open decision.
+  specified and implemented — `exchange_match::cross` consults the order's own
+  `tif`, and `exchange_core::Exchange::exchange_step` threads a real,
+  caller-chosen value through rather than pinning every order to `GTC`.
 
 ### Algorithms
 
@@ -159,7 +160,7 @@ its matching algorithm or order-book data flow (→ external design corpus
 |------|--------------|
 | `ecs_component/152_limit_order_conditions.md` (design corpus) | The corpus's own Fill-or-Kill/Good-till-Cancelled vocabulary; IOC is this instance's own addition |
 | `ecs_system/049_order_matching_system.md` (design corpus) | States step 5's FOK outcome directly: kill outright, no partial fills |
-| `src/lib.rs` | `Exchange::submit` — steps 1, 2, 5 and 6; step 5's TIF branch is not implemented, so every order behaves GTC |
+| `src/lib.rs` | `Exchange::exchange_step`/`step_place` — steps 1, 2, 5 and 6; step 5's TIF branch is implemented, threaded through from the caller's own order |
 | `../../../exchange_match/src/lib.rs` | Step 3's match loop and step 4's exact split, at the maker's price |
 | `../../../exchange_book/src/lib.rs` | The book representation this instance leaves to implementation, and its published order |
 | `../../../exchange_escrow/src/lib.rs` | Step 2's reservation and the settlement that releases price improvement |

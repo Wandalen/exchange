@@ -8,13 +8,15 @@
 
 use exchange_core::
 {
-  AccountId, CancelCause, EscrowError, Event, EventKind, Exchange, ExchangeError, InstrumentId, Money, Obligation,
-  OrderId, Quantity, RejectReason, Side, verify,
+  AccountId, CancelCause, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd, InstrumentId,
+  Money, Obligation, Order, OrderId, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy, Sequence,
+  Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
 };
 
-/// The one instrument [`Exchange::submit`] ever books against today — see
-/// `exchange_core`'s own module doc, "What this slice does not implement" §
-/// "Multi-instrument".
+/// The one instrument every test in this suite submits against —
+/// multi-instrument routing through the facade is real now (see
+/// `exchange_core`'s own module doc), this suite just never needed a second
+/// one to make its points.
 const INSTRUMENT : InstrumentId = InstrumentId( 1 );
 
 fn money( text : &str ) -> Money
@@ -36,6 +38,37 @@ fn market() -> Exchange
   exchange
 }
 
+/// The ring-fed equivalent of the deleted `Exchange::submit( account, side,
+/// price, quantity )` — see `exchange_core`'s own module doc, "`exchange_step`
+/// replaces `submit`". `remaining`/`arrival` on the pushed [`Resting`] are
+/// never read by [`Exchange::exchange_step`] (it only extracts `.order` from
+/// a drained [`InboundCmd::Place`]), so both are placeholders; [`Tif::Gtc`]
+/// and [`SelfMatchPolicy::CancelIncoming`] match the old hardcoded
+/// submission semantics exactly, so every existing assertion below keeps its
+/// original meaning.
+fn submit
+(
+  exchange : &mut Exchange,
+  producer : &mut Producer< '_, InboundCmd >,
+  consumer : &mut Consumer< '_, InboundCmd >,
+  account : AccountId,
+  side : Side,
+  price : Money,
+  quantity : Quantity,
+) -> Result< Receipt, ExchangeError >
+{
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc };
+  let resting = Resting { order, remaining : quantity, arrival : Sequence( 0 ) };
+  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
+
+  match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
+  {
+    Some( StepOutcome::Placed( result ) ) => result,
+    other => panic!( "submit() only ever pushes Place — got {other:?}" ),
+  }
+}
+
 /// T11 — one order in, its trades out, through every crate in the family.
 ///
 /// The assertions walk the whole path deliberately: the types crate shaped the
@@ -46,13 +79,16 @@ fn market() -> Exchange
 fn t11_one_order_crosses_the_whole_family()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  let resting = exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
   assert!( resting.trades.is_empty(), "there was nothing to cross" );
   assert_eq!( resting.resting, qty( 10 ), "so all of it rests" );
   assert_eq!( exchange.book().len(), 1 );
 
-  let taking = exchange.submit( AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
 
   assert_eq!( taking.trades.len(), 1 );
   assert_eq!( taking.trades[ 0 ].quantity, qty( 4 ) );
@@ -77,9 +113,13 @@ fn t11_one_order_crosses_the_whole_family()
 fn an_order_that_crosses_nothing_still_rests()
 {
   let mut exchange = market();
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  let through = exchange.submit( AccountId( 2 ), Side::Buy, money( "2.49" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+
+  let through = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.49" ), qty( 4 ) ).unwrap();
 
   assert!( through.trades.is_empty() );
   assert_eq!( through.resting, qty( 4 ) );
@@ -95,10 +135,14 @@ fn an_order_that_crosses_nothing_still_rests()
 fn an_unfunded_order_never_reaches_the_book()
 {
   let mut exchange = market();
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
   let before = exchange.book().len();
 
-  let refused = exchange.submit( AccountId( 2 ), Side::Buy, money( "500.00" ), qty( 10 ) );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "500.00" ), qty( 10 ) );
 
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::InsufficientFunds ) ) );
   assert_eq!( exchange.book().len(), before, "the book is exactly as it was" );
@@ -110,8 +154,11 @@ fn an_unfunded_order_never_reaches_the_book()
 fn a_zero_quantity_order_is_refused()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  let refused = exchange.submit( AccountId( 1 ), Side::Buy, money( "2.50" ), Quantity::ZERO );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), Quantity::ZERO );
 
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ZeroQuantity ) ) );
   assert_eq!( exchange.escrow().reservation_count(), 0 );
@@ -122,8 +169,11 @@ fn a_zero_quantity_order_is_refused()
 fn an_unknown_account_is_refused_by_name()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  let refused = exchange.submit( AccountId( 99 ), Side::Buy, money( "2.50" ), qty( 1 ) );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 99 ), Side::Buy, money( "2.50" ), qty( 1 ) );
 
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::UnknownAccount ) ) );
 }
@@ -133,7 +183,11 @@ fn an_unknown_account_is_refused_by_name()
 fn a_cancel_through_the_facade_returns_the_reservation()
 {
   let mut exchange = market();
-  let resting = exchange.submit( AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 10 ) ).unwrap();
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), money( "25" ) );
 
   let withdrawn = exchange.cancel( resting.order ).unwrap();
@@ -158,8 +212,12 @@ fn cancelling_an_absent_order_is_reported()
 fn a_filled_order_cannot_be_cancelled()
 {
   let mut exchange = market();
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
-  let taking = exchange.submit( AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
 
   assert!( matches!( exchange.cancel( taking.order ), Err( ExchangeError::NotResting( _ ) ) ) );
 }
@@ -173,9 +231,13 @@ fn a_filled_order_cannot_be_cancelled()
 fn the_event_stream_numbers_every_event_without_a_gap()
 {
   let mut exchange = market();
-  let resting = exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
-  exchange.submit( AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
-  exchange.submit( AccountId( 2 ), Side::Buy, money( "2.50" ), Quantity::ZERO ).unwrap_err();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), Quantity::ZERO ).unwrap_err();
   exchange.cancel( resting.order ).unwrap();
 
   let positions : Vec< u64 > = exchange.events().iter().map( | event | event.sequence.0 ).collect();
@@ -207,7 +269,11 @@ fn kind_name( event : &Event ) -> &'static str
 fn acceptance_records_what_it_reserved_and_cancel_records_what_it_returned()
 {
   let mut exchange = market();
-  let resting = exchange.submit( AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 10 ) ).unwrap();
   exchange.cancel( resting.order ).unwrap();
 
   let reserved = exchange.events().iter().find_map( | event | match event.kind
@@ -234,8 +300,11 @@ fn acceptance_records_what_it_reserved_and_cancel_records_what_it_returned()
 fn a_rejection_leaves_only_its_own_event_behind()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  exchange.submit( AccountId( 2 ), Side::Buy, money( "500.00" ), qty( 100 ) ).unwrap_err();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "500.00" ), qty( 100 ) ).unwrap_err();
 
   assert!( exchange.book().is_empty() );
   assert_eq!( exchange.escrow().reservation_count(), 0 );
@@ -252,9 +321,13 @@ fn a_rejection_leaves_only_its_own_event_behind()
 fn the_posting_log_balances_under_the_conservation_auditor()
 {
   let mut exchange = market();
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 4 ) ).unwrap();
-  exchange.submit( AccountId( 2 ), Side::Buy, money( "3.00" ), qty( 8 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "3.00" ), qty( 8 ) ).unwrap();
 
   let postings = exchange.postings().unwrap();
   assert_eq!( postings.len(), 4, "two trades, two postings each" );
@@ -273,10 +346,14 @@ fn the_posting_log_balances_under_the_conservation_auditor()
 fn a_sweep_pays_each_level_its_own_price()
 {
   let mut exchange = market();
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 4 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  exchange.submit( AccountId( 2 ), Side::Buy, money( "3.00" ), qty( 8 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 4 ) ).unwrap();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "3.00" ), qty( 8 ) ).unwrap();
 
   assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.available(), money( "978" ) );
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.available(), money( "1022" ) );
@@ -292,9 +369,13 @@ fn replaying_the_same_submissions_from_empty_gives_the_same_result()
   let run = ||
   {
     let mut exchange = market();
-    exchange.submit( AccountId( 1 ), Side::Sell, money( "2.00" ), qty( 3 ) ).unwrap();
-    exchange.submit( AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 3 ) ).unwrap();
-    let taking = exchange.submit( AccountId( 2 ), Side::Buy, money( "2.00" ), qty( 5 ) ).unwrap();
+    let mut ring = inbound_ring( 8 ).unwrap();
+    let mut ends = ring.ends();
+    let ( mut producer, mut consumer ) = ends.split();
+
+    submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.00" ), qty( 3 ) ).unwrap();
+    submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 3 ) ).unwrap();
+    let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.00" ), qty( 5 ) ).unwrap();
     let resting : Vec< _ > = exchange.book().iter().map( | r | ( r.order.id, r.remaining ) ).collect();
     ( taking.trades, resting, exchange.postings().unwrap() )
   };
@@ -335,11 +416,14 @@ fn replaying_the_same_submissions_from_empty_gives_the_same_result()
 fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
   // One minor unit of asset at 0.5 — worth 0.0000005, which MONEY_SCALE = 6
   // cannot express. Accepted, because a sell reserves the asset, not a price.
-  let ask = exchange
-  .submit( AccountId( 1 ), Side::Sell, money( "0.5" ), Quantity::from_minor( 1 ).unwrap() )
+  let ask = submit
+  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "0.5" ), Quantity::from_minor( 1 ).unwrap() )
   .unwrap();
   assert_eq!( exchange.book().len(), 1 );
 
@@ -348,7 +432,7 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
 
   // Crosses on price, and must still decline: the only available fill is that
   // same one minor unit.
-  let taking = exchange.submit( AccountId( 2 ), Side::Buy, money( "0.5" ), qty( 1 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "0.5" ), qty( 1 ) ).unwrap();
   assert!( taking.trades.is_empty(), "an unpayable fill must not be generated" );
 
   // The ask survived. Before the fix it was consumed with nothing paid for it.
@@ -376,13 +460,16 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
 fn a_taking_buys_own_limit_is_checked_not_just_the_trade_price()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  exchange
-  .submit( AccountId( 1 ), Side::Sell, money( "1.00" ), Quantity::from_minor( 1 ).unwrap() )
+  submit
+  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), Quantity::from_minor( 1 ).unwrap() )
   .unwrap();
 
   let asset_before = exchange.escrow().total_asset().unwrap();
-  let taking = exchange.submit( AccountId( 2 ), Side::Buy, money( "1.50" ), qty( 1 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "1.50" ), qty( 1 ) ).unwrap();
 
   assert!( taking.trades.is_empty(), "the improvement notional is inexpressible" );
   assert_eq!( exchange.book().len(), 2 );
@@ -438,7 +525,11 @@ fn a_negative_price_is_refused_before_it_can_rest()
   for side in [ Side::Buy, Side::Sell ]
   {
     let mut exchange = market();
-    let refused = exchange.submit( AccountId( 1 ), side, money( "-2.00" ), qty( 10 ) );
+    let mut ring = inbound_ring( 8 ).unwrap();
+    let mut ends = ring.ends();
+    let ( mut producer, mut consumer ) = ends.split();
+
+    let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), side, money( "-2.00" ), qty( 10 ) );
 
     assert_eq!
     (
@@ -465,7 +556,11 @@ fn a_negative_price_is_refused_before_it_can_rest()
   // zero conserves exactly. Pinned so that widening the guard to `<=` has to
   // be a decision rather than a slip.
   let mut exchange = market();
-  let free = exchange.submit( AccountId( 1 ), Side::Sell, Money::ZERO, qty( 10 ) );
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let free = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, Money::ZERO, qty( 10 ) );
   assert!( free.is_ok(), "{free:?}" );
   assert_eq!( exchange.book().len(), 1 );
 }
@@ -525,22 +620,25 @@ fn a_reservation_ceiling_breach_is_distinguished_from_a_funds_shortfall()
   // enough asset to sell later.
   exchange.open_account( AccountId( 1 ), money( "9000000000" ), qty( 600 ) ).unwrap();
   exchange.open_account( AccountId( 2 ), money( "2000" ), qty( 0 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
   // Order 1: a huge resting buy at $1 that reserves nearly all of account 1's
   // cash — 500 minor units short of the whole-unit ceiling in minor units.
   let huge = Quantity::from_minor( 8_999_999_999_999_500 ).unwrap();
-  exchange.submit( AccountId( 1 ), Side::Buy, money( "1" ), huge ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1" ), huge ).unwrap();
 
   // Order 2: account 1 separately rests a sell for 500 of the asset, priced
   // at $2 — above order 1's own $1 buy, so the two do not cross each other
   // (which would otherwise trigger this account's own self-match policy).
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "2" ), qty( 500 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2" ), qty( 500 ) ).unwrap();
 
   // Account 2 crosses it at $2, paying account 1 $1000 that account 1's
   // original cash deposit never budgeted for — fresh, genuinely spendable
   // funds landing in `available` on top of the huge reservation already
   // sitting in `reserved`.
-  exchange.submit( AccountId( 2 ), Side::Buy, money( "2" ), qty( 500 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2" ), qty( 500 ) ).unwrap();
 
   let account_before = *exchange.escrow().account( AccountId( 1 ) ).unwrap();
   assert_eq!( account_before.cash.reserved().minor(), 8_999_999_999_999_500, "sanity: still holding order 1's reservation" );
@@ -554,7 +652,7 @@ fn a_reservation_ceiling_breach_is_distinguished_from_a_funds_shortfall()
 
   // Order 3: a vanishingly small buy — $0.001 — well within `available`, but
   // `reserved` has only 500 minor units of headroom left before the ceiling.
-  let refused = exchange.submit( AccountId( 1 ), Side::Buy, money( "1000" ), Quantity::from_minor( 1 ).unwrap() );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1000" ), Quantity::from_minor( 1 ).unwrap() );
 
   assert_eq!
   (
@@ -589,11 +687,14 @@ fn a_reservation_ceiling_breach_is_distinguished_from_a_funds_shortfall()
 fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
   // 0.3 x 0.000001 = 0.0000003 — a seventh decimal digit `Money` (scale 6)
   // cannot hold. The account has ample funds; the amount itself cannot be
   // expressed regardless.
-  let refused = exchange.submit( AccountId( 1 ), Side::Buy, money( "0.3" ), Quantity::from_minor( 1 ).unwrap() );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "0.3" ), Quantity::from_minor( 1 ).unwrap() );
 
   assert_eq!
   (
@@ -665,22 +766,25 @@ fn a_cancel_that_fails_to_release_leaves_the_order_resting()
   // enough asset to sell later.
   exchange.open_account( AccountId( 1 ), money( "8999999997" ), qty( 10 ) ).unwrap();
   exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
   // Order 1: a small resting buy that reserves 1 unit of cash — the
   // reservation this test tries, and fails, to release.
-  let order_1 = exchange.submit( AccountId( 1 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
+  let order_1 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), money( "1" ) );
 
   // Order 2: account 1 separately rests a sell for 2 of the asset, priced
   // above order 1's own $1 buy so the two do not cross each other (which
   // would otherwise trigger this account's own self-match policy).
-  exchange.submit( AccountId( 1 ), Side::Sell, money( "2" ), qty( 2 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2" ), qty( 2 ) ).unwrap();
 
   // Account 2 crosses it at $2, paying account 1 exactly the 4 cash units
   // that bring `available` to precisely the whole-unit ceiling — fresh,
   // genuinely spendable funds landing on top of order 1's reservation, still
   // sitting untouched in `reserved`.
-  exchange.submit( AccountId( 2 ), Side::Buy, money( "2" ), qty( 2 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2" ), qty( 2 ) ).unwrap();
 
   let account = exchange.escrow().account( AccountId( 1 ) ).unwrap();
   assert_eq!( account.cash.available(), money( "9000000000" ), "sanity: available sits exactly at the ceiling" );
@@ -781,18 +885,21 @@ fn a_crossing_whose_second_trade_cannot_settle_commits_nothing()
   exchange.open_account( AccountId( 1 ), money( "8999999999" ), qty( 10 ) ).unwrap();
   exchange.open_account( AccountId( 2 ), money( "10" ), Quantity::ZERO ).unwrap();
   exchange.open_account( AccountId( 3 ), money( "10" ), Quantity::ZERO ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
   // Two resting buys at the same price, account 2 first — so `cross`
   // matches account 2's trade first, landing account 1's cash exactly at the
   // ceiling, and account 3's trade second, one unit past it.
-  let buy_2 = exchange.submit( AccountId( 2 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
-  let buy_3 = exchange.submit( AccountId( 3 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
+  let buy_2 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
+  let buy_3 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
   assert_eq!( exchange.book().side( INSTRUMENT, Side::Buy ).count(), 2, "sanity: both rest before the crossing sell arrives" );
 
   let events_before = exchange.events().len();
 
   // One sell, crossing both — the crossing this bug needs.
-  let result = exchange.submit( AccountId( 1 ), Side::Sell, money( "1" ), qty( 2 ) );
+  let result = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1" ), qty( 2 ) );
   assert_eq!
   (
     result,
@@ -825,7 +932,7 @@ fn a_crossing_whose_second_trade_cannot_settle_commits_nothing()
   );
 
   // A retry sees the identical, still-untouched state and fails the same way.
-  let retry = exchange.submit( AccountId( 1 ), Side::Sell, money( "1" ), qty( 2 ) );
+  let retry = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1" ), qty( 2 ) );
   assert_eq!( retry, result, "a retry fails the same way, not differently, from an already-corrupted state" );
 }
 
@@ -872,12 +979,15 @@ fn a_crossing_whose_second_trade_cannot_settle_commits_nothing()
 fn a_self_match_cancelled_order_is_not_reported_complete()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
   // Account 1 rests a sell, then crosses its own resting order — the
   // hardcoded `SelfMatchPolicy::CancelIncoming` withdraws the incoming buy's
   // remainder whole, since the only liquidity it could take is its own.
-  let resting = exchange.submit( AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
-  let taking = exchange.submit( AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
 
   assert!( taking.trades.is_empty(), "a self-cross never trades" );
   assert_eq!( taking.resting, Quantity::ZERO, "the remainder was withdrawn, not rested" );

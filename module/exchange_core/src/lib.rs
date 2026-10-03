@@ -1,5 +1,5 @@
 //! The submission path — the crate a caller uses, and the only one that knows
-//! all five parts of the family exist.
+//! every part of the family exists.
 //!
 //! The Contract is one line: *orders in → trades + event stream out; escrow
 //! holds; no ECS types anywhere*. [`Exchange`] is where those three clauses
@@ -7,7 +7,8 @@
 //!
 //! # The order of operations is the design
 //!
-//! [`Exchange::submit`] does five things and their order is load-bearing:
+//! [`Exchange::exchange_step`]'s own per-command pipeline does five things and
+//! their order is load-bearing:
 //!
 //! 1. **Validate.** A malformed order is rejected whole.
 //! 2. **Reserve**, before anything is visible to matching. An order that
@@ -30,25 +31,34 @@
 //! output and the audit record both, so a mutation with no event is a fact the
 //! record cannot reproduce.
 //!
-//! # What this slice does not implement
+//! # `exchange_step` replaces `submit`
 //!
-//! Named rather than silently absent, because the family's own design
-//! documents specify all of them and a reader deserves to know which parts are
-//! real:
+//! The old `Exchange::submit( account, side, price, quantity )` is gone.
+//! [`Exchange::exchange_step`] drains an [`exchange_inbound`] ring and applies
+//! every [`InboundCmd`] it finds, in drain order — see that method's own doc
+//! for the full design (why it owns sequencing rather than trusting a
+//! caller-supplied id/arrival, why `Cancel` delegates to [`Exchange::cancel`]
+//! unchanged, and why `Replace` is not yet wired). Three of the four bullets
+//! the previous revision of this doc named as "not implemented" are resolved
+//! as a direct consequence, not a separate effort:
 //!
-//! - **Time-in-Force.** `{ FOK, IOC, GTC }` is specified and [`Order`] now
-//!   carries a real `tif` field — but [`Exchange::submit`] pins every order
-//!   it constructs to `Tif::Gtc` rather than taking a caller-supplied value,
-//!   because `cross` does not consult the field yet. FOK needs a pre-check
-//!   against visible liquidity and IOC needs a cancel-the-remainder
-//!   disposition — both are real work the matching crate owes this facade,
-//!   not something a hardcoded value here can stand in for.
-//! - **Multi-instrument.** [`Book`] itself is keyed by instrument now, but
-//!   this facade still pins every order it constructs to one constant
-//!   [`exchange_id::InstrumentId`] rather than taking a caller-supplied
-//!   value — nothing here routes a submission to any instrument but that
-//!   one, so from a caller's perspective the facade is still single-market.
-//!   Exposing the choice is a facade-level change this crate has not made.
+//! - **Time-in-Force** is a real, caller-chosen field on every [`InboundCmd::Place`]'s
+//!   own [`Order`] now — `exchange_match::cross` has consulted `tif` since the
+//!   crate's own TIF/FOK rework, so there is nothing left pinning it to `Gtc`.
+//! - **Multi-instrument** is real: `exchange_step` reads `instrument` off the
+//!   incoming order itself rather than a facade-wide constant. [`Book`] was
+//!   already keyed by instrument; this was the last piece pinning every
+//!   submission to one of them regardless.
+//! - **Self-match policy** is a parameter on [`Exchange::exchange_step`]
+//!   itself, supplied per call exactly like `exchange_match::cross`'s own
+//!   `policy` parameter — never stored on `Exchange`, matching the rest of
+//!   this family's "no state between calls, the caller supplies it" policy
+//!   convention.
+//!
+//! # What this slice still does not implement
+//!
+//! Named rather than silently absent:
+//!
 //! - **Market orders.** Only limit orders exist. A market order is a limit
 //!   order with no price bound, which changes the crossing predicate and the
 //!   reservation rule together; nothing here exercises one.
@@ -56,38 +66,46 @@
 //!   particular have a decided hook position and an undecided schedule, so
 //!   implementing the hook now would be building a parameter nobody can
 //!   supply.
-//! - **Self-match policy is fixed, not yet per-book configurable.** Detection
-//!   and cancellation are real — `docs/algorithm/002_self_match_prevention.md`
-//!   is implemented — but the three-policy choice that document specifies as
-//!   configurable per book is hardcoded below to `SelfMatchPolicy::CancelIncoming`,
-//!   its own named conservative candidate, because this crate has no
-//!   per-book configuration surface to select one from yet.
-//! - **Concurrent intake.** The arrival sequence here is a counter incremented
-//!   by one submitting thread. The family's design puts the real total
-//!   order in a shared merge substrate; what this crate owes that design is
-//!   that no decision on the matching path reads anything the sequence does
-//!   not carry, and that obligation *is* met — nothing here reads a clock,
-//!   iterates a hash container, or compares an address.
+//! - **Replace, end to end.** [`exchange_inbound::InboundCmd::Replace`] exists
+//!   and is tested at the book level in that crate's own suite, but
+//!   `exchange_step` does not yet apply it — see that method's own doc.
+//! - **Concurrent intake past the ring.** `exchange_step` itself still runs on
+//!   one thread, draining and applying one command at a time — the ring is
+//!   what lets *producers* genuinely race (see `exchange_inbound`'s own
+//!   module doc); nothing requires `exchange_step`'s own apply loop to be
+//!   concurrent too, and nothing here reads a clock, iterates a hash
+//!   container, or compares an address regardless.
+
+use std::collections::BTreeMap;
 
 pub use exact_arith::
 {
   Backing, ConservationError, Entry, KindError, MONEY_SCALE, Money, Quantity, Report, verify,
 };
 pub use exchange_book::{ Book, Resting };
+pub use exchange_depth::{ Depth, DepthError, LevelView };
 pub use exchange_escrow::{ Account, Conserved, Escrow, EscrowError, Holding };
+pub use exchange_halt::HaltError;
 pub use exchange_id::InstrumentId;
+pub use exchange_inbound::
+{
+  BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
+  inbound_ring,
+};
+use exchange_inbound::inbound_drain;
 pub use exchange_match::{ Crossing, MatchError, SelfMatchCancellation, SelfMatchPolicy };
+use exchange_rest::rest_place;
 use exchange_seq::seq_next;
-use exchange_tif::Tif;
+pub use exchange_snap::{ BookSnap, RestRow };
+pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
+pub use exchange_stats::BookStats;
+use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add };
+pub use exchange_tif::Tif;
 pub use exchange_types::
 {
   AccountId, Amount, CancelCause, Event, EventKind, Obligation, Order, OrderId, Price, RejectReason,
   Sequence, Side, Trade, TypeError, notional, obligation,
 };
-
-/// The one instrument every order books against, until the book itself is
-/// keyed by instrument. See the module doc's "Multi-instrument" bullet.
-const SINGLE_INSTRUMENT : InstrumentId = InstrumentId( 1 );
 
 /// What came of a submission.
 #[ derive( Debug, Clone, PartialEq, Eq ) ]
@@ -114,8 +132,9 @@ impl Receipt
   ///
   /// Fix(is_complete_reported_a_cancellation_as_a_fill):
   /// Root cause: `resting` reaches zero two different ways — every unit
-  /// found a counterparty, or `Exchange::submit` step 4a withdrew whatever
-  /// was left instead of resting it — and this method returned `true` for
+  /// found a counterparty, or the facade's step-4a self-match handling
+  /// withdrew whatever was left instead of resting it — and this method
+  /// returned `true` for
   /// both, contradicting its own "entirely filled" doc for the second: a
   /// self-match-cancelled order that traded nothing reported as complete.
   ///
@@ -144,6 +163,20 @@ pub enum ExchangeError
   /// A cancel or a lookup named an order that is not resting — a race result
   /// rather than a caller error, reported rather than ignored.
   NotResting( OrderId ),
+  /// [`Exchange::spec_register`] was asked about an instrument no spec names.
+  UnknownInstrument( InstrumentId ),
+  /// [`Exchange::spec_register`] refused a degenerate tick or lot.
+  Spec( SpecError ),
+  /// [`Exchange::spec_register`] was asked to register an instrument a
+  /// previous call already registered — refused rather than overwritten, since
+  /// silently changing a live grid would strand every order already resting
+  /// against the old one.
+  SpecAlreadyRegistered( InstrumentId ),
+  /// [`Exchange::depth_get`] was asked for the top zero levels.
+  Depth( DepthError ),
+  /// [`Exchange::halt_set`]/[`Exchange::halt_clear`] asked for a state the
+  /// instrument was already in.
+  Halt( HaltError ),
 }
 
 impl core::fmt::Display for ExchangeError
@@ -156,6 +189,11 @@ impl core::fmt::Display for ExchangeError
       Self::Escrow( error ) => write!( f, "escrow refused: {error}" ),
       Self::Matching( error ) => write!( f, "matching failed: {error}" ),
       Self::NotResting( id ) => write!( f, "order {} is not resting", id.0 ),
+      Self::UnknownInstrument( id ) => write!( f, "instrument {} has no registered spec", id.0 ),
+      Self::Spec( error ) => write!( f, "spec refused: {error}" ),
+      Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
+      Self::Depth( DepthError::BadN ) => write!( f, "depth refused: the top zero levels has no answer" ),
+      Self::Halt( HaltError::Already ) => write!( f, "halt refused: the instrument is already in that state" ),
     }
   }
 }
@@ -168,7 +206,9 @@ impl core::error::Error for ExchangeError
     {
       Self::Escrow( error ) => Some( error ),
       Self::Matching( error ) => Some( error ),
-      Self::Rejected( _ ) | Self::NotResting( _ ) => None,
+      Self::Spec( error ) => Some( error ),
+      Self::Rejected( _ ) | Self::NotResting( _ ) | Self::UnknownInstrument( _ )
+      | Self::SpecAlreadyRegistered( _ ) | Self::Depth( _ ) | Self::Halt( _ ) => None,
     }
   }
 }
@@ -189,8 +229,58 @@ impl From< MatchError > for ExchangeError
   }
 }
 
-/// One market: a book, the balances behind it, and the record of everything
-/// that happened.
+impl From< SpecError > for ExchangeError
+{
+  fn from( error : SpecError ) -> Self
+  {
+    Self::Spec( error )
+  }
+}
+
+impl From< DepthError > for ExchangeError
+{
+  fn from( error : DepthError ) -> Self
+  {
+    Self::Depth( error )
+  }
+}
+
+impl From< HaltError > for ExchangeError
+{
+  fn from( error : HaltError ) -> Self
+  {
+    Self::Halt( error )
+  }
+}
+
+/// What processing one drained [`InboundCmd`] produced.
+///
+/// `#[must_use]` on the type, not just the method returning a `Vec` of it —
+/// an ignored rejection or an ignored not-yet-wired `Replace` are exactly the
+/// silent failures the Contract's "no mutation without an event" rule exists
+/// to make visible, and a caller that drops this value entirely still has
+/// the event stream to fall back on, but should not do so by accident.
+#[ must_use ]
+#[ derive( Debug, Clone, PartialEq, Eq ) ]
+pub enum StepOutcome
+{
+  /// An [`InboundCmd::Place`] ran the same validate-reserve-match-settle-rest
+  /// pipeline the removed `submit` method used to run directly — see
+  /// [`Exchange::exchange_step`]'s own doc for what changed.
+  Placed( Result< Receipt, ExchangeError > ),
+  /// An [`InboundCmd::Cancel`] ran through [`Exchange::cancel`] unchanged —
+  /// see [`Exchange::exchange_step`]'s own doc for why this delegates rather
+  /// than re-implementing cancellation.
+  Cancelled( Result< Quantity, ExchangeError > ),
+  /// An [`InboundCmd::Replace`] was drained, but this facade does not yet
+  /// apply it — see [`Exchange::exchange_step`]'s own doc, "Replace is not
+  /// yet wired" section.
+  ReplaceNotWired,
+}
+
+/// One market: a book, the balances behind it, the record of everything that
+/// happened, every instrument's own grid, and the running counters
+/// [`Exchange::exchange_step`] keeps.
 #[ derive( Debug, Clone, Default ) ]
 pub struct Exchange
 {
@@ -199,6 +289,8 @@ pub struct Exchange
   next_order : u64,
   next_sequence : Sequence,
   events : Vec< Event >,
+  specs : BTreeMap< InstrumentId, InstrumentSpec >,
+  stats : BookStats,
 }
 
 impl Exchange
@@ -223,109 +315,230 @@ impl Exchange
     Ok( () )
   }
 
-  /// Submit a limit order, matching it against the book and resting whatever
-  /// is left.
+  /// Register `id`'s grid and asset pair.
   ///
   /// # Errors
   ///
-  /// [`ExchangeError::Rejected`] when validation, reservation, settlement, or
-  /// a self-match release refuses the order — in which case an
-  /// [`EventKind::OrderRejected`] is recorded and no other state (book,
-  /// escrow, or any other event) ever changed. Every one of those steps runs
-  /// first as a dry run against scratch state before any of it commits for
-  /// real, so a failure discovered mid-crossing still reports as one clean,
-  /// atomic rejection. [`ExchangeError::Matching`] for a failure the design
-  /// does not consider reachable through this path.
-  pub fn submit
+  /// [`ExchangeError::SpecAlreadyRegistered`] if `id` is already registered —
+  /// refused rather than overwritten, since replacing a live tick/lot grid
+  /// would silently change the terms under orders already resting against the
+  /// old one. [`ExchangeError::Spec`] if `tick` or `lot` is zero.
+  pub fn spec_register
   (
     &mut self,
-    account : AccountId,
-    side : Side,
-    price : Price,
-    quantity : Quantity,
-  ) -> Result< Receipt, ExchangeError >
+    id : InstrumentId,
+    base : AssetId,
+    quote : AssetId,
+    tick : Price,
+    lot : Quantity,
+  ) -> Result< (), ExchangeError >
   {
-    let order = Order
+    if self.specs.contains_key( &id )
     {
-      id : self.claim_order(), instrument : SINGLE_INSTRUMENT, account, side, price, quantity,
-      tif : Tif::Gtc,
-    };
-
-    // 1. Validate.
-    if quantity == Quantity::ZERO
-    {
-      return Err( self.reject( &order, RejectReason::ZeroQuantity ) );
+      return Err( ExchangeError::SpecAlreadyRegistered( id ) );
     }
-    // A negative price has to be refused here rather than left to escrow,
-    // because escrow only ever sees it on one of the two sides. A negative
-    // buy has a negative notional and step 2 refuses it; a negative *sell*
-    // reserves the asset, whose amount the price never enters, so it rests
-    // perfectly well — and then destroys the first order that crosses it, in
-    // step 4, after `cross` has already mutated the book and after the
-    // aggressor's own reservation has been taken. There is no unwind there:
-    // the `?` returns, the reservation is stranded with no order to cancel
-    // against, and the book keeps whatever the match did to it, all without
-    // emitting the event this crate's protocol says accompanies every state
-    // change.
-    //
-    // Fix(a_negative_price_is_refused_before_it_can_rest):
-    // Root cause: `Price` is `Money`, which is signed, and the only guard
-    // between a price and settlement lived in escrow — which a sell's
-    // obligation bypasses entirely, since it is denominated in asset.
-    // Pitfall: validating a field where its *value* is consumed misses every
-    // path that carries the field past that point without consuming it. A
-    // resting sell carries its price across the whole matching step untouched.
-    if price < Money::ZERO
+    let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
+    self.specs.insert( id, spec );
+    Ok( () )
+  }
+
+  /// The top `n` price levels on each side of `instrument`'s book.
+  ///
+  /// Unlike [`Self::halt_set`], this needs no registered spec — it reads
+  /// [`Book`] directly, the same as [`exchange_depth::depth_top`] itself.
+  ///
+  /// # Errors
+  ///
+  /// [`ExchangeError::Depth`] if `n` is zero.
+  pub fn depth_get( &self, instrument : InstrumentId, n : usize ) -> Result< Depth, ExchangeError >
+  {
+    Ok( exchange_depth::depth_top( &self.book, instrument, n )? )
+  }
+
+  /// Halt matching on `instrument`. Resting orders are untouched.
+  ///
+  /// # Errors
+  ///
+  /// [`ExchangeError::UnknownInstrument`] if `instrument` was never
+  /// registered via [`Self::spec_register`]. [`ExchangeError::Halt`] if it is
+  /// already halted.
+  pub fn halt_set( &mut self, instrument : InstrumentId ) -> Result< (), ExchangeError >
+  {
+    let spec = self.specs.get_mut( &instrument ).ok_or( ExchangeError::UnknownInstrument( instrument ) )?;
+    Ok( exchange_halt::halt_set( spec )? )
+  }
+
+  /// Resume matching on `instrument`.
+  ///
+  /// # Errors
+  ///
+  /// [`ExchangeError::UnknownInstrument`] if `instrument` was never
+  /// registered. [`ExchangeError::Halt`] if it was not halted.
+  pub fn halt_clear( &mut self, instrument : InstrumentId ) -> Result< (), ExchangeError >
+  {
+    let spec = self.specs.get_mut( &instrument ).ok_or( ExchangeError::UnknownInstrument( instrument ) )?;
+    Ok( exchange_halt::halt_clear( spec )? )
+  }
+
+  /// Whether `instrument` is currently halted.
+  ///
+  /// # Errors
+  ///
+  /// [`ExchangeError::UnknownInstrument`] if `instrument` was never
+  /// registered.
+  pub fn halt_is( &self, instrument : InstrumentId ) -> Result< bool, ExchangeError >
+  {
+    let spec = self.specs.get( &instrument ).ok_or( ExchangeError::UnknownInstrument( instrument ) )?;
+    Ok( exchange_halt::halt_is( spec ) )
+  }
+
+  /// A point-in-time copy of `instrument`'s resting book, stamped with the
+  /// caller-supplied `tick` — see [`exchange_snap::snap_take`] for why `tick`
+  /// is never read from a clock here.
+  #[ must_use ]
+  pub fn snap_take( &self, instrument : InstrumentId, tick : Money ) -> BookSnap
+  {
+    exchange_snap::snap_take( &self.book, instrument, tick )
+  }
+
+  /// Take every event recorded so far, leaving the stream empty.
+  ///
+  /// The owned counterpart to [`Self::events`]'s borrowed slice — see
+  /// `exchange_event`'s own module doc for why both exist.
+  #[ must_use ]
+  pub fn event_drain( &mut self ) -> Vec< Event >
+  {
+    exchange_event::event_drain( &mut self.events )
+  }
+
+  /// A copy of the running counters [`Self::exchange_step`] has kept so far.
+  ///
+  /// Counts only activity processed through [`Self::exchange_step`] —
+  /// [`Self::cancel`]'s own direct, synchronous path is kept byte-for-byte
+  /// unchanged by this stage's own scope, so it does not feed these counters.
+  #[ must_use ]
+  pub fn stats_get( &self ) -> BookStats
+  {
+    exchange_stats::stats_snapshot( &self.stats )
+  }
+
+  /// Drain `consumer` and apply every command it yields, in drain order, with
+  /// `policy` governing self-match resolution for every
+  /// [`InboundCmd::Place`] in the batch.
+  ///
+  /// # `exchange_step` owns sequencing
+  ///
+  /// A [`Resting`] inside an incoming [`InboundCmd::Place`] is a *draft*, not
+  /// a finished order — its `order.id` and `arrival` are never trusted. This
+  /// is the single-threaded apply side of the ring (see `exchange_inbound`'s
+  /// own module doc, "Two producers without two threads on one ring"), so it
+  /// is the only place with authoritative access to [`Self::claim_order`]'s
+  /// counter and [`Self::emit`]'s sequence — exactly mirroring how the old
+  /// `submit` never took a caller-supplied id either. Producers may push a
+  /// placeholder id/arrival; `exchange_step` always overwrites both with its
+  /// own, so global id-uniqueness and a correct, facade-authoritative total
+  /// order hold regardless of what (if anything) a producer stamped on the
+  /// way in.
+  ///
+  /// # `Cancel` delegates, it does not re-implement
+  ///
+  /// [`InboundCmd::Cancel`]'s own `instrument` field is never consulted —
+  /// [`Self::cancel`] already does its own authoritative, instrument-agnostic
+  /// search and is already correct and tested, so a command arriving via the
+  /// ring gets exactly the same escrow-release behaviour a direct call would,
+  /// with no second implementation to keep in sync.
+  ///
+  /// # Replace is not yet wired
+  ///
+  /// [`InboundCmd::Replace`] drains successfully but this method does not
+  /// apply it — every drained `Replace` comes back as
+  /// [`StepOutcome::ReplaceNotWired`]. A faithful replace has to move the old
+  /// order's reservation and the new order's obligation atomically alongside
+  /// the book-level swap [`exchange_rest::rest_replace`] already does, and
+  /// report it with events whose `reserved`/`released` fields are honest —
+  /// neither escrow orchestration nor a suitable event shape exists yet for
+  /// that (`exchange_fill::EventKind` has no "replaced" kind, only
+  /// `OrderAccepted`/`OrderCancelled`, each requiring the `Obligation` an
+  /// escrow-free replace would have none of). Building that is new
+  /// orchestration this stage was not asked for — see
+  /// `exchange_rest`'s own module doc, which already names escrow
+  /// orchestration as a facade-level concern it deliberately left open.
+  /// Direct callers of `exchange_rest::rest_replace` are unaffected; so is
+  /// `exchange_inbound`'s own test coverage of `InboundCmd::Replace` at the
+  /// book level.
+  pub fn exchange_step
+  (
+    &mut self,
+    consumer : &mut Consumer< '_, InboundCmd >,
+    policy : SelfMatchPolicy,
+  ) -> Vec< StepOutcome >
+  {
+    inbound_drain( consumer ).into_iter().map( | cmd | self.step_one( cmd, policy ) ).collect()
+  }
+
+  fn step_one( &mut self, cmd : InboundCmd, policy : SelfMatchPolicy ) -> StepOutcome
+  {
+    match cmd
     {
-      return Err( self.reject( &order, RejectReason::NegativePrice ) );
+      InboundCmd::Place( draft ) => StepOutcome::Placed( self.step_place( draft.order, policy ) ),
+      InboundCmd::Cancel { id, .. } =>
+      {
+        let result = self.cancel( id );
+        if result.is_ok() { stats_cancel_add( &mut self.stats, 1 ); }
+        StepOutcome::Cancelled( result )
+      },
+      InboundCmd::Replace { .. } => StepOutcome::ReplaceNotWired,
+    }
+  }
+
+  /// The old `submit`'s five-step body, generalized: `draft` supplies
+  /// instrument/account/side/price/quantity/tif directly — no more pinning to
+  /// a single instrument or `Tif::Gtc` — and `policy` is the caller's choice
+  /// instead of a hardcoded `SelfMatchPolicy::CancelIncoming`. `draft.id` is
+  /// never trusted; see [`Self::exchange_step`]'s own "owns sequencing"
+  /// section.
+  fn step_place( &mut self, draft : Order, policy : SelfMatchPolicy ) -> Result< Receipt, ExchangeError >
+  {
+    let order = Order { id : self.claim_order(), ..draft };
+
+    // 1. Validate. Unchanged from the old `submit`'s own step 1 — see that
+    // method's former `Fix(a_negative_price_is_refused_before_it_can_rest)`
+    // comment (preserved in git history) for why the negative-price guard
+    // lives here rather than inside escrow.
+    if order.quantity == Quantity::ZERO
+    {
+      return Err( self.reject_counted( &order, RejectReason::ZeroQuantity ) );
+    }
+    if order.price < Money::ZERO
+    {
+      return Err( self.reject_counted( &order, RejectReason::NegativePrice ) );
     }
 
     // 2. Dry-run the whole operation — reserve, cross, settle every trade,
     // release every self-match cancellation — against scratch clones, before
-    // any of it touches real state.
-    //
-    // Fix(exchange_submit_partial_crossing_could_strand_state):
-    // `cross` mutates the book it is given as it computes a crossing,
-    // unconditionally withdrawing every resting order it matches, and
-    // `Holding::receive` is an unconditional, non-reservation-bounded
-    // credit — so a second trade in one crossing can breach an account's
-    // ceiling even though the first trade's `settle` and its emitted event
-    // already committed for real. Without this dry run, that later failure
-    // left an `OrderAccepted` event on record for an order the caller never
-    // received an id for, real proceeds already paid out for whichever
-    // trades did settle, and every resting order `cross` consumed —
-    // including the one behind the failed trade — gone from the book with
-    // no trade, no event, and no way back. `cross` is a pure function of the
-    // book and the incoming order (`exchange_match`'s own
-    // `crossing_the_same_book_twice_gives_the_same_trades`), so replaying it
-    // against the real book below reproduces this dry run exactly.
-    // Root cause: real state was mutated one step at a time, each failure
-    // guarded individually with `?`, instead of the whole operation being
-    // validated as one atomic unit before any of it committed.
-    // Pitfall: dry-running only the crossing/settlement portion and leaving
-    // step 2's reserve and its event committing unconditionally still
-    // strands the incoming order's own reservation on a mid-crossing
-    // failure — the dry run has to cover reserve through release, not just
-    // cross and settle.
+    // any of it touches real state. Unchanged from the old `submit`'s own
+    // step 2 — see that method's former
+    // `Fix(exchange_submit_partial_crossing_could_strand_state)` comment
+    // (preserved in git history) for why.
     let mut dry_escrow = self.escrow.clone();
     if let Err( error ) = dry_escrow.reserve( &order )
     {
-      return Err( self.reject( &order, Self::reason_for( error ) ) );
+      return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
     }
     let mut dry_book = self.book.clone();
-    let dry_crossing = exchange_match::cross( &mut dry_book, &order, SelfMatchPolicy::CancelIncoming )?;
+    let dry_crossing = exchange_match::cross( &mut dry_book, &order, policy )?;
     for trade in &dry_crossing.trades
     {
-      if let Err( error ) = dry_escrow.settle( trade, side, price )
+      if let Err( error ) = dry_escrow.settle( trade, order.side, order.price )
       {
-        return Err( self.reject( &order, Self::reason_for( error ) ) );
+        return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
       }
     }
     for cancellation in &dry_crossing.cancelled
     {
       if let Err( error ) = dry_escrow.release( cancellation.account, cancellation.order )
       {
-        return Err( self.reject( &order, Self::reason_for( error ) ) );
+        return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
       }
     }
 
@@ -334,24 +547,23 @@ impl Exchange
     // pure `cross`, and nothing else touches `self.escrow`/`self.book` in
     // between.
     let reserved = self.escrow.reserve( &order ).expect( "already validated by the dry run above" );
-    let arrival = self.emit( order.id, order.account, EventKind::OrderAccepted { side, price, quantity, reserved } );
-    let crossing = exchange_match::cross( &mut self.book, &order, SelfMatchPolicy::CancelIncoming )
+    let arrival = self.emit
+    (
+      order.id, order.account,
+      EventKind::OrderAccepted { side : order.side, price : order.price, quantity : order.quantity, reserved },
+    );
+    let crossing = exchange_match::cross( &mut self.book, &order, policy )
       .expect( "already produced by the identical dry run above — cross is pure" );
 
-    // 4. Settle each trade in the step that generated it. Already validated
-    // by the identical dry-run settle loop above, against the same starting
-    // escrow state and the same trades `cross` just reproduced.
+    // 4. Settle each trade in the step that generated it.
+    stats_fill_add( &mut self.stats, crossing.trades.len() as u64 );
     for trade in &crossing.trades
     {
-      self.escrow.settle( trade, side, price ).expect( "already validated by the dry run above" );
+      self.escrow.settle( trade, order.side, order.price ).expect( "already validated by the dry run above" );
       self.emit( order.id, order.account, EventKind::Trade( *trade ) );
     }
 
-    // 4a. Release and report each self-match cancellation. The resting side
-    // of any such cancellation is already gone from the book by this point —
-    // `exchange_match::cross` withdrew it before returning. If the incoming
-    // order itself was the cancelled side, note it: its remainder was just
-    // released here rather than being available to rest in step 5.
+    // 4a. Release and report each self-match cancellation.
     let mut incoming_cancelled = false;
     for cancellation in &crossing.cancelled
     {
@@ -365,21 +577,28 @@ impl Exchange
       incoming_cancelled |= cancellation.order == order.id;
     }
 
-    // 5. Rest the remainder, reservation retained. `crossing.remaining` alone
-    // cannot distinguish "nothing left to cross" from "the incoming order's
-    // remainder was just cancelled above" — both leave it positive — so the
-    // flag from 4a decides whether anything is left to rest at all.
+    // 5. Rest the remainder, reservation retained — via `exchange_rest::rest_place`
+    // now that this facade consumes that crate, rather than reaching into
+    // `self.book.insert` directly.
     let resting = if incoming_cancelled { Quantity::ZERO } else { crossing.remaining };
     if resting > Quantity::ZERO
     {
       assert!
       (
-        self.book.insert( Resting { order, remaining : resting, arrival } ),
+        rest_place( &mut self.book, Resting { order, remaining : resting, arrival } ),
         "order id came from this exchange's own next_order counter, which never repeats",
       );
+      stats_rest_add( &mut self.stats, 1 );
     }
 
     Ok( Receipt { order : order.id, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled } )
+  }
+
+  /// [`Self::reject`], plus the stats counter [`Self::exchange_step`] keeps.
+  fn reject_counted( &mut self, order : &Order, reason : RejectReason ) -> ExchangeError
+  {
+    stats_reject_add( &mut self.stats, 1 );
+    self.reject( order, reason )
   }
 
   /// Withdraw a resting order's remainder and return its reservation.
@@ -537,8 +756,8 @@ impl Exchange
     ExchangeError::Rejected( reason )
   }
 
-  /// Map what `Escrow::reserve` refused, in step 2 of [`Self::submit`], to
-  /// the reason reported to the caller.
+  /// Map what `Escrow::reserve` refused, in step 2 of the old `submit`
+  /// (now `step_place`'s own step 2), to the reason reported to the caller.
   ///
   /// An exhaustive match, not a wildcard: a reason no code path produces is a
   /// claim the code does not back, and letting a future `EscrowError` variant

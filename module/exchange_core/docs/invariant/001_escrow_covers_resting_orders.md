@@ -107,7 +107,7 @@ exact quantity, never an estimate with rounding slack.
 
 | File | Relationship |
 |------|--------------|
-| `src/lib.rs` | `Exchange::submit` reserves before the book sees the order, and rejects whole |
+| `src/lib.rs` | `Exchange::exchange_step`/`step_place` reserves before the book sees the order, and rejects whole |
 | `../../../exchange_escrow/src/lib.rs` | The reservation ledger this invariant constrains, and its reserve-or-reject-whole path |
 | `system/032_order_matching_engine.md` (design corpus) | States the ACID all-or-nothing requirement this invariant's reserve-or-reject-whole rule applies to reservation |
 

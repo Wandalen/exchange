@@ -30,4 +30,4 @@ Every file also carries a verified **Design status** comparing the proposed surf
 | [`020_exchange_snap_items.md`](020_exchange_snap_items.md) | Built, own crate — full field match; declined `exchange_order` dep/`SnapError` |
 | [`021_exchange_stats_items.md`](021_exchange_stats_items.md) | Built, own crate — includes `cancels` counter |
 | [`022_exchange_inbound_items.md`](022_exchange_inbound_items.md) | Built — `InboundCmd` + flush/drain/apply/overflow_reject; no standalone `Inbound`/`InboundError` types |
-| [`023_exchange_core_items.md`](023_exchange_core_items.md) | Built — facade over 8 real crates |
+| [`023_exchange_core_items.md`](023_exchange_core_items.md) | Built — facade over 13 real crates, ring-fed `exchange_step`; only `order_replace` still deferred |

@@ -14,6 +14,14 @@ exchange_escrow = { path = "../exchange_escrow" }
 exchange_seq = { path = "../exchange_seq" }
 exchange_id = { path = "../exchange_id" }
 exchange_tif = { path = "../exchange_tif" }
+exchange_spec = { path = "../exchange_spec" }
+exchange_depth = { path = "../exchange_depth" }
+exchange_halt = { path = "../exchange_halt" }
+exchange_snap = { path = "../exchange_snap" }
+exchange_event = { path = "../exchange_event" }
+exchange_stats = { path = "../exchange_stats" }
+exchange_rest = { path = "../exchange_rest" }
+exchange_inbound = { path = "../exchange_inbound" }
 exact_arith = { path = "../../../exact/module/exact_arith" }
 
 [lints]

@@ -87,36 +87,37 @@ clock), 007 (sockets — orders arrive already drained), 010 (wallets — a *con
 The workstream readme at
 [`../../../codename_space_sandbox/docs/workstream/002_exchange_core/readme.md`](../../../codename_space_sandbox/docs/workstream/002_exchange_core/readme.md)
 already cites an earlier design pass ("message 879") naming a 4-crate breakdown —
-`exchange_types`, `exchange_book`, `exchange_match`, `exchange_escrow` — and that is
-exactly what the real build at [`../module/`](../readme.md) implements, plus the
-`exchange_core` facade and the `smoke_exchange_core` demo lane (6 crates total) — see
-the family's own [Responsibility Table](../readme.md) for the authoritative list; there
-is no separate `module/readme.md` index file.
+`exchange_types`, `exchange_book`, `exchange_match`, `exchange_escrow` — which was the
+real build's starting point: those 4 crates, plus the `exchange_core` facade and the
+`smoke_exchange_core` demo lane (6 crates total).
 
 `core_exchange.txt` is a later, independent, far more granular pass: 23 crates instead
-of 4, one responsibility per crate rather than four coarse ones. None of that extra
-granularity has been built — the real family is still exactly the 6-crate shape message
-879 described. This corpus documents the 23-crate proposal faithfully regardless, the
-same way the sibling workstream 006 corpus documents its own superseded 15-crate
-proposal in [`../../exact/docs/`](../../exact/docs/readme.md) after that one *was* built
-in full. Here the gap is still open.
+of 4, one responsibility per crate rather than four coarse ones. As of 2026-10-03, that
+full granularity has been built — all 23 proposed crates are now real, alongside the
+original `exchange_types` (kept as a re-export aggregator, not retired) and
+`exchange_core`. See [`../module/readme.md`](../module/readme.md) for the authoritative,
+current crate list. This corpus continues to document the 23-crate proposal as the
+record of what was proposed, the same way the sibling workstream 006 corpus documents
+its own 15-crate proposal in [`../../exact/docs/`](../../exact/docs/readme.md) after that
+one was built in full.
 
 ## Design status summary
 
-Of the 23 proposed crates, 4 were built under their proposed name and shape
-(`exchange_book`, `exchange_match`, `exchange_core`), one was built but with an
-expanded scope and renamed methods (`exchange_escrow` — see
-[`crate/012_exchange_escrow.md`](crate/012_exchange_escrow.md)), 9 were folded into the
-real `exchange_types` crate, and 9 were not built at all: `exchange_tif`,
-`exchange_spec`, `exchange_cap`, `exchange_idem`, `exchange_depth`, `exchange_halt`,
-`exchange_snap`, `exchange_stats`, `exchange_inbound`. Two enum-level naming
-corrections surfaced while building this corpus and are recorded in their own files
-rather than here: real `Side` is `Buy`/`Sell` not `Bid`/`Ask`
+As of 2026-10-03, all 23 proposed crates are built as their own real crates. The
+pre-existing `exchange_types` persists too, now as a thin re-export aggregator for the
+types that moved out of it (`AccountId`/`OrderId` → `exchange_id`, `Side` →
+`exchange_side`, `Sequence` → `exchange_seq`, and others — see each crate's own
+"Extracted from `exchange_types`" note). Two enum-level naming corrections surfaced
+while building this corpus and remain accurate, recorded in their own files rather than
+here: real `Side` is `Buy`/`Sell` not `Bid`/`Ask`
 ([`side/001_bid.md`](side/001_bid.md)), and real `SelfMatchPolicy` is
-`CancelResting`/`CancelIncoming`/`CancelBoth` with no "allow" option at all, hardcoded
-to `CancelIncoming`
-([`stp_policy/001_allow.md`](stp_policy/001_allow.md)). Full per-crate accounting is in
-[`crate/`](crate/readme.md); full per-item accounting is in
+`CancelResting`/`CancelIncoming`/`CancelBoth` with no "Allow" option at all — the real
+design refuses every self-match unconditionally, by construction
+([`stp_policy/001_allow.md`](stp_policy/001_allow.md)). `exchange_escrow` keeps an
+expanded scope (real balances, not narrowed to a thin port over workstream 010) by
+deliberate decision — see
+[`crate/012_exchange_escrow.md`](crate/012_exchange_escrow.md). Full per-crate accounting
+is in [`crate/`](crate/readme.md); full per-item accounting is in
 [`exposed_item/`](exposed_item/readme.md).
 
 ## Relocation note
@@ -124,8 +125,8 @@ to `CancelIncoming`
 This corpus was built at `/home/user1/pro/lib/yrd_gamedev/substrate/exchange/docs/` while
 this family was mid-relocation out of `codename_space_sandbox/substrate/exchange/` into
 its own repository (same pattern as `../../exact/` and `../../ring/`). The family's own
-root [`../readme.md`](../readme.md) still links to the workstream readme via a path
-(`../../docs/workstream/002_exchange_core/readme.md`) that was correct only while this
-repository was nested inside `codename_space_sandbox` — it now resolves two directories
-short. Not fixed here since it's outside this corpus and the relocation is still in
-progress elsewhere.
+root [`../readme.md`](../readme.md) has since been updated to drop the now-unreachable
+link to the workstream readme in favor of plain prose pointing at it by path instead —
+see its own "Provenance" section. This corpus's own line 7 citation above
+(`../../../codename_space_sandbox/intake/core_exchange.txt`) still resolves correctly
+and is unaffected.

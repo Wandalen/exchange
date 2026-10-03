@@ -182,7 +182,7 @@ untidy:
 |------|--------------|
 | `conversation/anatolii_shlyakhto/0024_kostiantyn_required_topics_list.md` (design corpus) | States the prohibition and no policy — the omission this instance fills |
 | `../../../exchange_match/src/lib.rs` | Implements the key comparison at step 3 of the match loop, `SelfMatchPolicy`, and `Crossing.cancelled` |
-| `../../src/lib.rs` | `Exchange::submit` selects the policy — currently hardcoded to `CancelIncoming`, the conservative candidate this instance's own "Open: the default" note above names — releases escrow for each cancellation, and emits it with `CancelCause::SelfMatch` |
+| `../../src/lib.rs` | `Exchange::exchange_step` takes the policy as a per-call parameter now (no longer hardcoded — the caller selects it, `CancelIncoming` being the conservative candidate this instance's own "Open: the default" note above names) — releases escrow for each cancellation, and emits it with `CancelCause::SelfMatch` |
 
 ### Tests
 
