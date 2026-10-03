@@ -1,14 +1,10 @@
 # Pitfall: Crossing a worse level while a better one still has qty
 
-### Scope
-
-- **Purpose**: Name a specific mistake to avoid while building workstream 002.
-- **Responsibility**: Matching against a worse price while a better price on the same side still has quantity left.
-- **In Scope**: Book
-
-### Statement
-
-A taker must exhaust every unit available at the best price before touching the next-best one; skipping ahead to a worse level while the better one is not yet empty hands the taker (or the resting side) a worse execution than the book actually offered.
+**Relocated.** This pitfall is single-crate-relevant (`exchange_book`'s own
+`best`/`consume_best` indexing, which never reaches any level but the
+current front one) and now lives at
+[`../../module/exchange_book/docs/pitfall/002_crossing_worse_level_while_better_has_qty.md`](../../module/exchange_book/docs/pitfall/002_crossing_worse_level_while_better_has_qty.md),
+with the "how this crate avoids it" verification alongside it.
 
 ### Sources
 

@@ -14,9 +14,10 @@ exchange_tif = { path = "../exchange_tif" }
 exact_arith = { path = "../../../exact/module/exact_arith" }
 
 [dev-dependencies]
-# The test helpers' `Order` fixtures need an `InstrumentId` value — nothing
-# in this crate's own src/ reads it; `cross()` stays single-instrument until
-# Stage 4's book rework is consumed here.
+# The test helpers' `Order` fixtures need an `InstrumentId` value to
+# construct. Stale note removed: `cross()` reads `incoming.instrument`
+# directly (`src/lib.rs`) and threads it through every `Book` call — the
+# multi-instrument book rework landed here some time ago.
 exchange_id = { path = "../exchange_id" }
 
 [lints]

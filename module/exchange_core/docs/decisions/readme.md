@@ -19,7 +19,7 @@ integrates this engine, and aren't this crate's alone to decide.
 ### Regenerate
 
 ```sh
-cd "$(git rev-parse --show-toplevel)"/substrate/exchange/exchange_core/docs/decisions
+cd "$(git rev-parse --show-toplevel)"/substrate/exchange/module/exchange_core/docs/decisions
 printf 'ADR instances:            '; ls [0-9][0-9][0-9]_*.md 2>/dev/null | wc -l
 # ADR instances:            0
 ```

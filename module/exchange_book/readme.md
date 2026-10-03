@@ -5,7 +5,11 @@ The resting order book — two sides, each in published order, best at the front
 ```rust
 use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
+use exchange_id::InstrumentId;
+use exchange_tif::Tif;
 use exchange_types::{ AccountId, Order, OrderId, Sequence, Side };
+
+const INSTRUMENT : InstrumentId = InstrumentId( 1 );
 
 fn bid( id : u64, arrival : u64 ) -> Resting
 {
@@ -15,10 +19,12 @@ fn bid( id : u64, arrival : u64 ) -> Resting
     order : Order
     {
       id : OrderId( id ),
+      instrument : INSTRUMENT,
       account : AccountId( id ),
       side : Side::Buy,
       price : Money::parse( "2.50" ).unwrap(),
       quantity,
+      tif : Tif::Gtc,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),
@@ -29,8 +35,8 @@ let mut book = Book::new();
 // insert two bids at the same price, newest first …
 book.insert( bid( 2, 20 ) );
 book.insert( bid( 1, 10 ) );
-// … and the earlier arrival is still at index 0.
-assert_eq!( book.side( Side::Buy )[ 0 ].order.id, OrderId( 1 ) );
+// … and the earlier arrival is still at the front.
+assert_eq!( book.side( INSTRUMENT, Side::Buy ).next().unwrap().order.id, OrderId( 1 ) );
 ```
 
 ## The contract is the order, not the storage
@@ -97,10 +103,12 @@ believes is gone.
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_types` and `exact_arith` |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_types`, `exchange_level`, `exchange_id`, `exact_arith` |
 | [`src/lib.rs`](src/lib.rs) | `Book`, `Resting`, and the one ranking function |
 | `docs/workaround/` | External constraints this crate absorbs — none |
-| `docs/pitfall/` | The 1 "Book" pitfall that is purely this crate's own storage choice |
+| `docs/pitfall/` | The 2 "Book" pitfalls that are purely this crate's own storage choice and indexing |
+| `docs/definition/` | Module index — every `pub` item and where it's documented |
+| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
 | [`tests/priority_test.rs`](tests/priority_test.rs) | Test Matrix T02–T04 — priority from both sides, and cancel |
 
 ## Related

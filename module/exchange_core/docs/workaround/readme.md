@@ -6,8 +6,8 @@ External constraints `exchange_core` absorbs.
 
 - **Purpose**: Record every external constraint this crate compensates for, so each one carries a cost and a deletion condition.
 - **Responsibility**: Document this crate's workarounds, or record explicitly that it has none.
-- **In Scope**: Constraints originating outside this repository — for a crate with no dependencies, that means the language, the toolchain, and the targets.
-- **Out of Scope**: This crate's own design decisions, which are not workarounds however unusual they look; constraints compensated in shared tooling (→ [`docs/workaround/`](../../../../../../docs/workaround/readme.md) at the repository root).
+- **In Scope**: Constraints originating outside this repository — the language, the toolchain, the targets, and any published (non-workspace) crate.
+- **Out of Scope**: This crate's own design decisions, which are not workarounds however unusual they look; constraints a dependency absorbs on its own behalf, to be documented in that crate's own `docs/workaround/`, not duplicated here. (No family-wide `docs/workaround/` collection exists under `substrate/exchange/docs/` to defer to — confirmed the same way `exchange_escrow`'s own `docs/workaround/readme.md` already found; every crate checked so far reports zero instances, so there is nothing yet for a central collection to hold.)
 
 ### Overview
 
@@ -30,9 +30,13 @@ cargo tree --depth 1
 
 ### Workarounds
 
-| File | Relationship |
-|------|-----------------|
-| [`../../../../../../docs/workaround/readme.md`](../../../../../../docs/workaround/readme.md) | Repo-wide workarounds; none reach this crate, which has no rendering or dev-server path |
+None. No instance file exists in this directory, and no family-wide
+`docs/workaround/` collection exists under `substrate/exchange/docs/` to
+check against either (see Out of Scope, above). This section previously
+linked six directory levels up from here, past the repo root into a
+nonexistent sibling `docs/workaround/readme.md` — fixed by removing the
+dead link rather than correcting its depth, since no such repo-wide
+collection exists at any depth.
 
 ### Sources
 

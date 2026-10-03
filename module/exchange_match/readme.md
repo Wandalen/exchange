@@ -79,17 +79,45 @@ If the book refuses, the two disagree about what rests — and rather than
 clamping or looping, that is an error. It should be unreachable; an error it
 cannot silently be wrong about is what makes "should" checkable.
 
+## Time-in-force
+
+`incoming.tif` is read in exactly one place: `tif_requires_full` (from
+`exchange_tif`) gates whether `cross` must treat a partial outcome as a
+rejection rather than an ordinary partial fill. GTC and IOC need no special
+case — `cross` has never rested the incoming order's own remainder for any
+TIF (resting it is a caller's decision, not this crate's), so "drop any
+remainder" was already the behavior for both; only whether a caller later
+rests that remainder differs. FOK is the real branch: by the time `cross`
+returns, any trade it made is real and cannot be un-happened, so a FOK order
+is probed first against a disposable clone of `book`, and only a probe that
+fully consumes it is replayed against the real `book`. An unfillable FOK
+comes back shaped exactly like an ordinary no-cross outcome — empty trades,
+full remaining, nothing cancelled — because nothing in the real book ever
+changed.
+
+[`tests/tif_test.rs`](tests/tif_test.rs) covers IOC's GTC-parity and FOK's
+full matrix — fits-entirely, cannot-fill-entirely, against-no-liquidity, and
+short-by-a-second-level. The failure mode this probe-then-commit structure
+forecloses — a partial fill committed to the real book and then undone — is
+this crate's own [`docs/pitfall/001_fok_that_fills_part_then_rejects.md`](docs/pitfall/001_fok_that_fills_part_then_rejects.md).
+
 ## Responsibility Table
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_types`, `exact_arith` |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_stp`, `exchange_tif`, `exchange_types`, `exact_arith` |
 | [`src/lib.rs`](src/lib.rs) | `cross`, `Crossing`, the crossing predicate, and self-match policy/cancellation types |
 | [`tests/crossing_test.rs`](tests/crossing_test.rs) | Test Matrix T05–T07 — full fill, partial fill, and no cross |
+| [`tests/tif_test.rs`](tests/tif_test.rs) | Test Matrix — IOC's GTC parity, and FOK's probe-then-commit matrix |
 | `docs/workaround/` | External constraints this crate absorbs — none |
-| `docs/pitfall/` | The 1 "Match policy" pitfall this crate's FOK probe-then-commit avoids |
+| `docs/pitfall/` | The 2 "Match policy" pitfalls this crate's FOK probe-then-commit and self-match-before-fill ordering avoid |
+| `docs/definition/` | Module index — every `pub` item and where it's documented |
+| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
 | [`tests/self_match_test.rs`](tests/self_match_test.rs) | Test Matrix T09–T12 — the three self-match policies, checked before a fill commits |
+| [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan — the FOK probe-vs-commit gate's one load-bearing condition |
 
 ## Related
 
 - [`exchange_book/`](../exchange_book/readme.md) — the book this loop consumes from
+- [`exchange_tif/`](../exchange_tif/readme.md) — `tif_requires_full`, consulted here to gate FOK
+- [`exchange_stp/`](../exchange_stp/readme.md) — `SelfMatchPolicy`, re-exported here unchanged

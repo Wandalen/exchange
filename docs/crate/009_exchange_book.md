@@ -7,7 +7,7 @@
 - **In Scope**: Storage and lookup. No match, no escrow, no `ring_*` import.
 - **Out of Scope**: Matching and escrow.
 
-**Design status**: Built as the real `exchange_book` crate — `Book`, `Resting`, with `insert`/`cancel`/`best`/`consume_best`/`side`/`iter`. Single-instrument only (no `InstrumentId` anywhere in its API).
+**Design status**: Built as the real `exchange_book` crate — `Book`, `Resting`, with `insert`/`cancel`/`best`/`consume_best`/`side`/`iter`. Multi-instrument: one `Book` value holds every instrument's own bids/asks internally (keyed by `InstrumentId`), with `cancel`/`side`/`best`/`consume_best` each taking an `InstrumentId` as their own first argument — this superseded an earlier, truly single-instrument build with no `InstrumentId` anywhere in its API. Full comparison: [`../../module/exchange_book/docs/item/readme.md`](../../module/exchange_book/docs/item/readme.md).
 
 ### Statement
 

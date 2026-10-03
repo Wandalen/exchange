@@ -1,14 +1,14 @@
 # Pitfall: STP applied after the fill is already emitted
 
-### Scope
-
-- **Purpose**: Name a specific mistake to avoid while building workstream 002.
-- **Responsibility**: Checking the self-trade policy after a Fill event has already been produced for the crossing orders.
-- **In Scope**: Match policy
-
-### Statement
-
-Self-match prevention has to intercept the cross before a trade is recorded — applying it afterward means a self-fill event has already gone out to any consumer watching the event stream, and withdrawing it after the fact is not the same as it never having happened.
+**Relocated.** This pitfall is single-crate-relevant (`exchange_match`'s
+own `cross_inner` ordering — the self-match check runs before any `Trade`
+is built, not after) and now lives at
+[`../../module/exchange_match/docs/pitfall/002_stp_applied_after_fill_emitted.md`](../../module/exchange_match/docs/pitfall/002_stp_applied_after_fill_emitted.md),
+with the "how this crate avoids it" verification alongside it. (An earlier
+pass of this effort had reasoned this one "spans this crate and
+`exchange_stp`"; re-verified against `exchange_stp`'s real source for this
+batch — see the relocated file's own "Redistribution note" for why that
+reasoning did not hold.)
 
 ### Sources
 
