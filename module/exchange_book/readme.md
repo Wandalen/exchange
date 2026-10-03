@@ -1,0 +1,108 @@
+# exchange_book
+
+The resting order book — two sides, each in published order, best at the front.
+
+```rust
+use exact_arith::{ Money, Quantity };
+use exchange_book::{ Book, Resting };
+use exchange_types::{ AccountId, Order, OrderId, Sequence, Side };
+
+fn bid( id : u64, arrival : u64 ) -> Resting
+{
+  let quantity = Quantity::from_int( 5 ).unwrap();
+  Resting
+  {
+    order : Order
+    {
+      id : OrderId( id ),
+      account : AccountId( id ),
+      side : Side::Buy,
+      price : Money::parse( "2.50" ).unwrap(),
+      quantity,
+    },
+    remaining : quantity,
+    arrival : Sequence( arrival ),
+  }
+}
+
+let mut book = Book::new();
+// insert two bids at the same price, newest first …
+book.insert( bid( 2, 20 ) );
+book.insert( bid( 1, 10 ) );
+// … and the earlier arrival is still at index 0.
+assert_eq!( book.side( Side::Buy )[ 0 ].order.id, OrderId( 1 ) );
+```
+
+## The contract is the order, not the storage
+
+Matching takes from the front and never re-decides. That makes the *published
+order* the whole of what this crate promises: a book holding the right orders in
+the wrong sequence fills the wrong people, and nothing downstream can notice —
+every trade is well-formed, every balance conserves, and the wrong account got
+paid.
+
+So every test in [`tests/priority_test.rs`](tests/priority_test.rs) reads
+`side()` rather than any internal, and the ranking rule lives in one private
+function that both `insert` and the tests' own re-derivation agree on:
+
+- better price first — higher for bids, lower for asks;
+- at one price, earlier arrival first.
+
+Price outranks arrival. The two rules only disagree when a later order is priced
+better, and an implementation sorting by `( arrival, price )` passes both
+individual cases and fails that one, which is why it has a test of its own.
+
+## Arrival is a claimed number, never a clock
+
+`arrival` is a `Sequence` handed in by the caller. The arrival-order invariant
+this crate must uphold forbids the matching path from reading a clock, and a
+book that timestamped its own insertions would be reading one. Two orders that
+arrive in the same microsecond need an order anyway; a claimed sequence number
+has one, and a replay from an empty book reproduces it exactly.
+
+`the_published_order_is_total_with_no_ties_left` states this as a property
+rather than an instance: no two neighbours are ever indistinguishable, so no tie
+is ever resolved by something the sequence does not carry.
+
+## Why a sorted `Vec` per side
+
+Because the observable property is the order, and a flat vector *is* that order
+— a test reads it directly instead of reconstructing it from a map of levels,
+each of which would need its own queue and its own invariant.
+
+The alternative — a price-level map holding per-level FIFOs — wins on insertion
+cost at book depths this crate has not reached and does not yet measure.
+`insert` uses `partition_point`, so finding the position is logarithmic and only
+the shift is linear. When a benchmark measures the shift and finds it matters,
+the representation changes behind the same three methods; until something
+measures it, the simpler shape is the honest one.
+
+## Refusals rather than repairs
+
+`cancel` on an absent order returns `None`. It is an ordinary race — the order
+may have filled a moment earlier — and a crate that panicked would turn a
+routine event into an outage.
+
+`consume_best` past what rests returns `false` and moves nothing, rather than
+clamping. A clamp leaves the book and its caller disagreeing about how much
+changed hands: books that balance, quantities that do not.
+
+`insert` on an id that already rests — on either side — returns `false` and
+leaves the book untouched, rather than seating the duplicate. `cancel` only
+ever removes the first match for an id, so an unrejected duplicate would
+silently outlive its own cancellation and keep trading under a name its owner
+believes is gone.
+
+## Responsibility Table
+
+| File | Responsibility |
+|------|----------------|
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_types` and `exact_arith` |
+| [`src/lib.rs`](src/lib.rs) | `Book`, `Resting`, and the one ranking function |
+| `docs/workaround/` | External constraints this crate absorbs — none |
+| `docs/pitfall/` | The 1 "Book" pitfall that is purely this crate's own storage choice |
+| [`tests/priority_test.rs`](tests/priority_test.rs) | Test Matrix T02–T04 — priority from both sides, and cancel |
+
+## Related
+
+- [`exchange_types/`](../exchange_types/readme.md) — the orders this book holds

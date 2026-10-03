@@ -1,0 +1,20 @@
+[package]
+name = "exchange_depth"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Top-N book depth without a full walk"
+publish = false
+
+[dependencies]
+exchange_book = { path = "../exchange_book" }
+exchange_id = { path = "../exchange_id" }
+exchange_side = { path = "../exchange_side" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
+
+[dev-dependencies]
+exchange_types = { path = "../exchange_types" }
+exchange_tif = { path = "../exchange_tif" }
+
+[lints]
+workspace = true

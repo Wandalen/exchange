@@ -1,0 +1,10 @@
+[package]
+name = "exchange_cap"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "A limit on rests and levels per book; past the cap is a refusal, not unbounded growth or a silent drop"
+publish = false
+
+[lints]
+workspace = true

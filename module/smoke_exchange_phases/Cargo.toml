@@ -1,0 +1,33 @@
+[package]
+name = "smoke_exchange_phases"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The P01-P29 phase-smoke ladder — one tiny golden-line binary per phase, graded independently of the P30 wall smoke"
+publish = false
+
+[dependencies]
+exchange_id = { path = "../exchange_id" }
+exchange_side = { path = "../exchange_side" }
+exchange_spec = { path = "../exchange_spec" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
+exchange_tif = { path = "../exchange_tif" }
+exchange_stp = { path = "../exchange_stp" }
+exchange_seq = { path = "../exchange_seq" }
+exchange_cap = { path = "../exchange_cap" }
+exchange_book = { path = "../exchange_book" }
+exchange_depth = { path = "../exchange_depth" }
+exchange_types = { path = "../exchange_types" }
+exchange_halt = { path = "../exchange_halt" }
+exchange_snap = { path = "../exchange_snap" }
+exchange_order = { path = "../exchange_order" }
+exchange_idem = { path = "../exchange_idem" }
+exchange_level = { path = "../exchange_level" }
+exchange_core = { path = "../exchange_core" }
+exchange_escrow = { path = "../exchange_escrow" }
+exchange_match = { path = "../exchange_match" }
+exchange_conserve = { path = "../exchange_conserve" }
+exchange_rest = { path = "../exchange_rest" }
+
+[lints]
+workspace = true

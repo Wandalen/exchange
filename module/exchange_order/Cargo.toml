@@ -1,0 +1,16 @@
+[package]
+name = "exchange_order"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "One order record - a resting order or a taker - with its instrument and tif"
+publish = false
+
+[dependencies]
+exchange_id = { path = "../exchange_id" }
+exchange_side = { path = "../exchange_side" }
+exchange_tif = { path = "../exchange_tif" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
+
+[lints]
+workspace = true

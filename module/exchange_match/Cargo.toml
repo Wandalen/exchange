@@ -1,0 +1,23 @@
+[package]
+name = "exchange_match"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The crossing engine — an incoming order against a book, producing trades"
+publish = false
+
+[dependencies]
+exchange_types = { path = "../exchange_types" }
+exchange_book = { path = "../exchange_book" }
+exchange_stp = { path = "../exchange_stp" }
+exchange_tif = { path = "../exchange_tif" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
+
+[dev-dependencies]
+# The test helpers' `Order` fixtures need an `InstrumentId` value — nothing
+# in this crate's own src/ reads it; `cross()` stays single-instrument until
+# Stage 4's book rework is consumed here.
+exchange_id = { path = "../exchange_id" }
+
+[lints]
+workspace = true

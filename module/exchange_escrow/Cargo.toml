@@ -1,0 +1,20 @@
+[package]
+name = "exchange_escrow"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The available/reserved balance partition, so an order cannot commit what it does not hold"
+publish = false
+
+[dependencies]
+exchange_types = { path = "../exchange_types" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
+
+[dev-dependencies]
+# The test helpers' `Order` fixtures need `InstrumentId`/`Tif` values —
+# nothing in this crate's own src/ reads either.
+exchange_id = { path = "../exchange_id" }
+exchange_tif = { path = "../exchange_tif" }
+
+[lints]
+workspace = true

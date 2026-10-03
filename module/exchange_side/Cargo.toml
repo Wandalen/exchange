@@ -1,0 +1,10 @@
+[package]
+name = "exchange_side"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Bid and ask as one closed type, with no knowledge of price"
+publish = false
+
+[lints]
+workspace = true

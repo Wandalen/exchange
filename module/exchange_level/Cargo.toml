@@ -1,0 +1,23 @@
+[package]
+name = "exchange_level"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "One price, FIFO rest - the queue a book keeps at a single price point"
+publish = false
+
+[dependencies]
+exchange_id = { path = "../exchange_id" }
+exchange_order = { path = "../exchange_order" }
+exchange_seq = { path = "../exchange_seq" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
+
+[dev-dependencies]
+# The test helper's `node()` fixture needs `Side`/`Tif` values for the
+# `Order` each `LevelNode` wraps — nothing in this crate's own src/ reads
+# either.
+exchange_side = { path = "../exchange_side" }
+exchange_tif = { path = "../exchange_tif" }
+
+[lints]
+workspace = true

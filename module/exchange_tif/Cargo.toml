@@ -1,0 +1,10 @@
+[package]
+name = "exchange_tif"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Time-in-force as an explicit value on the order: GTC, IOC, FOK"
+publish = false
+
+[lints]
+workspace = true

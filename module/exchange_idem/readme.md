@@ -1,0 +1,45 @@
+# exchange_idem
+
+`OrderId` seen once per book — a retry that resubmits the same id is rejected
+rather than doubling the rest. Depends on `exchange_id` only.
+
+```rust
+use exchange_id::OrderId;
+use exchange_idem::{ IdSet, idem_insert, idem_seen };
+
+let mut seen = IdSet::new();
+idem_insert( &mut seen, OrderId( 1 ) ).unwrap();
+assert!( idem_seen( &seen, OrderId( 1 ) ) );
+assert!( idem_insert( &mut seen, OrderId( 1 ) ).is_err(), "a repeat is refused" );
+```
+
+## Net new
+
+No real crate carried idempotency before this one — nothing tracked which
+`OrderId`s had already been accepted, so a caller that retried a submission
+after a dropped acknowledgement could double-rest the same order. Closes hard
+problem 15.
+
+## `idem_remove` exists so a cancelled id can be resubmitted
+
+Without it, a legitimate cancel-then-resubmit under the same id would be
+indistinguishable from the retry this crate exists to refuse.
+
+## Responsibility Table
+
+| File | Responsibility |
+|------|----------------|
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_id` only |
+| [`src/lib.rs`](src/lib.rs) | `IdSet`, `idem_seen`, `idem_insert`, `idem_remove`, `IdemError` |
+| `docs/workaround/` | External constraints this crate absorbs — none |
+| `docs/pitfall/` | The 1 "Identity and cap" pitfall this crate's refusal behavior avoids |
+| `docs/definition/` | Module index — every `pub` item and where it's documented |
+| `docs/item/` | Consolidated exposed-surface listing — matches the proposal exactly |
+| [`tests/exchange_idem_test.rs`](tests/exchange_idem_test.rs) | Test Matrix T13, plus Phase P13's smoke assertion |
+| [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan |
+
+## Related
+
+- [`exchange_id/`](../exchange_id/readme.md) — supplies `OrderId`
+- [`exchange_rest/`](../exchange_rest/readme.md) — the future caller that checks idempotency before resting a submission
+- [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p13_idem`

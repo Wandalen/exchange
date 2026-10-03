@@ -1,0 +1,17 @@
+[package]
+name = "exchange_fill"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The trade record and the event stream — the Contract's two outputs"
+publish = false
+
+[dependencies]
+exact_arith = { path = "../../../exact/module/exact_arith" }
+exchange_id = { path = "../exchange_id" }
+exchange_order = { path = "../exchange_order" }
+exchange_seq = { path = "../exchange_seq" }
+exchange_side = { path = "../exchange_side" }
+
+[lints]
+workspace = true

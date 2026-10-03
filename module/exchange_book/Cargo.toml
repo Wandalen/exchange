@@ -1,0 +1,23 @@
+[package]
+name = "exchange_book"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The resting order book and its price-time priority ordering"
+publish = false
+
+[dependencies]
+exchange_types = { path = "../exchange_types" }
+exchange_level = { path = "../exchange_level" }
+exchange_id = { path = "../exchange_id" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
+
+[dev-dependencies]
+# The test helper's `rest()` fixture also needs a `Tif` value for the
+# `Order` each `Resting` wraps — nothing in this crate's own src/ reads it;
+# `exchange_id` moved to a real dependency above once `Book` itself became
+# keyed by `InstrumentId`.
+exchange_tif = { path = "../exchange_tif" }
+
+[lints]
+workspace = true

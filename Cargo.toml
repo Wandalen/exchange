@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = [
+  "module/exchange_book",
+  "module/exchange_cap",
+  "module/exchange_conserve",
+  "module/exchange_core",
+  "module/exchange_depth",
+  "module/exchange_escrow",
+  "module/exchange_event",
+  "module/exchange_fill",
+  "module/exchange_halt",
+  "module/exchange_id",
+  "module/exchange_idem",
+  "module/exchange_level",
+  "module/exchange_match",
+  "module/exchange_order",
+  "module/exchange_rest",
+  "module/exchange_seq",
+  "module/exchange_side",
+  "module/exchange_snap",
+  "module/exchange_spec",
+  "module/exchange_stats",
+  "module/exchange_stp",
+  "module/exchange_tif",
+  "module/exchange_types",
+  "module/smoke_exchange_core",
+  "module/smoke_exchange_phases",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+
+[workspace.lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+future_incompatible = { level = "warn", priority = -1 }
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unsafe-code = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"

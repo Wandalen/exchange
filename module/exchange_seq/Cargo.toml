@@ -1,0 +1,10 @@
+[package]
+name = "exchange_seq"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "A monotonic sequence for time priority, without a wall clock"
+publish = false
+
+[lints]
+workspace = true
