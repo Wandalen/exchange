@@ -1,13 +1,9 @@
 # Feature: conservation_assert
 
-### Scope
-
-- **Purpose**: Check a set of fills sums to zero.
-- **Responsibility**: Assert that a batch of fills conserves value exactly.
-
-### Statement
-
-`conservation_assert` checks that a set of fills' legs sum to exactly zero, giving hard problem 5 a function to call rather than leaving it as an unchecked invariant.
+**Relocated.** This feature is single-crate-relevant (`exchange_conserve`'s
+own `conserve_assert`) and now lives at
+[`../../module/exchange_conserve/readme.md`](../../module/exchange_conserve/readme.md)'s
+"Closes hard problem 5 and feature 21" section.
 
 ### Sources
 

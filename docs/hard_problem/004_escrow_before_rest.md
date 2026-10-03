@@ -1,13 +1,9 @@
 # Hard Problem: Escrow Before Rest
 
-### Scope
-
-- **Purpose**: Lock first, then rest; unlock on cancel and on the remainder.
-- **Responsibility**: Reserve funds before an order rests, and release the reservation on cancel or on any unfilled remainder.
-
-### Statement
-
-Funds must lock before an order rests, and unlock on cancel or on whatever remains unfilled, or two ticks could spend the same balance twice. Without this, the exchange oversells.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_core`'s
+own `Exchange::submit`/`Exchange::cancel` step ordering) and now lives at
+[`../../module/exchange_core/readme.md`](../../module/exchange_core/readme.md)'s
+"Closes hard problem 4, and feature 10" section.
 
 ### Sources
 

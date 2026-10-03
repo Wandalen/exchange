@@ -9,6 +9,13 @@ use exchange_stp::{ SelfMatchPolicy, stp_name };
 assert_eq!( stp_name( SelfMatchPolicy::CancelIncoming ), "cancel_incoming" );
 ```
 
+## Closes feature 15
+
+`SelfMatchPolicy` offering a closed choice of self-trade policies,
+configured once per book rather than decided ad hoc at match time, is
+feature 15 (`stp_policy`) — `exchange_match` is the crate that applies it on
+every candidate pair; see that crate's own readme.
+
 ## Extracted from `exchange_match`
 
 `SelfMatchPolicy` lived in `exchange_match` until this crate split out;

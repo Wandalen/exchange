@@ -1,13 +1,9 @@
 # Hard Problem: Inbound At Aeon Edge
 
-### Scope
-
-- **Purpose**: Orders arrive as a drained slice, then the match runs.
-- **Responsibility**: Receive orders as an already-drained slice at the aeon boundary, then run the match outside of 001's own tick.
-
-### Statement
-
-008 (the ring) delivers orders as an already-drained slice so that 001 is never blocked from inside the matching system. Without this boundary, a race opens up inside the simulation tick.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_inbound`'s
+own `inbound_drain`) and now lives at
+[`../../module/exchange_inbound/readme.md`](../../module/exchange_inbound/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

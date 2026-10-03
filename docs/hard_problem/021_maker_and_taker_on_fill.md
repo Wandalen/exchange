@@ -1,13 +1,9 @@
 # Hard Problem: Maker And Taker On Fill
 
-### Scope
-
-- **Purpose**: Every fill names both sides and the price.
-- **Responsibility**: Name both the maker and the taker, and the execution price, on every fill.
-
-### Statement
-
-Workstream 010 computes fees and logs settlement from the fill alone, so every fill must name both the maker and taker and the price it executed at — otherwise settlement doesn't know who to credit.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_fill`'s
+own `Trade` type) and now lives at
+[`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md)'s
+"Closes hard problem 21, and features 12 and 13" section.
 
 ### Sources
 

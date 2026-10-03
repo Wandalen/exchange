@@ -20,6 +20,12 @@ it gives the increment a name and a home, replacing the raw `u64` counter
 `exchange_core` previously incremented by hand — `Exchange::emit`
 (`module/exchange_core/src/lib.rs`) now calls it instead.
 
+## Closes feature 28
+
+Stamping resting orders with a monotonic `Sequence` instead of a wall clock
+is feature 28 (sequence, no wall clock) — a prerequisite for hard problem 6's
+determinism, since a clock reading differs across replays and nodes.
+
 ## Not built: `SeqError::Exhausted`, `seq_cmp`
 
 Both are named in the source design; neither is built here. See

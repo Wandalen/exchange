@@ -7,7 +7,7 @@
 - **In Scope**: The bridge itself. Does not own `ring_claim` and does not implement gating.
 - **Out of Scope**: Owning `ring_claim` or gating.
 
-**Design status**: Not built — zero `ring_*` dependency exists anywhere in the family (verified via grep across every `module/*/Cargo.toml`); no bridge to workstream 008 exists at all.
+**Design status**: Built (`module/exchange_inbound`), depending on exactly three `ring_*` crates (`ring_factory`, `ring_handle`, `ring_types`) rather than the six originally named — see `../ring_edge/001_exchange_inbound_ring_edge.md` for the resolved edge and [`../../module/exchange_inbound/docs/item/readme.md`](../../module/exchange_inbound/docs/item/readme.md) for the full comparison against this crate's own proposal.
 
 ### Statement
 

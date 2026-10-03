@@ -39,6 +39,16 @@ book.insert( bid( 1, 10 ) );
 assert_eq!( book.side( INSTRUMENT, Side::Buy ).next().unwrap().order.id, OrderId( 1 ) );
 ```
 
+## Closes hard problem 1, and features 6 and 22
+
+`per_instrument` keys every side by `InstrumentId`, so one instrument's
+resting orders can never cross another's — this crate closes hard problem 1
+(one book per instrument). `Book` itself — one instrument's bid and ask
+ladders — is feature 6. Every read path (`side`, `best`, `iter`) walks
+`per_instrument`'s and each side's own sorted `Vec` in price order, never a
+hash, which is feature 22 (sorted price walk); `exchange_match` and
+`exchange_depth` both rely on this without re-sorting anything themselves.
+
 ## The contract is the order, not the storage
 
 Matching takes from the front and never re-decides. That makes the *published

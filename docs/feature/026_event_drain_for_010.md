@@ -1,13 +1,9 @@
 # Feature: Event Drain For 010
 
-### Scope
-
-- **Purpose**: Hand workstream 010 what happened, once.
-- **Responsibility**: Drain fills, rejects, and cancel-acks for the consumer to settle.
-
-### Statement
-
-An event drain hands workstream 010 every fill, reject, and cancel-ack produced this call, exactly once — the one channel through which this workstream's state changes reach the economy layer.
+**Relocated.** This feature is single-crate-relevant (`exchange_event`'s own
+`event_drain`) and now lives at
+[`../../module/exchange_event/readme.md`](../../module/exchange_event/readme.md)'s
+"Closes hard problem 12 and feature 26" section.
 
 ### Sources
 

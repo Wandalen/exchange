@@ -1,13 +1,9 @@
 # Feature: book_rest, book_cancel
 
-### Scope
-
-- **Purpose**: Place a resting order; remove one.
-- **Responsibility**: Insert an order into the book, and remove one by id.
-
-### Statement
-
-`book_rest` places an order onto its price level; `book_cancel` removes a resting order by id — the two primitive mutations every higher-level operation (replace, match) builds from.
+**Relocated.** This feature is single-crate-relevant (`exchange_rest`'s own
+`rest_place`/`rest_cancel`) and now lives at
+[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md)'s
+"Closes hard problem 9, and features 8 and 25" section.
 
 ### Sources
 

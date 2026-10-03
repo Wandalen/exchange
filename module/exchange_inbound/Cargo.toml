@@ -1,0 +1,27 @@
+[package]
+name = "exchange_inbound"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "InboundCmd over a ring_factory/ring_handle channel — many producers, one deterministic apply order"
+publish = false
+
+[dependencies]
+exchange_book = { path = "../exchange_book" }
+exchange_id = { path = "../exchange_id" }
+exchange_match = { path = "../exchange_match" }
+exchange_rest = { path = "../exchange_rest" }
+exchange_tif = { path = "../exchange_tif" }
+ring_factory = { path = "../../../ring/ring_factory" }
+ring_handle = { path = "../../../ring/ring_handle" }
+ring_types = { path = "../../../ring/ring_types" }
+
+[dev-dependencies]
+exact_arith = { path = "../../../exact/module/exact_arith" }
+exchange_order = { path = "../exchange_order" }
+exchange_seq = { path = "../exchange_seq" }
+exchange_side = { path = "../exchange_side" }
+exchange_stp = { path = "../exchange_stp" }
+
+[lints]
+workspace = true

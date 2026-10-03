@@ -1,13 +1,9 @@
 # Feature: Partial Fill, Rest The Leftover
 
-### Scope
-
-- **Purpose**: A fill that doesn't exhaust the taker rests what's left.
-- **Responsibility**: Rest whatever quantity a match didn't consume.
-
-### Statement
-
-When a taker's quantity outlasts the resting liquidity it crossed, the unfilled remainder rests in the book exactly as a fresh order would — partial fills feed back into the same resting path rather than a separate one.
+**Relocated.** This feature is single-crate-relevant (`exchange_core`'s own
+`Exchange::submit` step 5) and now lives at
+[`../../module/exchange_core/readme.md`](../../module/exchange_core/readme.md)'s
+"Closes hard problem 4, and feature 10" section.
 
 ### Sources
 

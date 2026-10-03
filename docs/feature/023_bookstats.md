@@ -1,13 +1,12 @@
 # Feature: BookStats
 
-### Scope
-
-- **Purpose**: Visibility into the hot path.
-- **Responsibility**: Count rests, fills, and rejects for one call.
-
-### Statement
-
-`BookStats` counts what happened during a call — rests, fills, rejects — so the hot path isn't flying blind when something needs to be measured.
+**Relocated.** This feature is single-crate-relevant (`exchange_stats`'s own
+`BookStats`) and now lives at
+[`../../module/exchange_stats/readme.md`](../../module/exchange_stats/readme.md)'s
+"## Genuinely new" section. (That section also claims hard problem 14 —
+disputed; see this collection's readme and the final report: hard problem 14
+is "keep matching cheap," a family-wide performance concern `BookStats`'
+counters alone don't resolve, so hard problem 14 itself stays central.)
 
 ### Sources
 

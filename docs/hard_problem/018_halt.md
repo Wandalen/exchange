@@ -1,15 +1,15 @@
 # Hard Problem: Halt
 
-### Scope
-
-- **Purpose**: Freeze the match; resting orders stay.
-- **Responsibility**: Freeze matching on an instrument while leaving its resting orders in place.
-
-**Design status**: Not addressed — no `halt_set`/`halt_clear`/`halt_is` or equivalent exists anywhere in the real crates.
-
-### Statement
-
-A station lockdown or circuit breaker needs to freeze matching while leaving resting orders untouched — without halt, there's no way to stop a market at all.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_halt`'s
+own `halt_set`/`halt_clear`/`halt_is`) and now lives at
+[`../../module/exchange_halt/readme.md`](../../module/exchange_halt/readme.md)'s
+"## Genuinely new" section. (The central Design status this entry used to
+carry — "Not addressed... no `halt_set`/`halt_clear`/`halt_is`... exists" —
+is stale: `exchange_halt` now builds and tests exactly those three.
+`exchange_spec/readme.md`'s own "## Net new" section also lists this hard
+problem among four it claims; `exchange_halt`'s dedicated `halt_set`/
+`halt_clear`/`halt_is` functions are the more precise, mechanistic owner, so
+this redistribution points here rather than to `exchange_spec`.)
 
 ### Sources
 

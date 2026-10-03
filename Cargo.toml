@@ -12,6 +12,7 @@ members = [
   "module/exchange_halt",
   "module/exchange_id",
   "module/exchange_idem",
+  "module/exchange_inbound",
   "module/exchange_level",
   "module/exchange_match",
   "module/exchange_order",

@@ -59,6 +59,8 @@ see the root readme's own Responsibility Table.
 | [`src/bin/demo_p25_halt.rs`](src/bin/demo_p25_halt.rs) | P25 — halt/resume round-trip |
 | [`src/bin/demo_p26_depth.rs`](src/bin/demo_p26_depth.rs) | P26 — `depth_top(2)` matches the book |
 | [`src/bin/demo_p27_snap.rs`](src/bin/demo_p27_snap.rs) | P27 — snapshot survives a live cancel taken after it |
+| [`src/bin/demo_p28_drain.rs`](src/bin/demo_p28_drain.rs) | P28 — two producers drain in one deterministic order |
+| [`src/bin/demo_p29_over.rs`](src/bin/demo_p29_over.rs) | P29 — a full ring rejects rather than silently drops |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/pitfall/` | The 2 "Process" pitfalls this suite's own structure bears on |
 

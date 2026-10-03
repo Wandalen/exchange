@@ -1,13 +1,9 @@
 # Hard Problem: More Than One Asset
 
-### Scope
-
-- **Purpose**: An instrument names a cash asset and a commodity asset.
-- **Responsibility**: Let an instrument name a distinct cash asset and commodity asset, not a single implicit token.
-
-### Statement
-
-The game isn't a single token: an instrument has to name both a cash asset and a commodity asset, or adding a second tradeable good forces a rewrite.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_spec`'s
+own `InstrumentSpec` asset-pair fields) and now lives at
+[`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md)'s
+"## Net new" section.
 
 ### Sources
 

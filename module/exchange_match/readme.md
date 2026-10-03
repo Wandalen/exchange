@@ -16,6 +16,12 @@ only the fill — an engine that filled 4 of 10 and reported a remainder of 0
 satisfies a fill-only check and quietly destroys six units of a customer's
 order.
 
+## Closes feature 9
+
+`cross` — crossing an incoming order against the opposite side of the book,
+producing fills plus a remainder — is feature 9 (`match_in`), the single
+entry point into the matching algorithm.
+
 ## The row that is easiest to leave out
 
 T07 — an order priced through no liquidity. An engine that fills

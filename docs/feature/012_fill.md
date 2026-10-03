@@ -1,13 +1,11 @@
 # Feature: Fill
 
-### Scope
-
-- **Purpose**: One record of a match.
-- **Responsibility**: Name maker, taker, price, quantity, and instrument for one executed match.
-
-### Statement
-
-A `Fill` records exactly who matched whom, at what price and quantity, on which instrument — the unit workstream 010 consumes to settle balances and compute fees.
+**Relocated.** This feature is single-crate-relevant (`exchange_fill`'s own
+`Trade`) and now lives at
+[`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md)'s
+"Closes hard problem 21, and features 12 and 13" section. (`instrument` is
+not yet one of `Trade`'s fields, since every real book is still one
+instrument deep — see that section's note.)
 
 ### Sources
 

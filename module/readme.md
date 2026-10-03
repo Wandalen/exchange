@@ -27,6 +27,7 @@ Every crate in the `substrate/exchange` workspace.
 | [`exchange_snap/`](exchange_snap/readme.md) | `snap_take` — a plain, copied snapshot of a book's resting rows |
 | [`exchange_match/`](exchange_match/readme.md) | `cross()` — an incoming order against the book, producing trades |
 | [`exchange_rest/`](exchange_rest/readme.md) | `rest_place`/`rest_cancel`/`rest_replace` — the non-matching ways an order moves on the book |
+| [`exchange_inbound/`](exchange_inbound/readme.md) | `InboundCmd` over a `ring_factory`/`ring_handle` channel — many producers, one deterministic apply order |
 | [`exchange_escrow/`](exchange_escrow/readme.md) | Available/reserved balance partition |
 | [`exchange_core/`](exchange_core/readme.md) | `Exchange` — the facade tying book, match and escrow together |
 | [`smoke_exchange_core/`](smoke_exchange_core/readme.md) | The original single-instrument wall smoke |

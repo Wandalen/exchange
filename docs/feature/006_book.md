@@ -1,13 +1,9 @@
 # Feature: Book
 
-### Scope
-
-- **Purpose**: One book per instrument.
-- **Responsibility**: Hold one instrument's resting bid and ask ladders.
-
-### Statement
-
-A `Book` holds one instrument's resting orders, sorted into its bid and ask ladders — the central structure every other operation in this workstream reads or mutates.
+**Relocated.** This feature is single-crate-relevant (`exchange_book`'s own
+`Book`) and now lives at
+[`../../module/exchange_book/readme.md`](../../module/exchange_book/readme.md)'s
+"Closes hard problem 1, and features 6 and 22" section.
 
 ### Sources
 

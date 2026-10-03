@@ -1,13 +1,9 @@
 # Hard Problem: Events, Not Wallets
 
-### Scope
-
-- **Purpose**: The output is Fill, Reject, CancelAck.
-- **Responsibility**: Emit Fill/Reject/CancelAck events and leave all balance-keeping to workstream 010.
-
-### Statement
-
-Balances belong to workstream 010; this workstream's only output is the Fill/Reject/CancelAck event stream. Without that split, there would be two sources of truth for the same money.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_event`'s
+own `event_drain`) and now lives at
+[`../../module/exchange_event/readme.md`](../../module/exchange_event/readme.md)'s
+"Closes hard problem 12 and feature 26" section.
 
 ### Sources
 

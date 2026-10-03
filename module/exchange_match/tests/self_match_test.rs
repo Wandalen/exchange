@@ -2,12 +2,13 @@
 //! self-match keys on both sides, and each of the three configured policies
 //! withdraws exactly its documented side.
 //!
-//! T13 (a self-crossing FOK cancelled whole) is not testable yet. [`Order`]
-//! carries a real `tif` field now, but `cross()` does not consult it —
-//! matching stays GTC-only until Stage 6 of the family's own refactor plan
-//! wires TIF-aware behavior through the crossing loop. Named here as open
-//! rather than silently dropped or faked with behavior the crate does not
-//! have.
+//! T13 (a self-crossing FOK cancelled whole) is still untested, for a
+//! different reason than originally noted here: `cross()` is TIF-aware now
+//! (see `tests/tif_test.rs`), but every test there fixes the policy to
+//! `SelfMatchPolicy::CancelResting` with no self-crossing order in the
+//! book, and every test here fixes `tif` to GTC — the two dimensions have
+//! never been exercised together. Named here as open rather than silently
+//! dropped or faked with behavior not actually verified.
 
 use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };

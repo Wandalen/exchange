@@ -1,13 +1,9 @@
 # Feature: InstrumentId, OrderId, AccountId
 
-### Scope
-
-- **Purpose**: Plain ids for the three concepts this workstream identifies.
-- **Responsibility**: Give the instrument, the order, and the account each a plain id type.
-
-### Statement
-
-Three identities recur throughout this workstream — which instrument, which order, which account — and each gets its own plain id type rather than a raw, interchangeable number.
+**Relocated.** This feature is single-crate-relevant (`exchange_id`'s own
+`InstrumentId`/`OrderId`/`AccountId`) and now lives at
+[`../../module/exchange_id/readme.md`](../../module/exchange_id/readme.md)'s
+"Closes feature 1" section.
 
 ### Sources
 

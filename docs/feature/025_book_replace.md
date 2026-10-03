@@ -1,15 +1,12 @@
 # Feature: book_replace
 
-### Scope
-
-- **Purpose**: Change a resting order without a cancel/re-rest race.
-- **Responsibility**: Replace an order's terms atomically — old gone, new live.
-
-**Design status**: Not built as a dedicated operation — the real `exchange_book` has `insert`/`cancel` but no `replace` method (verified via grep of `module/exchange_book/src/lib.rs` public functions).
-
-### Statement
-
-`book_replace` changes a resting order's terms as one atomic step, so the old order is reliably gone and the new one reliably live — never a window where a plain cancel-then-rest could lose priority or leave neither in place.
+**Relocated.** This feature is single-crate-relevant (`exchange_rest`'s own
+`rest_replace`) and now lives at
+[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md)'s
+"Closes hard problem 9, and features 8 and 25" section. (The central Design
+status this entry used to carry — "Not built as a dedicated operation...
+no `replace` method" — is stale: `exchange_rest::rest_replace` is built and
+tested, as an atomic cancel-then-reinsert-with-rollback.)
 
 ### Sources
 

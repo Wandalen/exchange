@@ -7,7 +7,13 @@
 - **In Scope**: Rest, cancel, replace.
 - **Out of Scope**: Crossing — this crate does not cross.
 
-**Design status**: Partially folded into the real `exchange_book` crate — `insert`/`cancel` exist; no `replace` method exists anywhere (verified via grep of `module/exchange_book/src/lib.rs` public functions).
+**Design status**: Built as its own real crate — `rest_place`, `rest_cancel`,
+`rest_replace`, and `RestReplaceError` all present, `rest_replace`'s atomic
+cancel-then-reinsert-with-rollback the one genuinely new operation
+(verified via direct read of `module/exchange_rest/src/lib.rs`). Not yet
+wired into `exchange_core`'s own `Exchange::cancel`, but `exchange_inbound`'s
+`inbound_apply` already calls through to all three functions — see
+[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md).
 
 ### Statement
 

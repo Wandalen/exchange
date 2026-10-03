@@ -7,7 +7,16 @@
 - **In Scope**: Thread-local staging flush, total-order ring drain, dispatch to rest or match, and overflow handling.
 - **Out of Scope**: Claiming ring slots or implementing gating — `exchange_inbound` consumes the ring, it does not own it.
 
-**Design status**: Not implemented — zero `ring_*` dependency exists anywhere in `substrate/exchange` (verified via grep across all `module/*/Cargo.toml`). No `exchange_inbound` crate exists.
+**Design status**: Implemented — `exchange_inbound` is now a real crate
+depending on `ring_factory`/`ring_handle`/`ring_types` (verified via direct
+read of `module/exchange_inbound/src/lib.rs` and grep of its `Cargo.toml`),
+mapping the four steps directly: `inbound_flush` (staging buffer → ring),
+`inbound_drain` (total-order drain), `inbound_apply` (dispatch — a fresh
+`Place` crosses via `exchange_match::cross` first, any remainder rests;
+`Cancel`/`Replace` call through to `exchange_rest` directly), and
+`inbound_overflow_reject` (a full ring returns `Err`, never a silent drop,
+via `OverflowPolicy::Fail`). See
+[`../../module/exchange_inbound/readme.md`](../../module/exchange_inbound/readme.md).
 
 ### Statement
 

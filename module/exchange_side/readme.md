@@ -15,6 +15,11 @@ assert_eq!( Side::Buy.opposite(), Side::Sell );
 now depends on this crate and re-exports it, so every existing
 `use exchange_types::Side` still resolves.
 
+## Closes feature 2
+
+`Side` as a dedicated two-variant type, not a bare `bool`, is feature 2
+(`Side`).
+
 ## Naming — `Buy`/`Sell`, not `Bid`/`Ask`
 
 The source design names the variants `Bid`/`Ask`. The real type keeps

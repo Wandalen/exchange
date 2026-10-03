@@ -1,13 +1,9 @@
 # Hard Problem: Snapshot Of Book
 
-### Scope
-
-- **Purpose**: Resting orders are copyable rows.
-- **Responsibility**: Represent resting orders as copyable rows so the book can be saved, replayed, and extracted.
-
-### Statement
-
-Save, replay, and extraction all need resting orders as copyable rows; without a snapshot, the market dies the moment the process restarts.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_snap`'s
+own snapshot rows) and now lives at
+[`../../module/exchange_snap/readme.md`](../../module/exchange_snap/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

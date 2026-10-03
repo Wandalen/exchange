@@ -18,6 +18,11 @@ out; `exchange_types` now depends on this crate and re-exports both, so every
 existing `use exchange_types::{ AccountId, OrderId }` still resolves.
 `InstrumentId` is new here and unused until the multi-instrument book lands.
 
+## Closes feature 1
+
+`InstrumentId`/`OrderId`/`AccountId` — one plain id type per identity this
+workstream names — is feature 1 (`InstrumentId`, `OrderId`, `AccountId`).
+
 ## Not built: `IdError::Zero`
 
 The source design rejects a raw id of zero. Every field here stays `pub`, so

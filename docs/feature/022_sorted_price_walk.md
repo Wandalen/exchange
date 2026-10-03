@@ -1,13 +1,9 @@
 # Feature: Sorted Price Walk
 
-### Scope
-
-- **Purpose**: Walk prices in sorted order, not map iteration order.
-- **Responsibility**: Traverse price levels from the best price outward, by sort order.
-
-### Statement
-
-Matching and depth both walk price levels starting from the best price, in sorted order — never by iterating a hash map, whose order is an implementation accident rather than a price ordering.
+**Relocated.** This feature is single-crate-relevant (`exchange_book`'s own
+sorted-`Vec` read paths) and now lives at
+[`../../module/exchange_book/readme.md`](../../module/exchange_book/readme.md)'s
+"Closes hard problem 1, and features 6 and 22" section.
 
 ### Sources
 

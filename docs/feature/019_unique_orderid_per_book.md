@@ -1,13 +1,9 @@
 # Feature: Unique OrderId Per Book
 
-### Scope
-
-- **Purpose**: One OrderId, one order, per book.
-- **Responsibility**: Refuse a second submission under an OrderId already live in the book.
-
-### Statement
-
-A book tracks which OrderIds are currently live and refuses a duplicate submission under the same id, which is what makes a retried send safe rather than a second resting order.
+**Relocated.** This feature is single-crate-relevant (`exchange_idem`'s own
+duplicate-`OrderId` check) and now lives at
+[`../../module/exchange_idem/readme.md`](../../module/exchange_idem/readme.md)'s
+"## Net new" section.
 
 ### Sources
 

@@ -2,12 +2,12 @@
 
 ### Scope
 
-- **Purpose**: Orient a new reader in the real, as-built crate family — what each crate does, how to call it, and how the 23 crates relate to each other — without re-deriving what each crate's own readme already says.
+- **Purpose**: Orient a new reader in the real, as-built crate family — what each crate does, how to call it, and how the crates relate to each other — without re-deriving what each crate's own readme already says.
 - **Responsibility**: Each instance is one self-contained orientation document. This first instance covers the whole family in one pass.
 - **In Scope**: The real `module/` crates as they exist today — their actual `Cargo.toml` dependency edges, their actual public surface, their actual wiring (or lack of it) into `exchange_core`.
 - **Out of Scope**: The 23-crate proposal's own per-crate analysis (→ [`../crate/`](../crate/readme.md), [`../exposed_item/`](../exposed_item/readme.md) — the proposed-vs-real comparison already lives there); any crate's own design trade-offs in depth (→ that crate's own `readme.md`).
 
-**Design status**: one instance so far, dated 2026-10-03, covering all 25 real crates/lanes under `module/` as of that date, verified directly against every crate's own `Cargo.toml` rather than against readme prose (two readmes were found to understate their own crate's dependencies while writing this). Re-verify the crate count and tier table if the family has grown since.
+**Design status**: one instance so far, first drafted 2026-10-03 and updated the same day once `exchange_inbound` landed (26 real crates/lanes as of that update), verified directly against every crate's own `Cargo.toml` rather than against readme prose (multiple readmes were found to understate their own crate's dependencies while writing this). Re-verify the crate count and tier table if the family has grown since — the instance's own "Verify this guide yourself" section has the recompute command.
 
 ### Overview Table
 

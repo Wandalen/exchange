@@ -1,15 +1,11 @@
 # Hard Problem: Idempotent Order Id
 
-### Scope
-
-- **Purpose**: A retry is the same order.
-- **Responsibility**: Treat a retried submission of the same OrderId as the same order, not a second one.
-
-**Design status**: Not addressed — no duplicate-`OrderId` detection exists; `RejectReason` has no `Duplicate` variant.
-
-### Statement
-
-The host and the UI can both resend the same submission, so a retried OrderId must resolve to the same order rather than resting twice.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_idem`'s
+own duplicate-`OrderId` check) and now lives at
+[`../../module/exchange_idem/readme.md`](../../module/exchange_idem/readme.md)'s
+"## Net new" section. (The central Design status this entry used to carry —
+"Not addressed... no duplicate-`OrderId` detection exists" — is stale:
+`exchange_idem` now builds and tests it, as its own dedicated named error.)
 
 ### Sources
 

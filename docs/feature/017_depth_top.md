@@ -1,15 +1,12 @@
 # Feature: depth_top
 
-### Scope
-
-- **Purpose**: Top-N book depth in one call.
-- **Responsibility**: Return the best N price levels per side without a full walk.
-
-**Design status**: Not built — see [`docs/hard_problem/013_depth.md`](../hard_problem/013_depth.md).
-
-### Statement
-
-`depth_top(n)` answers "what are the best N levels right now" directly, rather than making every UI or NPC caller walk the whole ladder itself.
+**Relocated.** This feature is single-crate-relevant (`exchange_depth`'s own
+`depth_top`) and now lives at
+[`../../module/exchange_depth/readme.md`](../../module/exchange_depth/readme.md)'s
+"## Genuinely new" section. (The central Design status this entry used to
+carry — "Not built", cross-referencing hard problem 13 — is likewise stale:
+see that redistributed entry at
+[`../hard_problem/013_depth.md`](../hard_problem/013_depth.md).)
 
 ### Sources
 

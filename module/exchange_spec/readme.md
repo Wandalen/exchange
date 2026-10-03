@@ -20,6 +20,14 @@ No real crate carried an instrument concept before this one — the real
 against a grid. Closes hard problems 1 (one book per instrument), 8 (tick and
 lot), 18 (halt), and 19 (more than one asset).
 
+## Also closes features 4 and 5
+
+`InstrumentSpec` itself — tick, lot, halt flag, asset pair, in one record —
+is feature 4 (`InstrumentSpec`). `price_snap`/`qty_snap` are feature 5
+(`price_snap`/`qty_snap`): validating a submitted price/quantity against
+that grid, built on workstream 006's exact arithmetic rather than
+reimplemented locally (see the next section).
+
 ## Snap is borrowed, not reimplemented
 
 `price_snap`/`qty_snap` call `exact_arith::price_snap_tick`/`qty_snap_lot`

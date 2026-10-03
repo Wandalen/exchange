@@ -1,15 +1,12 @@
 # Feature: Order
 
-### Scope
-
-- **Purpose**: One record for a resting or taker order.
-- **Responsibility**: Carry id, instrument, account, side, price, qty, tif, and sequence in one record.
-
-**Design status**: Partially held — the real `Order` (`exchange_types/src/lib.rs:99-111`) has id/account/side/price/quantity but no `tif` field and no `instrument` field, both named in this feature's scope.
-
-### Statement
-
-An order is one record naming who submitted it, which instrument, which side, at what price and quantity, under what time-in-force, and at what sequence — not a loose tuple assembled ad hoc at each call site.
+**Relocated.** This feature is single-crate-relevant (`exchange_order`'s own
+`Order`) and now lives at
+[`../../module/exchange_order/readme.md`](../../module/exchange_order/readme.md)'s
+"Closes feature 3" section. (The central Design status this entry used to
+carry — "Partially held... no `tif` field and no `instrument` field" — is
+stale: `exchange_order::Order` now carries both; see that section for the
+detail.)
 
 ### Sources
 

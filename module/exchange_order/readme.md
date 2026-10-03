@@ -30,6 +30,13 @@ The real `Order` lived in `exchange_types` with five fields, missing
 other field is unchanged. `exchange_types` still re-exports `Order` so
 existing callers keep resolving.
 
+## Closes feature 3
+
+`Order` carrying id, instrument, account, side, price, quantity, and tif in
+one record is feature 3 (`Order`) — now fully held: both fields the central
+doc's own Design status once listed as missing (`instrument`, `tif`) are
+real fields here.
+
 ## What moved, what stayed
 
 `Obligation` moved here alongside `Order` — the family's dependency tree never

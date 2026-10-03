@@ -22,6 +22,14 @@ missing pieces — `event_push`/`event_drain`/`event_len`/`event_clear`
 ([`src/lib.rs`](src/lib.rs)) — without a second definition of the types they
 operate on.
 
+## Closes hard problem 12 and feature 26
+
+This crate closes hard problem 12 (events, not wallets) and feature 26
+(event drain for 010): `event_drain` is the owned drain point 010 reads
+fills/rejects/cancel-acks from, which `exchange_core::events()`'s borrowed
+`&[Event]` alone cannot give it — see [`src/lib.rs`](src/lib.rs)'s module doc
+for the full "despite being marked Folded centrally" reasoning.
+
 ## Diverges from the proposal
 
 No `EventDrain` type, no `EventError` — see

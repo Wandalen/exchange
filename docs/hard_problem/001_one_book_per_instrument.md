@@ -1,15 +1,12 @@
 # Hard Problem: One Book Per Instrument
 
-### Scope
-
-- **Purpose**: Iron and credits don't share one ladder.
-- **Responsibility**: Keep every instrument's resting orders in its own book; never cross two instruments against each other.
-
-**Design status**: Not addressed — the real `Order` struct (`exchange_types/src/lib.rs:99-111`) has no `instrument`/`InstrumentId` field at all; the real book is implicitly single-instrument.
-
-### Statement
-
-The game runs many markets at once, so one instrument's book must never see another's orders. Without this separation, orders from unrelated instruments could cross each other, producing false fills.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_book`'s
+own per-instrument storage) and now lives at
+[`../../module/exchange_book/readme.md`](../../module/exchange_book/readme.md)'s
+"Closes hard problem 1, and features 6 and 22" section. (The central Design
+status this entry used to carry — "Not addressed... the real book is
+implicitly single-instrument" — is stale: `exchange_book::Book` now keys
+every side by `InstrumentId`, and `exchange_order::Order` now carries one.)
 
 ### Sources
 

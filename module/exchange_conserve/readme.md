@@ -21,6 +21,13 @@ full reasoning, including why a single trade can never fail this check on its
 own (its two legs come from one shared `price`/`quantity`, not two
 independent sources) and why the batch is where this earns its keep.
 
+## Closes hard problem 5 and feature 21
+
+`conserve_assert` is hard problem 5 (conservation) and feature 21
+(`conservation_assert`) both: one batch of fills, checked to net to exactly
+zero. See [`src/lib.rs`](src/lib.rs)'s own module doc for why this is a
+different, narrower check than `Escrow::total_cash`/`total_asset`.
+
 ## Not yet wired into `exchange_match`
 
 `conserve_assert` is built and tested standalone; calling it from

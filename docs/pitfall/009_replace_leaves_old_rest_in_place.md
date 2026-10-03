@@ -1,14 +1,11 @@
 # Pitfall: Replace that leaves the old rest in place
 
-### Scope
-
-- **Purpose**: Name a specific mistake to avoid while building workstream 002.
-- **Responsibility**: Implementing cancel-and-replace so the original order is still resting afterward.
-- **In Scope**: Book
-
-### Statement
-
-A replace is supposed to remove the old order and rest the new one in its place; if the old order is left on the book, the account now has two live orders where it asked for one, doubling its exposure and reservation without its knowledge.
+**Redistributed**: this pitfall is `exchange_rest`'s own concern (its
+`rest_replace` — cancel old, insert new, roll back on refusal — is exactly
+the operation this pitfall is about) — see
+[`../../module/exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md`](../../module/exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md)
+for the full writeup, including the ordering argument and the test/mutation
+evidence it rests on.
 
 ### Sources
 

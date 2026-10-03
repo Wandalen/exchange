@@ -28,6 +28,7 @@ exchange_escrow = { path = "../exchange_escrow" }
 exchange_match = { path = "../exchange_match" }
 exchange_conserve = { path = "../exchange_conserve" }
 exchange_rest = { path = "../exchange_rest" }
+exchange_inbound = { path = "../exchange_inbound" }
 
 [lints]
 workspace = true

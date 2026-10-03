@@ -1,13 +1,9 @@
 # Feature: Inbound Flush, Drain, Then Rest Or Match
 
-### Scope
-
-- **Purpose**: The fixed sequence an incoming order follows before it touches the book.
-- **Responsibility**: Flush thread-local staging, drain the ring in total order, then rest or match.
-
-### Statement
-
-An incoming order's path is fixed: thread-local staging flushes into the ring, the ring drains in total order, and only then does an individual order rest or match — never matched straight off a producer thread.
+**Relocated.** This feature is single-crate-relevant (`exchange_inbound`'s own
+`inbound_flush`/`inbound_drain`/`inbound_apply` sequence) and now lives at
+[`../../module/exchange_inbound/readme.md`](../../module/exchange_inbound/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

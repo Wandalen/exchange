@@ -1,13 +1,9 @@
 # Hard Problem: Conservation
 
-### Scope
-
-- **Purpose**: A fill's legs sum to zero (006).
-- **Responsibility**: Make every fill's two legs sum to exactly zero.
-
-### Statement
-
-The machine must never print money: a fill's legs — what leaves one side, what arrives at the other — have to sum to exactly zero, per workstream 006's arithmetic. Without conservation, the system quietly inflates.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_conserve`'s
+own `conserve_assert` check) and now lives at
+[`../../module/exchange_conserve/readme.md`](../../module/exchange_conserve/readme.md)'s
+"Closes hard problem 5 and feature 21" section.
 
 ### Sources
 

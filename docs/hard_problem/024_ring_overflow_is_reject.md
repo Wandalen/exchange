@@ -1,13 +1,10 @@
 # Hard Problem: Ring Overflow Is Reject
 
-### Scope
-
-- **Purpose**: A full ring doesn't swallow the order.
-- **Responsibility**: Turn a full ring into an explicit Reject for the order that didn't fit, never a silent drop.
-
-### Statement
-
-A full ring must not silently swallow an order — a silent drop means money that was already reserved in escrow vanishes while the player believes their order is resting. Ring overflow must surface as an explicit Reject.
+**Relocated.** This hard problem is single-crate-relevant
+(`exchange_inbound`'s own `inbound_overflow_reject`/`OverflowPolicy::Fail`)
+and now lives at
+[`../../module/exchange_inbound/readme.md`](../../module/exchange_inbound/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

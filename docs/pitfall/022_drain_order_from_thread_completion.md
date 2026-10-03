@@ -1,14 +1,13 @@
 # Pitfall: Drain order taken from thread completion, not drain_order
 
-### Scope
-
-- **Purpose**: Name a specific mistake to avoid while building workstream 002.
-- **Responsibility**: Letting the order producer threads happen to finish in determine processing order, instead of using the ring's own defined drain order.
-- **In Scope**: Ring
-
-### Statement
-
-Whichever producer thread happens to finish first is not a deterministic property — relying on thread-completion order instead of the ring's own total drain order means two runs of the identical input can process orders in a different sequence, breaking the determinism the whole design exists to guarantee.
+**Redistributed**: this pitfall is `exchange_inbound`'s own concern (its
+`inbound_ring`/`inbound_drain` are the building blocks the fixed-order
+combine is built on, and `docs/decisions/001_two_producers_is_two_rings.md`
+records the design decision directly) — see
+[`../../module/exchange_inbound/docs/pitfall/001_drain_order_from_thread_completion.md`](../../module/exchange_inbound/docs/pitfall/001_drain_order_from_thread_completion.md)
+for the full writeup, including the structural guarantee and the
+cross-crate two-thread demonstration (`smoke_exchange_phases`'s
+`demo_p28_drain.rs`) it rests on.
 
 ### Sources
 

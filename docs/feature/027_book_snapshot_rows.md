@@ -1,13 +1,9 @@
 # Feature: Book Snapshot Rows
 
-### Scope
-
-- **Purpose**: A copyable view of the book, tick supplied by the caller.
-- **Responsibility**: Produce plain snapshot rows of resting orders, tick taken from the caller.
-
-### Statement
-
-A book snapshot is a set of plain rows copied out of the live book, with the tick supplied by whoever calls for the snapshot rather than read from a wall clock — matching hard problem 22's save/replay/extract need.
+**Relocated.** This feature is single-crate-relevant (`exchange_snap`'s own
+snapshot rows) and now lives at
+[`../../module/exchange_snap/readme.md`](../../module/exchange_snap/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

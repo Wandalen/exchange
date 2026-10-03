@@ -1,13 +1,9 @@
 # Feature: Side
 
-### Scope
-
-- **Purpose**: Bid and ask as one type.
-- **Responsibility**: Represent which side of the book an order stands on as a dedicated type, not a bool.
-
-### Statement
-
-Bid and ask are the two sides of a book; a dedicated `Side` type names them directly instead of letting a bare boolean stand in for the distinction.
+**Relocated.** This feature is single-crate-relevant (`exchange_side`'s own
+`Side`) and now lives at
+[`../../module/exchange_side/readme.md`](../../module/exchange_side/readme.md)'s
+"Closes feature 2" section.
 
 ### Sources
 

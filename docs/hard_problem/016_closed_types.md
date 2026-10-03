@@ -1,13 +1,9 @@
 # Hard Problem: Closed Types
 
-### Scope
-
-- **Purpose**: Ids and the book are plain data, without host pointers.
-- **Responsibility**: Keep ids and the book as plain data with no host pointers, so the book can live inside the VM and be snapshotted.
-
-### Statement
-
-Ids and the book must be plain data with no host pointers, so the book can be placed inside the VM and snapshotted. Without closed types, this workstream can't live inside workstream 001's storage.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_snap`'s
+own plain-data snapshot rows) and now lives at
+[`../../module/exchange_snap/readme.md`](../../module/exchange_snap/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

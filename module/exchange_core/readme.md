@@ -53,6 +53,15 @@ a build failure over there rather than a gap that surfaces at the first external
 consumer — the construction
 [`exact_arith`](https://github.com/Wandalen/exact/blob/master/module/exact_arith/readme.md) uses for the same reason.
 
+## Closes hard problem 4, and feature 10
+
+Step 2 reserves before the order is visible to matching, and releases on
+cancel; step 5 rests only what the match didn't consume, reservation
+retained — together, this is `Exchange::submit`/`Exchange::cancel`'s own
+load-bearing ordering, not a restatement of `exchange_escrow`'s or
+`exchange_book`'s own, narrower contracts. Closes hard problem 4
+(escrow before rest) and feature 10 (partial fill, rest the leftover).
+
 ## Hosting, and what is not here
 
 Not yet integrated with any concurrency host — the sequence is a single-thread

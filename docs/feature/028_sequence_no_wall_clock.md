@@ -1,13 +1,9 @@
 # Feature: Sequence, No Wall Clock
 
-### Scope
-
-- **Purpose**: Time priority from a counter, not a clock.
-- **Responsibility**: Stamp resting orders with a monotonic sequence instead of wall-clock time.
-
-### Statement
-
-Time priority comes from a monotonic sequence number stamped on each resting order, never from `Instant`/`SystemTime` — a prerequisite for hard problem 6's determinism, since wall-clock reads differ across replays and nodes.
+**Relocated.** This feature is single-crate-relevant (`exchange_seq`'s own
+`Sequence`/`seq_next`) and now lives at
+[`../../module/exchange_seq/readme.md`](../../module/exchange_seq/readme.md)'s
+"Closes feature 28" section.
 
 ### Sources
 

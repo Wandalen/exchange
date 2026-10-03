@@ -1,14 +1,11 @@
 # Pitfall: ring_spsc as the market path (many producers)
 
-### Scope
-
-- **Purpose**: Name a specific mistake to avoid while building workstream 002.
-- **Responsibility**: Using a single-producer ring variant on a path that genuinely has many producers submitting orders.
-- **In Scope**: Ring
-
-### Statement
-
-The exchange's inbound edge has many producers (every account submitting orders concurrently) feeding one drain — picking `ring_spsc` for that path violates its single-producer contract the moment a second submitter appears, with a failure mode that may not surface until concurrent load actually happens.
+**Redistributed**: this pitfall is `exchange_inbound`'s own concern (its
+`inbound_ring` is the only place a ring's producer cardinality is decided
+for the market path) — see
+[`../../module/exchange_inbound/docs/pitfall/003_ring_spsc_as_market_path.md`](../../module/exchange_inbound/docs/pitfall/003_ring_spsc_as_market_path.md)
+for the full writeup, including why the real rings built here genuinely are
+`ring_spsc`-backed and why that is still the correct avoidance, not a miss.
 
 ### Sources
 

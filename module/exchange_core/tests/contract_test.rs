@@ -37,7 +37,7 @@ use std::path::{ Path, PathBuf };
 /// stale entry here either panics on a deleted directory or silently stops
 /// covering a crate nobody remembered to add — this list must be updated in
 /// the same change that adds or removes a crate.
-const FAMILY_CRATES : [ &str; 23 ] =
+const FAMILY_CRATES : [ &str; 24 ] =
 [
   "exchange_id",
   "exchange_side",
@@ -60,6 +60,7 @@ const FAMILY_CRATES : [ &str; 23 ] =
   "exchange_conserve",
   "exchange_match",
   "exchange_rest",
+  "exchange_inbound",
   "exchange_escrow",
   "exchange_core",
 ];

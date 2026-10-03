@@ -22,6 +22,17 @@ See [`src/lib.rs`](src/lib.rs) for the full reasoning, including why
 `notional`/`TypeError`/`obligation` stay in `exchange_types` rather than
 following this cluster.
 
+## Closes hard problem 21, and features 12 and 13
+
+`Trade` naming both `taker`/`taker_account` and `maker`/`maker_account`
+alongside `price` on every match is hard problem 21 (maker and taker on
+fill) and feature 12 (`Fill`) together — `instrument` is not yet one of its
+fields, since every real book is still one instrument deep (see
+`exchange_core`'s own "Multi-instrument" note). `RejectReason`, a closed set
+rather than a string, is feature 13 (`Reject`); the order and account a
+rejection concerns travel on the enclosing `Event`, not on `RejectReason`
+itself.
+
 ## `taker_side`, added to `Trade`
 
 The real struct lacked a field recording which side the taker was on.

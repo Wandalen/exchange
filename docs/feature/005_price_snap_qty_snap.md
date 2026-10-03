@@ -1,13 +1,9 @@
 # Feature: price_snap, qty_snap
 
-### Scope
-
-- **Purpose**: Snap a submitted price or quantity onto its instrument's grid.
-- **Responsibility**: Validate a price/quantity against tick/lot via workstream 006.
-
-### Statement
-
-`price_snap` and `qty_snap` check a submitted price or quantity against the instrument's tick/lot grid, built on workstream 006's exact arithmetic rather than reimplemented locally.
+**Relocated.** This feature is single-crate-relevant (`exchange_spec`'s own
+`price_snap`/`qty_snap`) and now lives at
+[`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md)'s
+"## Also closes features 4 and 5" section.
 
 ### Sources
 

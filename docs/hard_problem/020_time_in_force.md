@@ -1,15 +1,12 @@
 # Hard Problem: Time In Force
 
-### Scope
-
-- **Purpose**: GTC, IOC, FOK as data.
-- **Responsibility**: Carry GTC/IOC/FOK as explicit order data rather than only ever resting forever.
-
-**Design status**: Not implemented — confirmed directly in the real code's own doc comment at `exchange_types/src/lib.rs:218-220`: "Time-in-Force disposition is the other cause the family's design names; it is not implemented, so it is not listed here."
-
-### Statement
-
-Different in-game order types need GTC, IOC, and FOK as explicit data, or every order can only ever sit forever.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_tif`'s
+own `Tif`/`tif_requires_full`) and now lives at
+[`../../module/exchange_tif/readme.md`](../../module/exchange_tif/readme.md)'s
+"## Genuinely new" section. (The central Design status this entry used to
+carry — "Not implemented" per `exchange_types`' own doc comment — is stale:
+`exchange_tif` now builds it, and `exchange_order`/`exchange_match` both
+carry and consult it.)
 
 ### Sources
 

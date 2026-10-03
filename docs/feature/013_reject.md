@@ -1,13 +1,9 @@
 # Feature: Reject
 
-### Scope
-
-- **Purpose**: An order refusal that names why.
-- **Responsibility**: Carry the order and a closed-set reason for every refusal.
-
-### Statement
-
-A `Reject` names the order that was refused and a closed-set reason — never a bare failure — so a caller can branch on why rather than parse prose.
+**Relocated.** This feature is single-crate-relevant (`exchange_fill`'s own
+`RejectReason`) and now lives at
+[`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md)'s
+"Closes hard problem 21, and features 12 and 13" section.
 
 ### Sources
 

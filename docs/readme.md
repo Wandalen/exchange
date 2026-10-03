@@ -41,6 +41,7 @@ and stops there — 010 is out of scope for this corpus.
 | [`decision/`](decision/readme.md) | Six settled design decisions for this workstream (6) |
 | [`not_a_002_crate/`](not_a_002_crate/readme.md) | Five things explicitly outside this workstream's crate set (5) |
 | [`research/`](research/readme.md) | Why this family builds its own book/match instead of an existing crate (1) |
+| [`guide/`](guide/readme.md) | Orientation in the real, as-built crate family — purpose, usage, and dependency tier per crate (1) |
 
 Directory names are the entity catalog's own names, verbatim, from Prompt 8
 (`../../../codename_space_sandbox/intake/core_exchange.txt:950-985`) — not the closest
@@ -48,10 +49,13 @@ Directory names are the entity catalog's own names, verbatim, from Prompt 8
 either. This is a deliberate departure from how the sibling workstream 006 corpus
 (`../../exact/docs/readme.md`) named its collections (`crate/`, `type/`, `wall_smoke/`,
 `scene/` — prompt headings): here, every one of the first 26 directories above matches
-an entity name Prompt 8 lists, one-to-one, with no renaming. `research/` is the one
-exception — a non-catalog addition with no Prompt 8 counterpart, the same way the
-sibling workstream 006 corpus also added its own `research/` on top of its entity
-catalog.
+an entity name Prompt 8 lists, one-to-one, with no renaming. `research/` and `guide/`
+are the two exceptions — non-catalog additions with no Prompt 8 counterpart, the same
+way the sibling workstream 006 corpus also added its own `research/` on top of its
+entity catalog. `research/` answers an external question (could an existing crate
+replace this family?); `guide/` answers an internal one (what does this family actually
+look like today, and how do I use it?) — see [`guide/readme.md`](guide/readme.md)'s own
+"Why this collection exists" section.
 
 ## Workstream Charter
 

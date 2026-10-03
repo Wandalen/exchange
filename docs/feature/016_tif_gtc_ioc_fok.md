@@ -1,15 +1,12 @@
 # Feature: TIF: GTC, IOC, FOK
 
-### Scope
-
-- **Purpose**: Time-in-force as a closed set of three.
-- **Responsibility**: Offer GTC, IOC, and FOK as the order's time-in-force.
-
-**Design status**: Not implemented — see [`docs/hard_problem/020_time_in_force.md`](../hard_problem/020_time_in_force.md)'s Design status; same code-comment citation applies.
-
-### Statement
-
-Good-till-cancelled, immediate-or-cancel, and fill-or-kill are the three time-in-force options an order carries as data, rather than the book supporting only "rest forever."
+**Relocated.** This feature is single-crate-relevant (`exchange_tif`'s own
+`Tif`) and now lives at
+[`../../module/exchange_tif/readme.md`](../../module/exchange_tif/readme.md)'s
+"## Genuinely new" section. (The central Design status this entry used to
+carry — "Not implemented", cross-referencing hard problem 20's own stale
+status — is likewise stale: see that redistributed entry at
+[`../hard_problem/020_time_in_force.md`](../hard_problem/020_time_in_force.md).)
 
 ### Sources
 

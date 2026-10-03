@@ -1,15 +1,11 @@
 # Hard Problem: Depth
 
-### Scope
-
-- **Purpose**: Top-N without walking every resting order.
-- **Responsibility**: Answer top-N book depth without walking every resting order.
-
-**Design status**: Not addressed — no `depth_top` function or equivalent exists anywhere in the real crates.
-
-### Statement
-
-UI and NPC consumers need top-N depth without walking every resting order, or every quote costs O(n).
+**Relocated.** This hard problem is single-crate-relevant (`exchange_depth`'s
+own `depth_top`) and now lives at
+[`../../module/exchange_depth/readme.md`](../../module/exchange_depth/readme.md)'s
+"## Genuinely new" section. (The central Design status this entry used to
+carry — "Not addressed... no `depth_top` function... exists" — is stale:
+`exchange_depth` now builds and tests it.)
 
 ### Sources
 

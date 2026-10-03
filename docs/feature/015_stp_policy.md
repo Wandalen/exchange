@@ -1,15 +1,13 @@
 # Feature: STP Policy
 
-### Scope
-
-- **Purpose**: One named self-trade rule.
-- **Responsibility**: Offer allow, cancel-oldest, and cancel-newest as the self-trade policy choices.
-
-**Design status**: Held — `exchange_match::SelfMatchPolicy` exists with policy variants covering this choice (see `module/exchange_match/src/lib.rs:124` for the exact variant names).
-
-### Statement
-
-Self-trade policy is a closed choice of three — allow, cancel-oldest, cancel-newest — configured once per book rather than decided ad hoc at match time.
+**Relocated.** This feature is single-crate-relevant (`exchange_stp`'s own
+`SelfMatchPolicy`) and now lives at
+[`../../module/exchange_stp/readme.md`](../../module/exchange_stp/readme.md)'s
+"Closes feature 15" section. (The central Design status this entry used to
+carry named `exchange_match::SelfMatchPolicy` as the owner — that type has
+since moved to `exchange_stp`, which `exchange_match` now depends on and
+re-exports; see `exchange_stp/readme.md`'s own "Extracted from
+`exchange_match`" section.)
 
 ### Sources
 

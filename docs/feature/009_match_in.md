@@ -1,13 +1,9 @@
 # Feature: match_in
 
-### Scope
-
-- **Purpose**: Cross a taker against the opposite ladder.
-- **Responsibility**: Produce fills and a remainder from an incoming order against the book.
-
-### Statement
-
-`match_in` crosses an incoming order against the opposite side of the book, producing zero or more fills plus whatever quantity remains — the single entry point into the matching algorithm.
+**Relocated.** This feature is single-crate-relevant (`exchange_match`'s own
+`cross`) and now lives at
+[`../../module/exchange_match/readme.md`](../../module/exchange_match/readme.md)'s
+"Closes feature 9" section.
 
 ### Sources
 

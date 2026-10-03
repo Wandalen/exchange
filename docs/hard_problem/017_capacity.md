@@ -1,13 +1,9 @@
 # Hard Problem: Capacity
 
-### Scope
-
-- **Purpose**: A limit on resting orders; Full is an error, not a silent drop.
-- **Responsibility**: Enforce a cap on resting orders; report Full as an error rather than silently dropping the order.
-
-### Statement
-
-The same capacity discipline used in workstreams 001 and 003 applies here: a cap on resting orders, and Full as an explicit error rather than orders quietly vanishing.
+**Relocated.** This hard problem is single-crate-relevant (`exchange_cap`'s
+own `cap_check_rest`/`cap_check_level`) and now lives at
+[`../../module/exchange_cap/readme.md`](../../module/exchange_cap/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

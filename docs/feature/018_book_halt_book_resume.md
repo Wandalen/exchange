@@ -1,13 +1,9 @@
 # Feature: book_halt, book_resume
 
-### Scope
-
-- **Purpose**: Freeze and unfreeze matching on one instrument.
-- **Responsibility**: Toggle a book's halted state while its resting orders persist.
-
-### Statement
-
-`book_halt` freezes matching on an instrument without touching what's resting; `book_resume` lifts the freeze — the pair that implements hard problem 18's circuit breaker.
+**Relocated.** This feature is single-crate-relevant (`exchange_halt`'s own
+`halt_set`/`halt_clear`) and now lives at
+[`../../module/exchange_halt/readme.md`](../../module/exchange_halt/readme.md)'s
+"## Genuinely new" section.
 
 ### Sources
 

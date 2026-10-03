@@ -18,7 +18,9 @@ assert!( idem_insert( &mut seen, OrderId( 1 ) ).is_err(), "a repeat is refused" 
 No real crate carried idempotency before this one — nothing tracked which
 `OrderId`s had already been accepted, so a caller that retried a submission
 after a dropped acknowledgement could double-rest the same order. Closes hard
-problem 15.
+problem 15 (idempotent order ids) and feature 19 (unique `OrderId` per book)
+— `exchange_book::Book::insert` already refused a repeat silently; this
+crate gives that one case its own checkable, named error, pre-emptively.
 
 ## `idem_remove` exists so a cancelled id can be resubmitted
 
