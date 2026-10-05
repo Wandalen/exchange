@@ -20,7 +20,7 @@ per-declaration split is deferred).
 | `Crossing::is_complete` | fn | `(&self) -> bool` |
 | `Crossing::filled` | fn | `(&self) -> Result<Quantity, KindError>` |
 | `SelfMatchCancellation` | struct | `{ order: OrderId, account: AccountId, quantity: Quantity }` (`Copy`) |
-| `MatchError` | enum | `{ Quantity(KindError), BookDesynchronized }` — plus `Display`, `core::error::Error`, `From<KindError>` |
+| `MatchError` | enum | `{ Quantity(KindError), BookDesynchronized, Conservation(ConserveError) }` — plus `Display`, `core::error::Error`, `From<KindError>`, `From<ConserveError>`; the third variant added when `exchange_conserve::conserve_assert` was wired into `cross_inner`, as defense-in-depth |
 | `SelfMatchPolicy` | enum | `pub use exchange_stp::SelfMatchPolicy;` — `{ CancelResting, CancelIncoming, CancelBoth }`, re-exported unchanged |
 | `cross` | fn | `(book: &mut Book, incoming: &Order, policy: SelfMatchPolicy) -> Result<Crossing, MatchError>` |
 

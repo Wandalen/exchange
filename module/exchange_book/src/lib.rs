@@ -74,7 +74,7 @@
 //! `Resting { order, remaining, arrival }` literal and field access is
 //! unaffected by either that change or the instrument-keying one above it.
 
-use exact_arith::Quantity;
+use exact_arith::{ Price, Quantity };
 use exchange_id::{ InstrumentId, OrderId };
 use exchange_level::{ Level, level_empty_is, level_len, level_new, level_pop_front, level_push, level_remove };
 use exchange_side::Side;
@@ -326,6 +326,26 @@ impl Book
     self.per_instrument.iter()
     .flat_map( | ( _, book ) | book.bids.iter().chain( book.asks.iter() ) )
     .flat_map( | level | level.nodes.iter() )
+  }
+
+  /// How many orders currently rest at exactly `price` on `instrument`'s
+  /// `side` — what `exchange_cap::cap_check_rest` needs as `current_rests`.
+  ///
+  /// Zero if no level exists at that price — a level never persists empty
+  /// (see [`Self::cancel`]), so "no level" and "an empty level" are the same
+  /// observable state.
+  #[ must_use ]
+  pub fn rests_at( &self, instrument : InstrumentId, side : Side, price : Price ) -> usize
+  {
+    self.levels( instrument, side ).iter().find( | level | level.price == price ).map_or( 0, level_len )
+  }
+
+  /// How many distinct price levels currently exist on `instrument`'s
+  /// `side` — what `exchange_cap::cap_check_level` needs as `current_levels`.
+  #[ must_use ]
+  pub fn level_count( &self, instrument : InstrumentId, side : Side ) -> usize
+  {
+    self.levels( instrument, side ).len()
   }
 
   /// `instrument`'s own levels on `side`, or an empty slice if nothing has

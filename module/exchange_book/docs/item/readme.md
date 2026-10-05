@@ -27,6 +27,8 @@ per-declaration split is deferred).
 | `Book::len` | fn | `(&self) -> usize` |
 | `Book::is_empty` | fn | `(&self) -> bool` |
 | `Book::iter` | fn | `(&self) -> impl Iterator<Item = &Resting>` |
+| `Book::rests_at` | fn | `(&self, instrument: InstrumentId, side: Side, price: Price) -> usize` — added for `exchange_cap`'s wiring into `exchange_core` |
+| `Book::level_count` | fn | `(&self, instrument: InstrumentId, side: Side) -> usize` — added for `exchange_cap`'s wiring into `exchange_core` |
 
 ### Differs from the proposal
 

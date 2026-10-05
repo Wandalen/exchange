@@ -61,8 +61,44 @@
 //! act on an order already on the book, which is exactly `exchange_rest`'s
 //! own scope — no crossing involved either way. This mirrors
 //! `exchange_core::submit`'s shape in miniature, without duplicating its
-//! idempotency/cap/escrow orchestration: those stay facade-level concerns
-//! Stage 9 has not yet wired this crate into.
+//! cap/escrow orchestration: those stay facade-level concerns Stage 9 has
+//! not yet wired this crate into. Idempotency is the one exception — see
+//! the next section for why it is checked here instead.
+//!
+//! # Idempotency
+//!
+//! [`inbound_apply`] takes a `seen : &mut IdSet` and checks/claims the
+//! incoming id with `exchange_idem::idem_insert` before ever resting a
+//! [`InboundCmd::Place`]'s remainder — and un-claims it with
+//! `exchange_idem::idem_remove` once a [`InboundCmd::Cancel`]/
+//! [`InboundCmd::Replace`] actually withdraws it, so a legitimate
+//! cancel-then-resubmit is accepted again rather than permanently refused.
+//!
+//! This is *not* the same orchestration-stays-in-the-facade story the
+//! paragraph above tells for cap/escrow. Unlike those two, idempotency has a
+//! real, demonstrated gap at this crate's own level today: `exchange_core`'s
+//! facade never reaches `inbound_apply` at all (`Exchange::step_one` runs
+//! its own, separate, already-id-fresh pipeline — see that method's own
+//! doc), so an id arriving through *this* crate's own public
+//! [`inbound_apply`] has no upstream guarantee of freshness the way one
+//! arriving through the facade does. Before this check existed, a repeat id
+//! reaching [`rest_place`]'s own pre-existing duplicate guard was silently
+//! dropped in release builds — see [`inbound_apply`]'s own
+//! `Fix(exchange_inbound/BUG-003)` comment.
+//!
+//! See `exchange_idem`'s own module doc for why this does not duplicate
+//! `exchange_book::Book::insert`'s pre-existing duplicate-id guard: that
+//! guard already *has* the same information, just without a name a caller
+//! can branch on separately from "this quantity was already zero" — this
+//! crate's `idem_insert` call is what gives it one, named and returned to
+//! the caller rather than silently discarded the way a bare `rest_place`
+//! bool was before `Fix(exchange_inbound/BUG-003)`. It is checked only at
+//! the point a remainder would actually rest — not any earlier, against the
+//! incoming order as a whole — because that is the one place a repeat id
+//! can do the harm `exchange_idem` exists to name: doubling what rests. A
+//! repeat that happens to fully fill the second time around touches the
+//! book not at all, so there is nothing there for a duplicate check to
+//! protect.
 //!
 //! # What this crate does not do
 //!
@@ -74,12 +110,14 @@
 
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
+use exchange_idem::{ idem_insert, idem_remove };
 use exchange_match::{ cross, Crossing, MatchError, SelfMatchPolicy };
 use exchange_rest::{ rest_cancel, rest_place, rest_replace, RestReplaceError };
 use exchange_tif::tif_rests;
 use ring_factory::Factory;
 use ring_types::OverflowPolicy;
 
+pub use exchange_idem::{ IdemError, IdSet };
 pub use ring_factory::{ BuildError, RingConfig };
 pub use ring_handle::{ Consumer, Drain, Ends, Producer, Split };
 
@@ -126,6 +164,60 @@ pub enum InboundOutcome
   Cancelled( Option< Resting > ),
   /// [`InboundCmd::Replace`] ran; see [`RestReplaceError`] for the failure shapes.
   Replaced( Result< Resting, RestReplaceError > ),
+}
+
+/// Why [`inbound_apply`] could not apply a drained command.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
+pub enum InboundApplyError
+{
+  /// [`exchange_match::cross`] itself refused — see that function's own
+  /// documented guarantee for why this is unreachable through any path this
+  /// crate exercises.
+  Match( MatchError ),
+  /// [`InboundCmd::Place`] named an id that is already claimed by an earlier,
+  /// not-yet-cancelled `Place` — a retried submission, not a new order. See
+  /// the module doc's "Idempotency" section.
+  Idem( IdemError ),
+}
+
+impl core::fmt::Display for InboundApplyError
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::Match( error ) => write!( f, "matching failed: {error}" ),
+      Self::Idem( error ) => write!( f, "place refused: {error}" ),
+    }
+  }
+}
+
+impl core::error::Error for InboundApplyError
+{
+  fn source( &self ) -> Option< &( dyn core::error::Error + 'static ) >
+  {
+    match self
+    {
+      Self::Match( error ) => Some( error ),
+      Self::Idem( error ) => Some( error ),
+    }
+  }
+}
+
+impl From< MatchError > for InboundApplyError
+{
+  fn from( error : MatchError ) -> Self
+  {
+    Self::Match( error )
+  }
+}
+
+impl From< IdemError > for InboundApplyError
+{
+  fn from( error : IdemError ) -> Self
+  {
+    Self::Idem( error )
+  }
 }
 
 /// Build one ring of `capacity` inbound-command slots.
@@ -194,20 +286,24 @@ pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< Inbou
   consumer.drain().collect()
 }
 
-/// Apply one drained [`InboundCmd`] to `book`.
+/// Apply one drained [`InboundCmd`] to `book`, tracking claimed ids in `seen`.
 ///
 /// `policy` is supplied by the caller on every call, same as
-/// `exchange_match::cross` itself — this crate holds no state between calls
-/// either. See the module doc's "`inbound_apply`'s `Place`" section for why
-/// [`InboundCmd::Place`] reaches `exchange_match` rather than
-/// `exchange_rest::rest_place` directly.
+/// `exchange_match::cross` itself — this crate holds no state of its own
+/// between calls either; `seen` is the caller's, threaded through exactly
+/// like `book`. See the module doc's "`inbound_apply`'s `Place`" section for
+/// why [`InboundCmd::Place`] reaches `exchange_match` rather than
+/// `exchange_rest::rest_place` directly, and its "Idempotency" section for
+/// why `seen` exists at all.
 ///
 /// # Errors
 ///
-/// [`MatchError`] exactly when `exchange_match::cross` itself would return
-/// one — unreachable through any path this crate exercises, same as that
-/// function's own documented guarantee.
-pub fn inbound_apply( book : &mut Book, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, MatchError >
+/// [`InboundApplyError::Match`] exactly when `exchange_match::cross` itself
+/// would return one — unreachable through any path this crate exercises,
+/// same as that function's own documented guarantee.
+/// [`InboundApplyError::Idem`] if [`InboundCmd::Place`] names an id `seen`
+/// already claims.
+pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
 {
   match cmd
   {
@@ -234,15 +330,50 @@ pub fn inbound_apply( book : &mut Book, policy : SelfMatchPolicy, cmd : InboundC
 
       if !incoming_cancelled && !crossing.is_complete() && tif_rests( resting.order.tif )
       {
+        // Fix(exchange_inbound/BUG-003): a duplicate id reaching this point was
+        // silently dropped in release builds — `rest_place`'s own `false` was
+        // only ever checked by a `debug_assert!`, compiled out entirely outside
+        // debug, so the remainder neither rested nor was reported, with no event
+        // stream here to fall back on the way `exchange_core::step_place` has.
+        // Root cause: this function trusted `resting.order.id` to be fresh
+        // because `exchange_core`'s own pipeline guarantees that — true for the
+        // one caller Stage 9 actually wired up, but `inbound_apply` is a public
+        // function nothing stops a different caller from invoking directly with
+        // a hand-built, not-necessarily-fresh id (see this module's own
+        // "Idempotency" section).
+        // Pitfall: a `debug_assert!` guarding an invariant that only holds for
+        // today's one caller is not a check — it is a release-mode no-op with a
+        // comment attached. An invariant a *public* function depends on must be
+        // enforced for every caller, not assumed from the one caller that
+        // currently happens to satisfy it.
+        idem_insert( seen, resting.order.id )?;
         let remainder = Resting { remaining : crossing.remaining, ..resting };
         let placed = rest_place( book, remainder );
-        debug_assert!( placed, "a GTC remainder under the incoming order's own just-submitted id cannot already rest elsewhere" );
+        debug_assert!( placed, "idem_insert above already refused a repeat; a freshly-claimed id cannot also collide in Book::insert" );
       }
 
       Ok( InboundOutcome::Crossed( crossing ) )
     },
-    InboundCmd::Cancel { instrument, id } => Ok( InboundOutcome::Cancelled( rest_cancel( book, instrument, id ) ) ),
+    InboundCmd::Cancel { instrument, id } =>
+    {
+      let cancelled = rest_cancel( book, instrument, id );
+      if cancelled.is_some()
+      {
+        idem_remove( seen, id );
+      }
+      Ok( InboundOutcome::Cancelled( cancelled ) )
+    },
     InboundCmd::Replace { instrument, old_id, new_resting } =>
-      Ok( InboundOutcome::Replaced( rest_replace( book, instrument, old_id, new_resting ) ) ),
+    {
+      let new_id = new_resting.order.id;
+      let result = rest_replace( book, instrument, old_id, new_resting );
+      if result.is_ok()
+      {
+        idem_remove( seen, old_id );
+        idem_insert( seen, new_id )
+          .expect( "rest_replace's own underlying Book::insert already proved this id free" );
+      }
+      Ok( InboundOutcome::Replaced( result ) )
+    },
   }
 }

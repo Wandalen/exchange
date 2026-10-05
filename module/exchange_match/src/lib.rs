@@ -100,6 +100,7 @@
 
 use exact_arith::{ KindError, Quantity };
 use exchange_book::Book;
+use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::Order;
@@ -182,6 +183,14 @@ pub enum MatchError
   /// book and this loop disagree about what rests, which no later step could
   /// repair.
   BookDesynchronized,
+  /// `exchange_conserve::conserve_assert` refused this call's own batch of
+  /// trades. Both of a trade's legs are built from the same `price`/
+  /// `quantity` pair (see [`Trade::executed_price`]), so they offset by
+  /// construction — unreachable through this function today, kept as
+  /// defense-in-depth for the day a fee or similar asymmetry enters the
+  /// family's design. See `exchange_conserve`'s own module doc, "Revision"
+  /// section.
+  Conservation( ConserveError ),
 }
 
 impl core::fmt::Display for MatchError
@@ -192,6 +201,7 @@ impl core::fmt::Display for MatchError
     {
       Self::Quantity( error ) => write!( f, "quantity arithmetic failed during matching: {error}" ),
       Self::BookDesynchronized => write!( f, "the book refused a reduction the match loop had decided on" ),
+      Self::Conservation( error ) => write!( f, "this batch of trades did not conserve: {error}" ),
     }
   }
 }
@@ -203,6 +213,7 @@ impl core::error::Error for MatchError
     match self
     {
       Self::Quantity( error ) => Some( error ),
+      Self::Conservation( error ) => Some( error ),
       Self::BookDesynchronized => None,
     }
   }
@@ -213,6 +224,14 @@ impl From< KindError > for MatchError
   fn from( error : KindError ) -> Self
   {
     Self::Quantity( error )
+  }
+}
+
+impl From< ConserveError > for MatchError
+{
+  fn from( error : ConserveError ) -> Self
+  {
+    Self::Conservation( error )
   }
 }
 
@@ -275,9 +294,11 @@ fn settleable( incoming : &Order, executed : Price, taken : Quantity ) -> bool
 ///
 /// # Errors
 ///
-/// [`MatchError`] if a quantity step fails or the book disagrees with the
-/// loop about what rests. Neither is reachable through the exchange engine's
-/// submission path.
+/// [`MatchError`] if a quantity step fails, the book disagrees with the loop
+/// about what rests, or this call's own batch of trades fails
+/// [`exchange_conserve::conserve_assert`]. None of the three is reachable
+/// through the exchange engine's submission path — the third is checked as
+/// defense-in-depth regardless; see [`MatchError::Conservation`]'s own doc.
 pub fn cross( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) -> Result< Crossing, MatchError >
 {
   if tif_requires_full( incoming.tif )
@@ -386,6 +407,10 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
     remaining = remaining.checked_sub( taken )?;
     trades.push( trade );
   }
+
+  // Defense-in-depth, not a live check — see `MatchError::Conservation`'s
+  // own doc comment for why this batch cannot actually fail it today.
+  conserve_assert( &trades )?;
 
   Ok( Crossing { trades, remaining, cancelled } )
 }

@@ -28,12 +28,15 @@ independent sources) and why the batch is where this earns its keep.
 zero. See [`src/lib.rs`](src/lib.rs)'s own module doc for why this is a
 different, narrower check than `Escrow::total_cash`/`total_asset`.
 
-## Not yet wired into `exchange_match`
+## Wired into `exchange_match`
 
-`conserve_assert` is built and tested standalone; calling it from
-`exchange_match::cross` after each batch of trades is Stage 6's job (that
-crate's own TIF-aware rework), not this crate's — same skeleton-first pattern
-already used for `exchange_cap` and `exchange_level`.
+`exchange_match::cross_inner` calls `conserve_assert` on its own batch of
+trades before returning, as defense-in-depth — `MatchError::Conservation`
+wraps a refusal, matching the crate's existing, pre-established pattern for
+`MatchError::Quantity`/`BookDesynchronized`: documented as unreachable
+through the real submission path today, kept because a trade's two legs
+coming from the same `price`/`quantity` (so they always offset) stops being
+guaranteed the day a fee or similar asymmetry enters this family's design.
 
 ## Responsibility Table
 
@@ -52,4 +55,5 @@ already used for `exchange_cap` and `exchange_level`.
 
 - [`exchange_fill/`](../exchange_fill/readme.md) — supplies `Trade` and its `taker_side` field
 - [`exchange_escrow/`](../exchange_escrow/readme.md) — the ledger-level conservation check this crate is *not* (see above)
+- [`exchange_match/`](../exchange_match/readme.md) — the real caller, via `cross_inner`
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p17_cons`, this crate's phase smoke

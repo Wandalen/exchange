@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 exchange_types = { path = "../exchange_types" }
 exchange_book = { path = "../exchange_book" }
+exchange_conserve = { path = "../exchange_conserve" }
 exchange_fill = { path = "../exchange_fill" }
 exchange_id = { path = "../exchange_id" }
 exchange_order = { path = "../exchange_order" }

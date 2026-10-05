@@ -91,6 +91,8 @@ fn reject_reason_is_still_exhaustively_matchable()
     RejectReason::ObligationUnrepresentable => "obligation_unrepresentable",
     RejectReason::ReservationUnrepresentable => "reservation_unrepresentable",
     RejectReason::Halted => "halted",
+    RejectReason::RestsFull => "rests_full",
+    RejectReason::LevelsFull => "levels_full",
   };
   assert_eq!( name, "zero_quantity" );
 }

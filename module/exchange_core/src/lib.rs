@@ -83,6 +83,8 @@ pub use exact_arith::
   Backing, ConservationError, Entry, KindError, MONEY_SCALE, Money, Quantity, Report, verify,
 };
 pub use exchange_book::{ Book, Resting };
+pub use exchange_cap::BookCaps;
+use exchange_cap::{ cap_check_level, cap_check_rest, CapError };
 pub use exchange_depth::{ Depth, DepthError, LevelView };
 pub use exchange_escrow::{ Account, Conserved, Escrow, EscrowError, Holding };
 pub use exchange_fill::{ CancelCause, Event, EventKind, RejectReason, Trade };
@@ -311,6 +313,7 @@ pub struct Exchange
   next_sequence : Sequence,
   events : Vec< Event >,
   specs : BTreeMap< InstrumentId, InstrumentSpec >,
+  caps : BTreeMap< InstrumentId, BookCaps >,
   stats : BookStats,
 }
 
@@ -361,6 +364,21 @@ impl Exchange
     let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
     self.specs.insert( id, spec );
     Ok( () )
+  }
+
+  /// Register (or replace) `instrument`'s resting-order caps. No registered
+  /// caps means no cap enforcement for that instrument — the same
+  /// absence-means-unenforced convention [`Self::halt_set`]'s own doc
+  /// describes for halts.
+  ///
+  /// Unlike [`Self::spec_register`], a cap is not a term any already-resting
+  /// order was placed against — raising or lowering it only changes how much
+  /// *more* room a future placement sees, so replacing it carries none of
+  /// `spec_register`'s "would silently change terms already relied on"
+  /// concern, and this never refuses a re-registration.
+  pub fn caps_set( &mut self, instrument : InstrumentId, caps : BookCaps )
+  {
+    self.caps.insert( instrument, caps );
   }
 
   /// The top `n` price levels on each side of `instrument`'s book.
@@ -583,6 +601,40 @@ impl Exchange
       if let Err( error ) = dry_escrow.release( cancellation.account, cancellation.order )
       {
         return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
+      }
+    }
+
+    // 2a. Dry-run the cap check too, against `dry_book` — mirrors step 5's
+    // own "would this actually rest" computation (`incoming_cancelled`/
+    // `tif_dropped`/`resting`) ahead of time, same reason the rest of step 2
+    // runs before any real state changes: discovering a cap breach only
+    // after trades already settled for real would leave no way to unwind
+    // them. `cross` never touches the incoming order's own side of the book
+    // (only the opposite side it matches against), so `dry_book`'s state on
+    // `order.side` is identical to `self.book`'s — checking against either
+    // gives the same answer, and `dry_book` is used for consistency with
+    // the rest of this dry run.
+    let dry_incoming_cancelled = dry_crossing.cancelled.iter().any( | c | c.order == order.id );
+    let dry_tif_dropped = !dry_incoming_cancelled && !tif_rests( order.tif ) && dry_crossing.remaining > Quantity::ZERO;
+    let would_rest = if dry_incoming_cancelled || dry_tif_dropped { Quantity::ZERO } else { dry_crossing.remaining };
+    if would_rest > Quantity::ZERO
+      && let Some( caps ) = self.caps.get( &order.instrument ).copied()
+    {
+      let current_rests = dry_book.rests_at( order.instrument, order.side, order.price );
+      if let Err( error ) = cap_check_rest( caps, current_rests )
+      {
+        return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
+      }
+      // Only a brand-new price level (nothing resting there yet) could
+      // possibly push the side's level count past its cap — an order
+      // joining an existing level changes no level count at all.
+      if current_rests == 0
+      {
+        let current_levels = dry_book.level_count( order.instrument, order.side );
+        if let Err( error ) = cap_check_level( caps, current_levels )
+        {
+          return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
+        }
       }
     }
 
@@ -939,6 +991,19 @@ impl Exchange
       | EscrowError::AlreadyReserved( _ )
       | EscrowError::ObligationMismatch
       | EscrowError::NegativeAmount => RejectReason::InsufficientFunds,
+    }
+  }
+
+  /// [`RejectReason::RestsFull`]/[`RejectReason::LevelsFull`] translation —
+  /// its own function rather than folded into [`Self::reason_for`] since
+  /// [`CapError`] and [`EscrowError`] are unrelated source types with no
+  /// shared variant to combine.
+  fn reason_for_cap( error : CapError ) -> RejectReason
+  {
+    match error
+    {
+      CapError::RestsFull => RejectReason::RestsFull,
+      CapError::LevelsFull => RejectReason::LevelsFull,
     }
   }
 }

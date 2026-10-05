@@ -145,6 +145,14 @@ pub enum RejectReason
   /// The order's instrument is currently halted — see `exchange_halt`.
   /// Resting orders are untouched; only a new arrival is refused.
   Halted,
+  /// Resting this order would push its price level past its configured
+  /// `max_rests`. Only reachable for an instrument with caps registered —
+  /// see `exchange_cap`.
+  RestsFull,
+  /// Resting this order would open a new price level past its side's
+  /// configured `max_levels`. Only reachable for an instrument with caps
+  /// registered — see `exchange_cap`.
+  LevelsFull,
 }
 
 /// Why a remainder was withdrawn.

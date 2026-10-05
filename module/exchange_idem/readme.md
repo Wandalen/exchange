@@ -22,6 +22,18 @@ problem 15 (idempotent order ids) and feature 19 (unique `OrderId` per book)
 — `exchange_book::Book::insert` already refused a repeat silently; this
 crate gives that one case its own checkable, named error, pre-emptively.
 
+## Wired into `exchange_inbound`, not `exchange_core`
+
+`exchange_core::Exchange::step_place` always mints a fresh id via
+`claim_order()` before an order can rest — a duplicate can never reach it
+through that path, so wiring this crate in there would be permanently dead
+code. `exchange_inbound::inbound_apply` is different: it is `pub`, it never
+goes through `exchange_core` at all (`step_one` runs its own, separate
+pipeline), and it had a real, demonstrated gap — a duplicate id's refusal was
+computed and then only checked by a `debug_assert!`, silently compiled out
+in release builds (`exchange_inbound/BUG-003`). `idem_insert`/`idem_remove`
+close that gap exactly where it lives.
+
 ## `idem_remove` exists so a cancelled id can be resubmitted
 
 Without it, a legitimate cancel-then-resubmit under the same id would be
@@ -43,5 +55,5 @@ indistinguishable from the retry this crate exists to refuse.
 ## Related
 
 - [`exchange_id/`](../exchange_id/readme.md) — supplies `OrderId`
-- [`exchange_rest/`](../exchange_rest/readme.md) — the future caller that checks idempotency before resting a submission
+- [`exchange_inbound/`](../exchange_inbound/readme.md) — the real caller, via `inbound_apply`'s `seen : &mut IdSet` (see "Wired into `exchange_inbound`" above — not `exchange_rest`, which stays a thin wrapper by its own module doc's design)
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p13_idem`
