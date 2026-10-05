@@ -3,11 +3,11 @@
 
 use exact_arith::{ Money, Quantity };
 use exchange_escrow::Escrow;
+use exchange_fill::Trade;
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_side::Side;
 use exchange_tif::Tif;
-use exchange_types::Trade;
 
 fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -> Order
 {

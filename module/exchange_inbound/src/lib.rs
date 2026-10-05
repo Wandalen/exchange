@@ -151,10 +151,22 @@ pub fn inbound_ring( capacity : usize ) -> Result< Split< InboundCmd >, BuildErr
 ///
 /// A thin forward to [`Producer::try_push_batch`] — see that method's own
 /// doc comment: partial acceptance is the normal case, not a failure.
+// Fix(exchange_inbound/BUG-001): try_push_batch returns Result<usize, (usize, T)>,
+// not usize — the Err case still carries the accepted count (the usize field),
+// which is what a partial-acceptance caller needs, same as the Ok case.
+// Root cause: inbound_flush was written against an assumed usize-returning
+// signature; ring_handle::Producer::try_push_batch's real signature already
+// returns Result<usize, (usize, T)> and was never usize — this forward never
+// compiled against the real API.
+// Pitfall: a "thin forward" doc comment is not itself proof the call compiles —
+// confirm the wrapped method's real signature, not just its documented intent.
 pub fn inbound_flush( producer : &mut Producer< '_, InboundCmd >, cmds : impl IntoIterator< Item = InboundCmd > ) -> usize
 {
   let mut cmds = cmds.into_iter();
-  producer.try_push_batch( &mut cmds )
+  match producer.try_push_batch( &mut cmds )
+  {
+    Ok( n ) | Err( ( n, _ ) ) => n,
+  }
 }
 
 /// Publish one command, surfacing a full ring as `Err` rather than a silent
@@ -203,7 +215,24 @@ pub fn inbound_apply( book : &mut Book, policy : SelfMatchPolicy, cmd : InboundC
     {
       let crossing = cross( book, &resting.order, policy )?;
 
-      if !crossing.is_complete() && tif_rests( resting.order.tif )
+      // Fix(exchange_inbound/BUG-002): a self-match-cancelled incoming order was
+      // rested anyway, because `!crossing.is_complete()` is true whenever
+      // `crossing.remaining > 0` regardless of *why* — the self-match branch
+      // (`SelfMatchPolicy::CancelIncoming`/`CancelBoth`) leaves the full
+      // cancelled quantity in `remaining` on purpose (see `Crossing::remaining`'s
+      // own doc comment), which this code read as an ordinary unfilled
+      // remainder instead of a cancellation. `exchange_core::step_place`
+      // already solved this exact problem (`incoming_cancelled`, scanning
+      // `crossing.cancelled` for the incoming order's own id) — ported here.
+      // Root cause: `crossing.is_complete()`/`crossing.remaining` alone cannot
+      // distinguish "nothing left to fill" from "cancelled, not meant to rest"
+      // — only `crossing.cancelled` carries that distinction.
+      // Pitfall: `remaining > 0` means "not finished", not "safe to rest" —
+      // check `cancelled` for the incoming order's own id before resting
+      // anything derived from `remaining`.
+      let incoming_cancelled = crossing.cancelled.iter().any( | c | c.order == resting.order.id );
+
+      if !incoming_cancelled && !crossing.is_complete() && tif_rests( resting.order.tif )
       {
         let remainder = Resting { remaining : crossing.remaining, ..resting };
         let placed = rest_place( book, remainder );

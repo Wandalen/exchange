@@ -12,10 +12,12 @@
 
 use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
-use exchange_id::InstrumentId;
+use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::{ SelfMatchCancellation, SelfMatchPolicy, cross };
+use exchange_order::Order;
+use exchange_seq::Sequence;
+use exchange_side::Side;
 use exchange_tif::Tif;
-use exchange_types::{ AccountId, Order, OrderId, Sequence, Side };
 
 fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -> Order
 {

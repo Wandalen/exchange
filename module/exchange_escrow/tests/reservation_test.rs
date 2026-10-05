@@ -7,9 +7,11 @@
 
 use exact_arith::{ CEILING_WHOLE_UNITS, Money, Quantity };
 use exchange_escrow::{ Escrow, EscrowError };
-use exchange_id::InstrumentId;
+use exchange_fill::Trade;
+use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_order::{ Obligation, Order };
+use exchange_side::Side;
 use exchange_tif::Tif;
-use exchange_types::{ AccountId, Obligation, Order, OrderId, Side, Trade };
 
 fn money( text : &str ) -> Money
 {

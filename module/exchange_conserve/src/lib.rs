@@ -143,9 +143,9 @@ pub fn fill_legs_sum( legs : &[ Money ] ) -> Result< Money, ConserveError >
 /// ```rust
 /// use exact_arith::{ Money, Quantity };
 /// use exchange_conserve::conserve_assert;
+/// use exchange_fill::Trade;
 /// use exchange_id::{ AccountId, OrderId };
 /// use exchange_side::Side;
-/// use exchange_types::Trade;
 ///
 /// let trade = Trade
 /// {

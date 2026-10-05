@@ -7,16 +7,20 @@ description = "The resting order book and its price-time priority ordering"
 publish = false
 
 [dependencies]
-exchange_types = { path = "../exchange_types" }
 exchange_level = { path = "../exchange_level" }
 exchange_id = { path = "../exchange_id" }
+exchange_side = { path = "../exchange_side" }
 exact_arith = { path = "../../../exact/module/exact_arith" }
 
 [dev-dependencies]
+# The test helper's `rest()`/`rest_on()` fixtures build a whole `Order` and
+# its `Sequence` arrival to populate `Resting` — nothing in this crate's own
+# src/ reads either; `exchange_id` moved to a real dependency above once
+# `Book` itself became keyed by `InstrumentId`.
+exchange_order = { path = "../exchange_order" }
+exchange_seq = { path = "../exchange_seq" }
 # The test helper's `rest()` fixture also needs a `Tif` value for the
-# `Order` each `Resting` wraps — nothing in this crate's own src/ reads it;
-# `exchange_id` moved to a real dependency above once `Book` itself became
-# keyed by `InstrumentId`.
+# `Order` each `Resting` wraps — nothing in this crate's own src/ reads it.
 exchange_tif = { path = "../exchange_tif" }
 
 [lints]

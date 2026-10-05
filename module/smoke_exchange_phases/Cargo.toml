@@ -18,6 +18,7 @@ exchange_cap = { path = "../exchange_cap" }
 exchange_book = { path = "../exchange_book" }
 exchange_depth = { path = "../exchange_depth" }
 exchange_types = { path = "../exchange_types" }
+exchange_fill = { path = "../exchange_fill" }
 exchange_halt = { path = "../exchange_halt" }
 exchange_snap = { path = "../exchange_snap" }
 exchange_order = { path = "../exchange_order" }

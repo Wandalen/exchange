@@ -85,8 +85,9 @@ pub use exact_arith::
 pub use exchange_book::{ Book, Resting };
 pub use exchange_depth::{ Depth, DepthError, LevelView };
 pub use exchange_escrow::{ Account, Conserved, Escrow, EscrowError, Holding };
+pub use exchange_fill::{ CancelCause, Event, EventKind, RejectReason, Trade };
 pub use exchange_halt::HaltError;
-pub use exchange_id::InstrumentId;
+pub use exchange_id::{ AccountId, InstrumentId, OrderId };
 pub use exchange_inbound::
 {
   BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
@@ -94,19 +95,18 @@ pub use exchange_inbound::
 };
 use exchange_inbound::inbound_drain;
 pub use exchange_match::{ Crossing, MatchError, SelfMatchCancellation, SelfMatchPolicy };
+pub use exchange_order::{ Amount, Obligation, Order };
 use exchange_rest::rest_place;
+pub use exchange_seq::Sequence;
 use exchange_seq::seq_next;
+pub use exchange_side::Side;
 pub use exchange_snap::{ BookSnap, RestRow };
 pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
 pub use exchange_stats::BookStats;
 use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add };
 pub use exchange_tif::Tif;
 use exchange_tif::tif_rests;
-pub use exchange_types::
-{
-  AccountId, Amount, CancelCause, Event, EventKind, Obligation, Order, OrderId, Price, RejectReason,
-  Sequence, Side, Trade, TypeError, notional, obligation,
-};
+pub use exchange_types::{ Price, TypeError, notional, obligation };
 
 /// What came of a submission.
 #[ derive( Debug, Clone, PartialEq, Eq ) ]

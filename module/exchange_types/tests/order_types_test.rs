@@ -15,12 +15,11 @@
 //! alongside `Trade` itself in Stage 5.
 
 use exact_arith::{ Money, Quantity };
-use exchange_id::InstrumentId;
+use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_order::{ Obligation, Order };
+use exchange_side::Side;
 use exchange_tif::Tif;
-use exchange_types::
-{
-  AccountId, Obligation, Order, OrderId, Side, TypeError, notional, obligation,
-};
+use exchange_types::{ TypeError, notional, obligation };
 
 fn order( side : Side, price : &str, quantity : i64 ) -> Order
 {

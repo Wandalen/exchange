@@ -46,6 +46,43 @@ fn a_pushed_command_drains_in_the_same_order_it_was_pushed()
   assert_eq!( inbound_drain( &mut consumer ), vec![ a, b ], "FIFO — push order must survive the ring" );
 }
 
+// exchange_inbound/BUG-001 substrate/task/exchange_inbound/bug/completed/001_inbound_flush_wrong_return_type.md
+// — bug_reproducer: this test already specified the correct partial-acceptance
+// behavior (accepted == 2, not a panic) before the fix; it simply could not run
+// because inbound_flush did not compile against try_push_batch's real signature.
+///
+/// # Root Cause
+///
+/// `inbound_flush` returned `producer.try_push_batch( &mut cmds )` directly from
+/// a function declared `-> usize`, but `try_push_batch` returns
+/// `Result<usize, (usize, T)>` — a type mismatch (`E0308`) that failed the whole
+/// workspace build, not a logic error inside a passing build.
+///
+/// # Why Not Caught
+///
+/// This test already asserted the right behavior and would have caught a wrong
+/// *count*, but a compile error pre-empts every test in the crate from running
+/// at all — `cargo test`/`nextest` never reached this assertion until the type
+/// mismatch itself was fixed.
+///
+/// # Fix Applied
+///
+/// `inbound_flush` now matches on the `Result`, returning the accepted count `n`
+/// from both `Ok( n )` and `Err( ( n, _ ) )` — the doc comment's own "partial
+/// acceptance is the normal case" was already correct; only the implementation
+/// disagreed with it (`module/exchange_inbound/src/lib.rs`).
+///
+/// # Prevention
+///
+/// When wrapping another crate's method as a "thin forward," confirm the real
+/// signature compiles against the wrapper's own declared return type before
+/// trusting the doc comment's description of its behavior.
+///
+/// # Pitfall
+///
+/// A doc comment describing intended behavior is not evidence the code compiles
+/// against that behavior — a signature mismatch can sit underneath correct prose
+/// and a correct test indefinitely, caught only when the crate is actually built.
 #[ test ]
 fn flush_accepts_as_many_as_fit_and_reports_the_count()
 {
@@ -187,4 +224,66 @@ fn replace_refuses_a_new_resting_for_a_different_instrument()
   assert!( matches!( outcome, InboundOutcome::Replaced( Err( RestReplaceError::InstrumentMismatch ) ) ) );
   assert_eq!( book.best( InstrumentId( 2 ), Side::Sell ), None, "the mismatched replacement must not land on instrument 2" );
   assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 1 ), "order 1 is back on its own instrument, unchanged" );
+}
+
+// exchange_inbound/BUG-002 substrate/task/exchange_inbound/bug/verified/002_place_rests_self_match_cancelled_order.md
+// — bug_reproducer: an incoming Place cancelled by self-match prevention
+// (CancelIncoming/CancelBoth) was rested on the book anyway, because
+// `inbound_apply` never checked `crossing.cancelled` before resting
+// `crossing.remaining` — the same class of bug `exchange_core::step_place`
+// already found and fixed under its own `incoming_cancelled` check.
+///
+/// # Root Cause
+///
+/// `crossing.remaining > 0` is true both for "still unfilled, rest it" and for
+/// "self-match-cancelled, do not rest it" — `inbound_apply`'s `Place` arm only
+/// checked `!crossing.is_complete()` and `tif_rests(..)`, never
+/// `crossing.cancelled`, so it could not tell the two apart
+/// (`module/exchange_inbound/src/lib.rs`, pre-fix).
+///
+/// # Why Not Caught
+///
+/// Every pre-existing test in this file used `SelfMatchPolicy::CancelResting`
+/// exclusively — the one policy where the INCOMING order is never the one
+/// cancelled — so no test ever exercised `CancelIncoming`/`CancelBoth` through
+/// `InboundCmd::Place`, the only path where this gap is reachable.
+///
+/// # Fix Applied
+///
+/// `inbound_apply` now scans `crossing.cancelled` for an entry matching the
+/// incoming order's own id (`incoming_cancelled`) and skips resting when true
+/// — the same pattern already used by `exchange_core::step_place`'s own
+/// `incoming_cancelled` check (`module/exchange_core/src/lib.rs:611-621`).
+///
+/// # Prevention
+///
+/// `Crossing::remaining` staying non-zero means "not resolved as a fill" —
+/// never assume that implies "safe to rest" without also checking
+/// `Crossing::cancelled` for the incoming order's own id.
+///
+/// # Pitfall
+///
+/// A self-match-cancelled order and an ordinary unfilled remainder look
+/// identical through `remaining`/`is_complete()` alone — only `cancelled`
+/// distinguishes them, and skipping that check silently undoes self-match
+/// prevention.
+#[ test ]
+fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
+{
+  let mut book = Book::new();
+  let shared_account = AccountId( 7 );
+
+  let resting_sell = Resting { order : Order { account : shared_account, ..resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ).order }, ..resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) };
+  assert!( book.insert( resting_sell ) );
+
+  let incoming_buy = Resting { order : Order { account : shared_account, ..resting( 2, Side::Buy, "1.00", 5, Tif::Gtc ).order }, ..resting( 2, Side::Buy, "1.00", 5, Tif::Gtc ) };
+  let cmd = InboundCmd::Place( incoming_buy );
+
+  let outcome = inbound_apply( &mut book, SelfMatchPolicy::CancelIncoming, cmd ).unwrap();
+
+  let InboundOutcome::Crossed( crossing ) = outcome else { panic!( "Place must produce Crossed" ) };
+  assert_eq!( crossing.cancelled.len(), 1, "the incoming order was self-match-cancelled, not filled" );
+  assert_eq!( crossing.cancelled[ 0 ].order, OrderId( 2 ) );
+  assert_eq!( book.best( INSTRUMENT, Side::Buy ), None, "a self-match-cancelled incoming order must not end up resting on the book" );
+  assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 1 ), "CancelIncoming leaves the resting side untouched" );
 }

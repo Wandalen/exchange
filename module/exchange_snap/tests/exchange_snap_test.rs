@@ -3,11 +3,12 @@
 
 use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
-use exchange_id::{ InstrumentId, OrderId };
+use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_order::Order;
+use exchange_seq::Sequence;
 use exchange_side::Side;
 use exchange_snap::{ BookSnap, RestRow, snap_len, snap_take };
 use exchange_tif::Tif;
-use exchange_types::{ AccountId, Order, Sequence };
 
 fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) -> Resting
 {

@@ -7,9 +7,8 @@
 //!
 //! **No ECS type, anywhere.** The Contract's prohibition is absolute — no
 //! `Entity`, no `World`, no `Component`, no `Query`, no system registration.
-//! A trader is identified by [`AccountId`], a number `exchange_id` owns and
-//! this crate re-exports. The failure this prevents is not a compile error
-//! anyone would notice: an
+//! A trader is identified by `AccountId`, a number `exchange_id` owns. The
+//! failure this prevents is not a compile error anyone would notice: an
 //! exchange holding an `Entity` handle in a private field matches perfectly,
 //! passes every behavioural test, and couples the market to the simulation's
 //! storage layer. Keeping identity a plain integer is what makes the exchange
@@ -23,8 +22,9 @@
 //! # Naming — `Trade`, not `Fill`
 //!
 //! The family's Contract says *trades out*; the matching algorithm talks
-//! about *fills*. They are one thing, so there is one type: [`Trade`], the
-//! record of one match. "Fill" survives as a verb — an order is *fully filled*
+//! about *fills*. They are one thing, so there is one type: `Trade` (now
+//! declared in `exchange_fill`), the record of one match. "Fill" survives as
+//! a verb — an order is *fully filled*
 //! or *partially filled* — describing what a Trade did to an order, never a
 //! second record of it. Two types here would be two sources of truth for one
 //! event, and they would disagree exactly when something had already gone
@@ -33,7 +33,7 @@
 //! Design: the family's shared algorithm, protocol, and state-machine
 //! documents specify behavior at family grain rather than per crate.
 //!
-//! # Extraction
+//! # Extraction — retired as a re-export aggregator
 //!
 //! `Side`, `AccountId`, `OrderId` and `Sequence` moved out to their own
 //! root crates — `exchange_side`, `exchange_id` (both ids), `exchange_seq` —
@@ -43,24 +43,20 @@
 //! that crate's own module doc for the full reasoning. `Trade`, `Event`,
 //! `EventKind`, `RejectReason` and `CancelCause` moved out next again, to
 //! `exchange_fill`, gaining a `taker_side` field on `Trade` — see that
-//! crate's own module doc for why. All eleven are re-exported here
-//! unchanged, so every existing `use exchange_types::{ ... }` keeps
-//! resolving.
+//! crate's own module doc for why. All eleven were re-exported here
+//! unchanged for a time, so every `use exchange_types::{ ... }` kept
+//! resolving through the move; every call site has since been cut over to
+//! the leaf crate directly, and the re-export block is gone — this crate no
+//! longer carries any type it does not itself declare.
 //!
-//! `notional`/`TypeError`/`obligation` stay here rather than moving with
-//! `Order`/`Obligation`: they are the one piece of real logic this crate still
-//! owns, and this crate now depends forward on `exchange_order` (and, for the
-//! event-stream vocabulary, `exchange_fill`) for the types that logic
-//! operates on, rather than the other way round — the shape every crate this
-//! one sheds types to ends up in.
+//! `notional`/`TypeError`/`obligation` stay here: they are the one piece of
+//! real logic this crate still owns. `Order`/`Obligation`/`Side` are named in
+//! `obligation`'s own signature and body, so `exchange_order`/`exchange_side`
+//! remain real dependencies — just no longer re-exported from here.
 
 use exact_arith::{ Backing, MONEY_SCALE, Money, Quantity, pow10 };
-
-pub use exchange_fill::{ CancelCause, Event, EventKind, RejectReason, Trade };
-pub use exchange_id::{ AccountId, OrderId };
-pub use exchange_order::{ Obligation, Order };
-pub use exchange_seq::Sequence;
-pub use exchange_side::Side;
+use exchange_order::{ Obligation, Order };
+use exchange_side::Side;
 
 /// The price of one unit, and the type every amount of currency is expressed
 /// in.
@@ -69,9 +65,6 @@ pub use exchange_side::Side;
 /// operations all belong to `exact_arith`, and wrapping them here would put
 /// this crate in the position of re-deciding them.
 pub type Price = Money;
-
-/// An amount of currency — a notional, a reservation, a balance.
-pub type Amount = Money;
 
 /// A quantity or price this crate could not express.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
@@ -121,7 +114,7 @@ impl core::error::Error for TypeError {}
 /// let three = Quantity::from_int( 3 ).unwrap();
 /// assert_eq!( notional( price, three ).unwrap(), Money::parse( "3.75" ).unwrap() );
 /// ```
-pub fn notional( price : Price, quantity : Quantity ) -> Result< Amount, TypeError >
+pub fn notional( price : Price, quantity : Quantity ) -> Result< Money, TypeError >
 {
   let scale = i128::from( pow10( MONEY_SCALE ) );
   let product = i128::from( price.minor() ) * i128::from( quantity.minor() );

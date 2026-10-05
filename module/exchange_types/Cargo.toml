@@ -8,13 +8,13 @@ publish = false
 
 [dependencies]
 exact_arith = { path = "../../../exact/module/exact_arith" }
-exchange_fill = { path = "../exchange_fill" }
-exchange_id = { path = "../exchange_id" }
 exchange_order = { path = "../exchange_order" }
 exchange_side = { path = "../exchange_side" }
-exchange_seq = { path = "../exchange_seq" }
 
 [dev-dependencies]
+# AccountId/OrderId, for the test helper's own order() fixture — nothing in
+# this crate's own src/ reads either; InstrumentId lives here too.
+exchange_id = { path = "../exchange_id" }
 # The test helper's `order()` fixture needs a `Tif` value for `Order`'s new
 # field — nothing in this crate's own src/ reads a Tif.
 exchange_tif = { path = "../exchange_tif" }

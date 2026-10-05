@@ -100,8 +100,12 @@
 
 use exact_arith::{ KindError, Quantity };
 use exchange_book::Book;
+use exchange_fill::Trade;
+use exchange_id::{ AccountId, OrderId };
+use exchange_order::Order;
+use exchange_side::Side;
 use exchange_tif::tif_requires_full;
-use exchange_types::{ AccountId, Order, OrderId, Price, Side, Trade, notional };
+use exchange_types::{ Price, notional };
 
 pub use exchange_stp::SelfMatchPolicy;
 

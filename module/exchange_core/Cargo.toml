@@ -9,7 +9,10 @@ publish = false
 [dependencies]
 exchange_types = { path = "../exchange_types" }
 exchange_book = { path = "../exchange_book" }
+exchange_fill = { path = "../exchange_fill" }
 exchange_match = { path = "../exchange_match" }
+exchange_order = { path = "../exchange_order" }
+exchange_side = { path = "../exchange_side" }
 exchange_escrow = { path = "../exchange_escrow" }
 exchange_seq = { path = "../exchange_seq" }
 exchange_id = { path = "../exchange_id" }

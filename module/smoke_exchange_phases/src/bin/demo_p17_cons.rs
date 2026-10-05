@@ -10,9 +10,10 @@
 
 use exact_arith::{ Money, Quantity };
 use exchange_conserve::conserve_assert;
+use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_side::Side;
-use exchange_types::{ Price, Trade };
+use exchange_types::Price;
 
 fn trade( taker_side : Side, price : &str ) -> Trade
 {

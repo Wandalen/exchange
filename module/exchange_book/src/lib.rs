@@ -75,9 +75,9 @@
 //! unaffected by either that change or the instrument-keying one above it.
 
 use exact_arith::Quantity;
-use exchange_id::InstrumentId;
+use exchange_id::{ InstrumentId, OrderId };
 use exchange_level::{ Level, level_empty_is, level_len, level_new, level_pop_front, level_push, level_remove };
-use exchange_types::{ OrderId, Side };
+use exchange_side::Side;
 
 /// An order on the book, with what is left of it.
 ///

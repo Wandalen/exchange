@@ -9,16 +9,18 @@ publish = false
 [dependencies]
 exchange_types = { path = "../exchange_types" }
 exchange_book = { path = "../exchange_book" }
+exchange_fill = { path = "../exchange_fill" }
+exchange_id = { path = "../exchange_id" }
+exchange_order = { path = "../exchange_order" }
+exchange_side = { path = "../exchange_side" }
 exchange_stp = { path = "../exchange_stp" }
 exchange_tif = { path = "../exchange_tif" }
 exact_arith = { path = "../../../exact/module/exact_arith" }
 
 [dev-dependencies]
-# The test helpers' `Order` fixtures need an `InstrumentId` value to
-# construct. Stale note removed: `cross()` reads `incoming.instrument`
-# directly (`src/lib.rs`) and threads it through every `Book` call — the
-# multi-instrument book rework landed here some time ago.
-exchange_id = { path = "../exchange_id" }
+# The test helpers' `Order` fixtures need a `Sequence` value for `Resting`'s
+# `arrival` — nothing in this crate's own src/ reads one.
+exchange_seq = { path = "../exchange_seq" }
 
 [lints]
 workspace = true

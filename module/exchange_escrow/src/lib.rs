@@ -43,7 +43,11 @@
 use std::collections::BTreeMap;
 
 use exact_arith::{ Money, Quantity };
-use exchange_types::{ AccountId, Obligation, Order, OrderId, Price, Side, Trade, TypeError, notional };
+use exchange_fill::Trade;
+use exchange_id::{ AccountId, OrderId };
+use exchange_order::{ Obligation, Order };
+use exchange_side::Side;
+use exchange_types::{ Price, TypeError, notional };
 
 /// The arithmetic a [`Holding`] needs of whatever it holds.
 ///

@@ -9,9 +9,10 @@
 use exact_arith::{ Money, Quantity, money_fmt };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_order::Order;
+use exchange_seq::Sequence;
 use exchange_side::Side;
 use exchange_tif::Tif;
-use exchange_types::{ Order, Sequence };
 
 fn rest( id : u64, side : Side, price : &str ) -> Resting
 {

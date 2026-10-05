@@ -7,7 +7,11 @@ description = "The one owned drain point for the event stream"
 publish = false
 
 [dependencies]
-exchange_types = { path = "../exchange_types" }
+exchange_fill = { path = "../exchange_fill" }
+
+[dev-dependencies]
+exchange_id = { path = "../exchange_id" }
+exchange_seq = { path = "../exchange_seq" }
 
 [lints]
 workspace = true

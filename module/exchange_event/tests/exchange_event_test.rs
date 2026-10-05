@@ -1,7 +1,9 @@
 //! Test Matrix T01 — the drain takes ownership and empties the source.
 
 use exchange_event::{ Event, EventKind, event_clear, event_drain, event_len, event_push };
-use exchange_types::{ AccountId, OrderId, RejectReason, Sequence };
+use exchange_fill::RejectReason;
+use exchange_id::{ AccountId, OrderId };
+use exchange_seq::Sequence;
 
 fn rejected( id : u64 ) -> Event
 {

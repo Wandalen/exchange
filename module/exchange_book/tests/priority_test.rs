@@ -8,9 +8,11 @@
 
 use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
-use exchange_id::InstrumentId;
+use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_order::Order;
+use exchange_seq::Sequence;
+use exchange_side::Side;
 use exchange_tif::Tif;
-use exchange_types::{ AccountId, Order, OrderId, Sequence, Side };
 
 /// The one instrument every test in this file threads through `Book`'s now
 /// instrument-scoped methods — T05's own leakage test is the one place a
