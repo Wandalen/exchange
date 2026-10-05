@@ -101,6 +101,7 @@ pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
 pub use exchange_stats::BookStats;
 use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add };
 pub use exchange_tif::Tif;
+use exchange_tif::tif_rests;
 pub use exchange_types::
 {
   AccountId, Amount, CancelCause, Event, EventKind, Obligation, Order, OrderId, Price, RejectReason,
@@ -124,6 +125,12 @@ pub struct Receipt
   /// order's own remainder, rather than because every unit found a
   /// counterparty. [`Self::is_complete`] uses this to tell the two apart.
   pub self_match_cancelled : bool,
+  /// Whether `resting` is zero because the order's own [`Tif`] forbids
+  /// resting an unfilled remainder (IOC drops it, FOK never partially fills
+  /// in the first place) rather than because every unit found a
+  /// counterparty. [`Self::is_complete`] uses this the same way it already
+  /// uses [`Self::self_match_cancelled`].
+  pub tif_dropped : bool,
 }
 
 impl Receipt
@@ -142,10 +149,24 @@ impl Receipt
   /// rest", not "did this fill" — the two coincide only when nothing was
   /// cancelled, so any later outcome that zeroes `resting` without a fill
   /// needs its own flag here too, not a widened zero-check.
+  ///
+  /// Fix(tif_forbidden_resting_was_not_tracked_as_its_own_reason):
+  /// Root cause: the same zero-means-ambiguous trap this method was already
+  /// fixed for once, recurring through a third path: an IOC/FOK order whose
+  /// [`Tif`] forbids resting an unfilled remainder also zeroes `resting`,
+  /// with no fill behind it, exactly like the self-match case above —
+  /// caught before release by the new regression tests added alongside the
+  /// facade's missing `tif_rests` gate (see `step_place`'s own fix), not by
+  /// a user report.
+  ///
+  /// Pitfall: a disambiguating flag added for one cause of an ambiguous zero
+  /// does not cover a second, later-discovered cause of the same zero — the
+  /// fix pattern is "name the new cause its own flag too", not "trust the
+  /// existing flag harder".
   #[ must_use ]
   pub fn is_complete( &self ) -> bool
   {
-    self.resting == Quantity::ZERO && !self.self_match_cancelled
+    self.resting == Quantity::ZERO && !self.self_match_cancelled && !self.tif_dropped
   }
 }
 
@@ -513,6 +534,29 @@ impl Exchange
     {
       return Err( self.reject_counted( &order, RejectReason::NegativePrice ) );
     }
+    // A halted instrument refuses every new placement outright — resting
+    // orders are untouched (see `Self::halt_set`'s own doc), only new
+    // arrivals are refused. No registered spec means no halt tracking
+    // exists for this instrument, so an order against an unregistered
+    // instrument validates exactly as it already did before `exchange_halt`
+    // existed.
+    //
+    // Fix(halt_set_never_actually_blocked_a_placement):
+    // Root cause: `Self::halt_set`/`halt_clear`/`halt_is` toggle
+    // `InstrumentSpec::halted` correctly, but nothing in `step_place` ever
+    // read it back — the flag was purely decorative from a placement's own
+    // point of view. `exchange_halt`'s own Stage 7 work and this method's
+    // Stage 9 rework landed independently, and nothing forced them to meet
+    // until the wall smoke's own "halt, then place: refused" scenario tried
+    // to exercise both together.
+    //
+    // Pitfall: a facade exposing a control (`halt_set`) is not the same
+    // claim as the facade's own hot path consulting it — a crate whose own
+    // tests all pass can still be wired to nothing.
+    if self.specs.get( &order.instrument ).is_some_and( exchange_halt::halt_is )
+    {
+      return Err( self.reject_counted( &order, RejectReason::Halted ) );
+    }
 
     // 2. Dry-run the whole operation — reserve, cross, settle every trade,
     // release every self-match cancellation — against scratch clones, before
@@ -579,8 +623,84 @@ impl Exchange
 
     // 5. Rest the remainder, reservation retained — via `exchange_rest::rest_place`
     // now that this facade consumes that crate, rather than reaching into
-    // `self.book.insert` directly.
-    let resting = if incoming_cancelled { Quantity::ZERO } else { crossing.remaining };
+    // `self.book.insert` directly. `tif_rests` gates this the same way
+    // `demo_p22_ioc`'s own direct orchestration already does: `cross` never
+    // inserts a remainder for any TIF by its own design (see that crate's
+    // module doc), so whether one ever reaches the book is entirely this
+    // caller's decision, and an IOC/FOK order's unfilled remainder must
+    // never make it to `rest_place`.
+    //
+    // Fix(tif_requires_full_orders_were_rested_instead_of_rejected):
+    // Root cause: an unfillable FOK comes back from `cross` shaped exactly
+    // like an ordinary no-cross outcome — empty trades, full remaining,
+    // `Ok`, per that crate's own module doc, which says in so many words
+    // that translating "FOK, nothing filled" into a rejection is this
+    // facade's job. `step_place` never did that translation, nor did it
+    // consult `tif_rests` for IOC's own partial-fill remainder — both TIFs
+    // fell through to the same unconditional `resting = crossing.remaining`
+    // the old `submit` used when every order was hardcoded `Tif::Gtc`, so a
+    // FOK against a thin book rested the whole quantity instead of being
+    // refused, and an IOC's unfilled remainder rested instead of dropping.
+    // Caught by the new `an_ioc_taker_never_rests_its_remainder_through_the_facade`/
+    // `a_fok_taker_rejects_whole_against_a_thin_book_through_the_facade` tests,
+    // not by a user report.
+    //
+    // Pitfall: `exchange_match::cross`'s own module doc already states that
+    // IOC/FOK remainder disposal is the caller's decision, in a crate this
+    // facade depends on directly — stating the obligation in the crate that
+    // does not do it is not the same as the crate that must do it actually
+    // doing it, and nothing short of a TIF-specific regression test catches
+    // the gap between the two.
+    let tif_dropped = !incoming_cancelled && !tif_rests( order.tif ) && crossing.remaining > Quantity::ZERO;
+
+    // 4b. A TIF-dropped remainder must release its own reservation now —
+    // nothing else will, since step 5 below is exactly what stops it from
+    // resting, and resting is the only other thing that keeps a reservation
+    // alive past this call.
+    //
+    // Fix(tif_dropped_remainder_leaked_its_own_reservation):
+    // Root cause: `Escrow::reserve` reserves an order's full notional up
+    // front, and `Escrow::settle` only ever reduces that reservation by
+    // whatever quantity actually filled (see `reduced_obligation`) — neither
+    // call releases the rest. Ordinarily the unfilled rest stays reserved
+    // because the order rests, and a later cancel or fill releases it then.
+    // Once step 5 stopped resting an IOC/FOK remainder (the fix directly
+    // above this one), nothing was left to ever call `Escrow::release` for
+    // it: not resting, not self-match cancellation (`crossing.cancelled`
+    // only ever names a self-match pair, never an ordinary TIF disposal),
+    // not a future cancel (there is nothing on the book to cancel). The
+    // reservation would have stayed on `self.escrow`'s books forever —
+    // exactly the leaked-reservation failure
+    // `docs/invariant/001_escrow_covers_resting_orders.md` names as a silent
+    // deletion of wealth, caught here before release rather than by a later
+    // conservation-audit imbalance with no event to trace it to.
+    //
+    // Pitfall: fixing "don't rest this" in isolation, without asking what
+    // used to keep the reservation this remainder depends on alive, trades
+    // one invariant violation (wrongly visible on the book) for a worse one
+    // (invisible everywhere). A resource a state machine releases on every
+    // other exit path needs the same release on a newly-added exit path too.
+    if tif_dropped
+    {
+      let released = self.escrow.release( order.account, order.id )
+        .expect( "settle reduced this order's own reservation to exactly its unfilled remainder, never removing the entry" );
+      self.emit
+      (
+        order.id, order.account,
+        EventKind::OrderCancelled { cause : CancelCause::TimeInForce, quantity : crossing.remaining, released },
+      );
+    }
+
+    // 5. Rest the remainder, reservation retained — via `exchange_rest::rest_place`
+    // now that this facade consumes that crate, rather than reaching into
+    // `self.book.insert` directly. `tif_rests` gates this the same way
+    // `demo_p22_ioc`'s own direct orchestration already does: `cross` never
+    // inserts a remainder for any TIF by its own design (see that crate's
+    // module doc), so whether one ever reaches the book is entirely this
+    // caller's decision, and an IOC/FOK order's unfilled remainder must
+    // never make it to `rest_place` — see the two fixes immediately above
+    // for why, and for the dry-run mirror of this same gate.
+    let resting = if incoming_cancelled || tif_dropped { Quantity::ZERO } else { crossing.remaining };
     if resting > Quantity::ZERO
     {
       assert!
@@ -591,7 +711,7 @@ impl Exchange
       stats_rest_add( &mut self.stats, 1 );
     }
 
-    Ok( Receipt { order : order.id, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled } )
+    Ok( Receipt { order : order.id, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
   }
 
   /// [`Self::reject`], plus the stats counter [`Self::exchange_step`] keeps.

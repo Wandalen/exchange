@@ -42,9 +42,11 @@ assert!( matches!( receipt, exchange_core::StepOutcome::Placed( Ok( ref r ) ) if
 assert!( verify( &exchange.postings().unwrap() ).unwrap().is_balanced() );
 ```
 
-To see the whole family work end to end: `cargo run -p smoke_exchange_core` —
-headless, no wallets beyond the escrow stub, prints a crossing trade, a
-no-cross control arm, and a cancel/release, then exits `ok`.
+To see the whole family work end to end: `cargo run -p smoke_exchange_book` —
+headless, one scenario exercising multi-level matching, every `Tif`,
+halt/resume, self-trade prevention, duplicate rejection, two-ring
+determinism, ring overflow, and conservation, against one fixed golden
+block, then exits `ok`.
 
 ## Status
 
@@ -103,7 +105,7 @@ Full comparison against `matchcore`, `orderbook-rs`, and `limitbook`:
 | [`exchange_inbound/`](module/exchange_inbound/readme.md) | Many ring producers, one deterministic drain into rest-or-match |
 | [`exchange_escrow/`](module/exchange_escrow/readme.md) | The reservation ledger — available/reserved partition and settlement |
 | [`exchange_core/`](module/exchange_core/readme.md) | Workstream 002's facade — the ring-fed `exchange_step`'s five-step pipeline over the crates below it |
-| [`smoke_exchange_core/`](module/smoke_exchange_core/readme.md) | Smoke lane 020 — one order across five crates, with a no-cross control arm |
+| [`smoke_exchange_book/`](module/smoke_exchange_book/readme.md) | P30 — the wall smoke, exercising every stage in one run |
 | [`smoke_exchange_phases/`](module/smoke_exchange_phases/readme.md) | The P01–P29 phase-smoke ladder — one new contract graded per phase |
 | [`license`](license) | MIT license text |
 | [`.github/`](.github/workflows/ci.yml) | CI — nextest, doctests, clippy, and a clean rustdoc build on every push/PR |

@@ -13,7 +13,7 @@
 
 ## Introduction
 
-`module/` holds 24 `exchange_*` crates plus two smoke lanes (`smoke_exchange_core`, `smoke_exchange_phases`). Each crate does one thing; nothing here is a kitchen-sink `utils`. The family splits into dependency **tiers** — tier *N* may depend only on tiers below it — which is the one piece of structure this guide adds on top of what each crate's own readme already says. Four things worth knowing before the table:
+`module/` holds 24 `exchange_*` crates plus two smoke lanes (`smoke_exchange_book`, `smoke_exchange_phases`). Each crate does one thing; nothing here is a kitchen-sink `utils`. The family splits into dependency **tiers** — tier *N* may depend only on tiers below it — which is the one piece of structure this guide adds on top of what each crate's own readme already says. Four things worth knowing before the table:
 
 1. **`exchange_types` is a legacy re-export aggregator, not a design tier.** It held everything in this family's original 4-crate build (`Side`, `AccountId`, `OrderId`, `Sequence`, `Order`, `Obligation`, `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause`). Every one of those has since moved to its own leaf crate, and `exchange_types` now re-exports all eleven unchanged — so old `use exchange_types::X` call sites still resolve while new code depends on the leaf directly. Four crates (`exchange_book`, `exchange_conserve`, `exchange_escrow`, `exchange_event`) still route through it rather than the leaf, which pushes their *measured* tier one layer deeper than their *conceptual* role would suggest. This is a known, tracked transitional state (see `exchange_types/readme.md`'s own "Extraction — shrinking, not static" section), not a design mistake — watch for it when the number in the table looks higher than you'd expect.
 2. **Most of the family is wired into `exchange_core` now — three crates still aren't.** The Stage 9 facade rework (2026-10-03) gave `Exchange` real methods calling straight through to `exchange_depth`, `exchange_event`, `exchange_halt`, `exchange_snap`, `exchange_spec`, and `exchange_stats`, plus `exchange_inbound` as the ring `exchange_step` itself drains. Only `exchange_cap`, `exchange_conserve`, and `exchange_idem` remain real, tested, and genuinely standalone — no reference to any of the three appears anywhere in `exchange_core/src/lib.rs`. `exchange_rest` is a fourth, partial case: `rest_place` is called from inside `step_place`, but `rest_replace` is reachable only directly — `exchange_step` drains an `InboundCmd::Replace` and returns `StepOutcome::ReplaceNotWired` rather than applying it (see `exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md`). This is the family's own established "skeleton-first" pattern, now mostly but not fully closed: build and prove a crate in isolation, wire it into the facade in a later stage. Call the four remaining names directly; don't expect `Exchange` to reach them yet.
@@ -48,7 +48,7 @@
 | 5 | [`exchange_snap`](../../module/exchange_snap/readme.md) | A plain, copied snapshot of a book's resting rows |
 | 6 | [`exchange_inbound`](../../module/exchange_inbound/readme.md) | `InboundCmd` from a ring producer to the book — the family's first concurrency |
 | 7 — Facade | [`exchange_core`](../../module/exchange_core/readme.md) | `Exchange` — ring-fed `exchange_step`, the facade's only intake path now |
-| — (lane) | [`smoke_exchange_core`](../../module/smoke_exchange_core/readme.md) | One order crossing five crates, watched from outside |
+| — (lane) | [`smoke_exchange_book`](../../module/smoke_exchange_book/readme.md) | The wall smoke, exercising every stage in one run |
 | — (lane) | [`smoke_exchange_phases`](../../module/smoke_exchange_phases/readme.md) | The P01–P29 phase-smoke ladder, one binary per phase |
 
 A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier 0. `exact_arith` (the family's shared decimal-arithmetic crate, outside this workstream) is not counted — it sits beneath every tier here and is not part of this family's own layering.
@@ -316,9 +316,9 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
 
 ## Smoke lanes
 
-- **`smoke_exchange_core`** — depends on `exchange_core` alone, by design: a re-export missing from the facade is a build failure here, not a gap nobody notices. Three arms (crossing, control, cancel) graded by exit code.
+- **`smoke_exchange_book`** — depends on `exchange_core` for everything except idempotency and conservation, by design: a re-export missing from the facade is a build failure here, not a gap nobody notices. One scenario covering multi-level matching, every `Tif`, halt/resume, self-trade prevention, duplicate rejection, two-ring determinism, ring overflow, and conservation, graded against one fixed golden block.
   ```bash
-  cargo run -p smoke_exchange_core
+  cargo run -p smoke_exchange_book
   ```
 - **`smoke_exchange_phases`** — one tiny `demo_pNN_*` binary per incremental build phase (P01–P29 so far), each printing an exact golden line checked against `../golden_output/`. Depends on nearly every crate directly, deliberately — it grades each new contract in isolation, the moment it lands.
   ```bash

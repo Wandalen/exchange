@@ -174,3 +174,56 @@ fn rest_replace_refused_by_zero_quantity_restores_the_original()
   assert_eq!( restored.order.price, Money::parse( "2.50" ).unwrap(), "rolled back to the pre-replace order" );
   assert_eq!( restored.remaining, qty( 4 ) );
 }
+
+// --- rest_replace: InstrumentMismatch ------------------------------------
+
+// BUG-001 substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md — bug_reproducer: `new_resting`'s
+// own `order.instrument` disagreeing with the `instrument` parameter used to go unnoticed —
+// the old order was cancelled on one instrument while the new one was inserted onto a
+// different one entirely, with `rest_replace` returning `Ok`.
+///
+/// # Root Cause
+///
+/// `rest_replace` read its `instrument` parameter only for the `book.cancel` lookup;
+/// the subsequent `book.insert( new_resting )` derives its target book purely from
+/// `new_resting.order.instrument`, with no comparison between the two anywhere in the
+/// function (`module/exchange_rest/src/lib.rs:133-151`, pre-fix).
+///
+/// # Why Not Caught
+///
+/// Every pre-existing test's `order()`/`resting()` helper hardcoded `InstrumentId( 1 )`
+/// for both the explicit `instrument` argument and the constructed order, so the two
+/// values were structurally identical in every call this crate's own suite made —
+/// no test ever supplied two disagreeing values.
+///
+/// # Fix Applied
+///
+/// `rest_replace` now checks `new_resting.order.instrument == instrument` first, before
+/// calling `book.cancel`, returning `RestReplaceError::InstrumentMismatch` on disagreement
+/// so nothing is touched (`module/exchange_rest/src/lib.rs:133-145`).
+///
+/// # Prevention
+///
+/// Any function taking both an explicit selector and a payload carrying its own copy of
+/// the same identity must assert the two agree before either drives an effectful
+/// operation — see `substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md § Prevention`.
+///
+/// # Pitfall
+///
+/// A lookup keyed on one value and a write keyed on a different, untrusted value that is
+/// assumed to agree with it is a silent cross-target hazard — assert agreement first.
+#[ test ]
+fn rest_replace_refuses_a_new_resting_for_a_different_instrument()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
+
+  let mismatched = Resting { order : Order { instrument : InstrumentId( 2 ), ..resting( 1, Side::Sell, "2.60", 6, 20 ).order }, ..resting( 1, Side::Sell, "2.60", 6, 20 ) };
+  let error = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), mismatched ).unwrap_err();
+
+  assert_eq!( error, RestReplaceError::InstrumentMismatch );
+  assert_eq!( book.best( InstrumentId( 2 ), Side::Sell ), None, "the mismatched replacement must not land on instrument 2" );
+  let restored = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
+  assert_eq!( restored.order.id, OrderId( 1 ), "order 1 is back on its own instrument, unchanged" );
+  assert_eq!( restored.order.price, Money::parse( "2.50" ).unwrap() );
+}

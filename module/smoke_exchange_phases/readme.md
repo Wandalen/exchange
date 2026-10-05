@@ -13,10 +13,10 @@ cargo run -q -p smoke_exchange_phases --bin demo_p01_id
 
 ## Why a separate crate from the wall smoke
 
-`smoke_exchange_core`/`smoke_exchange_book` grades the whole path end to end
-in one scenario; this crate grades each new contract in isolation, the moment
-it lands, before it is wired into anything bigger. One crate, one job each —
-see the root readme's own Responsibility Table.
+`smoke_exchange_book` grades the whole path end to end in one scenario; this
+crate grades each new contract in isolation, the moment it lands, before it
+is wired into anything bigger. One crate, one job each — see the root
+readme's own Responsibility Table.
 
 ## Adding a phase
 

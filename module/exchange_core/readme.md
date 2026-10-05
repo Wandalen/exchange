@@ -45,7 +45,7 @@ them, assigning both itself on drain (see that method's own doc, "owns sequencin
 
 Created per `task/decisions.md` Q-10.
 Implemented 2026-08-30 and graded from outside by
-[`smoke_exchange_core`](../smoke_exchange_core/readme.md).
+[`smoke_exchange_book`](../smoke_exchange_book/readme.md).
 
 ## A facade over the family's crates
 
@@ -65,11 +65,13 @@ everything else. Its own logic is the sequencing:
 | [`exchange_match`](../exchange_match/readme.md) | 2 | The crossing loop and the executed-price rule |
 | [`exchange_escrow`](../exchange_escrow/readme.md) | 2 | The reservation ledger and settlement |
 | `exchange_core` | 3 | This facade, and `Exchange` |
-| [`smoke_exchange_core`](../smoke_exchange_core/readme.md) | lane | Smoke lane, with the no-cross control arm |
+| [`smoke_exchange_book`](../smoke_exchange_book/readme.md) | lane | The wall smoke, exercising every stage in one run |
 
-The lane depends on this crate alone, so a re-export missing from the facade is
-a build failure over there rather than a gap that surfaces at the first external
-consumer — the construction
+The lane depends on this crate for everything except idempotency and
+conservation — two properties this facade deliberately never wires in (see
+the lane's own readme) — so a re-export missing from the facade is still a
+build failure over there rather than a gap that surfaces at the first
+external consumer — the construction
 [`exact_arith`](https://github.com/Wandalen/exact/blob/master/module/exact_arith/readme.md) uses for the same reason.
 
 This table predates most of the family's later decomposition and is kept here

@@ -53,7 +53,7 @@ fn qty( whole : i64 ) -> Quantity
 /// Two distinct colliding accounts (7 and 42, not just one hardcoded pair),
 /// so the assertion rests on key equality itself rather than on one
 /// coincidental id — the same concern
-/// `substrate/exchange/exchange_core/task/unverified/082_implement_exchange_core.md`'s
+/// `substrate/task/exchange_core/unverified/082_implement_exchange_core.md`'s
 /// AF3 names.
 #[ test ]
 fn t09_no_trade_in_a_mixed_account_flow_carries_equal_self_match_keys()

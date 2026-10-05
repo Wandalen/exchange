@@ -90,6 +90,7 @@ fn reject_reason_is_still_exhaustively_matchable()
     RejectReason::InsufficientFunds => "insufficient_funds",
     RejectReason::ObligationUnrepresentable => "obligation_unrepresentable",
     RejectReason::ReservationUnrepresentable => "reservation_unrepresentable",
+    RejectReason::Halted => "halted",
   };
   assert_eq!( name, "zero_quantity" );
 }

@@ -8,9 +8,9 @@
 
 use exchange_core::
 {
-  AccountId, CancelCause, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd, InstrumentId,
-  Money, Obligation, Order, OrderId, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy, Sequence,
-  Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
+  AccountId, AssetId, CancelCause, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
+  InstrumentId, Money, Obligation, Order, OrderId, Producer, Quantity, Receipt, RejectReason, Resting,
+  SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
 };
 
 /// The one instrument every test in this suite submits against —
@@ -66,6 +66,33 @@ fn submit
   {
     Some( StepOutcome::Placed( result ) ) => result,
     other => panic!( "submit() only ever pushes Place — got {other:?}" ),
+  }
+}
+
+/// Same as [`submit`], but taking a caller-built [`Order`] directly instead
+/// of separate scalar fields — `submit` itself stays pinned to [`Tif::Gtc`]
+/// to keep every pre-existing assertion's meaning unchanged (see its own doc
+/// comment); the IOC/FOK regression tests below need the other two values,
+/// and threading an eighth scalar `tif` parameter through `submit`'s own
+/// shape would cross clippy's `too_many_arguments` threshold for no reason —
+/// taking the whole `Order` is both narrower and the same shape
+/// `Resting`/`InboundCmd::Place` already wrap it in one line down.
+fn submit_tif
+(
+  exchange : &mut Exchange,
+  producer : &mut Producer< '_, InboundCmd >,
+  consumer : &mut Consumer< '_, InboundCmd >,
+  order : Order,
+) -> Result< Receipt, ExchangeError >
+{
+  let resting = Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) };
+  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
+
+  match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
+  {
+    Some( StepOutcome::Placed( result ) ) => result,
+    other => panic!( "submit_tif() only ever pushes Place — got {other:?}" ),
   }
 }
 
@@ -1008,4 +1035,108 @@ fn a_self_match_cancelled_order_is_not_reported_complete()
     ) ),
     "the self-match cancellation must be on record",
   );
+}
+
+/// An IOC taker that only partially fills must not rest its remainder —
+/// `exchange_match::cross` never inserts a remainder for any TIF by its own
+/// design (see that crate's module doc); whether a caller rests one is the
+/// caller's decision, and `Exchange::step_place` must decline for IOC the
+/// same way `demo_p22_ioc`'s own direct `tif_rests` check does.
+#[ test ]
+fn an_ioc_taker_never_rests_its_remainder_through_the_facade()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) ).unwrap();
+
+  let taker = Order
+  {
+    id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
+    price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Ioc,
+  };
+  let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
+
+  assert_eq!( taking.trades.len(), 1, "it should still fill against the one resting maker" );
+  assert_eq!( taking.resting, Quantity::ZERO, "IOC must report nothing resting" );
+  assert!( taking.tif_dropped, "the unfilled 6 units were dropped by Tif, not resolved some other way" );
+  assert_eq!( exchange.book().len(), 0, "IOC's own unfilled remainder must never reach the book" );
+
+  // The dropped remainder's reservation must come back, not leak — paid 4.00
+  // for the 4 units that filled, nothing held against the other 6.
+  assert_eq!( exchange.escrow().reserved_for( taking.order ), None, "no reservation may survive a TIF-dropped remainder" );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.available(), money( "996" ) );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.reserved(), Money::ZERO );
+
+  assert!
+  (
+    exchange.events().iter().any( | event | matches!
+    (
+      event.kind,
+      EventKind::OrderCancelled { cause : CancelCause::TimeInForce, quantity, .. } if quantity == qty( 6 ),
+    ) ),
+    "the dropped remainder's cause and quantity must be on record",
+  );
+}
+
+/// A FOK taker that cannot be filled in full against a thin book must be
+/// rejected whole, with the book left exactly as it was — `cross` reports an
+/// unfillable FOK as an ordinary no-cross outcome (empty trades, full
+/// remaining, `Ok`, per that crate's own module doc), so `Exchange::step_place`
+/// is the one place that must translate "FOK, nothing filled" into "reject,
+/// don't rest" rather than resting the untouched full quantity by accident.
+#[ test ]
+fn a_fok_taker_rejects_whole_against_a_thin_book_through_the_facade()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) ).unwrap();
+  let before = exchange.book().clone();
+
+  let taker = Order
+  {
+    id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
+    price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Fok,
+  };
+  let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
+
+  assert!( taking.trades.is_empty(), "a thin book cannot fill this FOK in full" );
+  assert_eq!( taking.resting, Quantity::ZERO, "FOK must never rest when it cannot fill completely" );
+  assert!( taking.tif_dropped, "the whole order was dropped by Tif, not resolved some other way" );
+  assert_eq!( exchange.book(), &before, "the book must be byte-for-byte unchanged after an unfillable FOK" );
+
+  // Nothing filled, so the full reservation must come all the way back —
+  // not stay stranded because the order never got to rest and release it.
+  assert_eq!( exchange.escrow().reserved_for( taking.order ), None, "no reservation may survive a rejected FOK" );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.available(), money( "1000" ) );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.reserved(), Money::ZERO );
+}
+
+/// A halted instrument refuses a new placement, and resuming it allows one
+/// again — `halt_set`/`halt_clear` toggled `InstrumentSpec::halted`
+/// correctly from the day they were built, but nothing in `step_place` ever
+/// consulted it until now (see that method's own
+/// `Fix(halt_set_never_actually_blocked_a_placement)` comment).
+#[ test ]
+fn a_halted_instrument_refuses_placement_and_resuming_allows_it_again()
+{
+  let mut exchange = market();
+  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), money( "0.05" ), qty( 1 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  exchange.halt_set( INSTRUMENT ).unwrap();
+  let halted = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) );
+  assert_eq!( halted, Err( ExchangeError::Rejected( RejectReason::Halted ) ) );
+  assert_eq!( exchange.book().len(), 0, "a refused placement must never reach the book" );
+
+  exchange.halt_clear( INSTRUMENT ).unwrap();
+  let resumed = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) ).unwrap();
+  assert_eq!( resumed.resting, qty( 4 ), "the identical order must now be accepted and rest" );
 }

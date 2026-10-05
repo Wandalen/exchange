@@ -142,13 +142,12 @@ pub enum RejectReason
   /// covers the new order, but folding it into `reserved` alongside the
   /// existing commitment would not fit the type's declared ceiling.
   ReservationUnrepresentable,
+  /// The order's instrument is currently halted — see `exchange_halt`.
+  /// Resting orders are untouched; only a new arrival is refused.
+  Halted,
 }
 
 /// Why a remainder was withdrawn.
-///
-/// Time-in-Force disposition is the other cause the family's design
-/// names; it is not implemented, so it is not listed here — an unreachable
-/// variant is a claim the code does not back.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum CancelCause
 {
@@ -158,6 +157,15 @@ pub enum CancelCause
   /// book, because it would otherwise have crossed an order sharing the same
   /// self-match key — see `SelfMatchPolicy` in the matching engine.
   SelfMatch,
+  /// The order's own Time-in-Force forbade resting an unfilled remainder —
+  /// IOC dropped what was left after a partial fill, or FOK found it could
+  /// not be filled in full and the whole order came back untraded. Added
+  /// once `exchange_core::Exchange::step_place` actually disposed of a
+  /// remainder this way instead of only `exchange_match::cross` reporting
+  /// one — see that method's own `Fix(tif_dropped_remainder_leaked_its_own_reservation)`
+  /// comment for why a cause variant and a release both had to exist
+  /// together, not just one of them.
+  TimeInForce,
 }
 
 /// One entry in the event stream — the Contract's second output, beside the

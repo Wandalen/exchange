@@ -25,7 +25,7 @@ members = [
   "module/exchange_stp",
   "module/exchange_tif",
   "module/exchange_types",
-  "module/smoke_exchange_core",
+  "module/smoke_exchange_book",
   "module/smoke_exchange_phases",
 ]
 

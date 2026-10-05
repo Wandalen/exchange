@@ -1,6 +1,6 @@
 # workaround
 
-External constraints `smoke_exchange_core` absorbs.
+External constraints `smoke_exchange_book` absorbs.
 
 ### Scope
 
@@ -13,18 +13,18 @@ External constraints `smoke_exchange_core` absorbs.
 
 **None.**
 
-`smoke_exchange_core` is one order crossing the whole exchange core, run end to end. `smoke_exchange_core` depends on exactly one crate, `exchange_core`, and zero published crates. Its source was read in full
+`smoke_exchange_book` is the wall scenario — every stage in one run, against the P30 golden block. It depends on three crates (`exchange_core`, `exchange_conserve`, `exchange_idem`) and zero published crates. Its source was read in full
 and holds no filesystem, environment-variable, or process-identity access —
 nothing here compensates for a toolchain limitation, a platform quirk, or a
 published dependency's own gap, because there is no such surface to
 compensate against. Verify with:
 
 ```bash
-# from this crate's root ( substrate/exchange/smoke_exchange_core/ )
+# from this crate's root ( module/smoke_exchange_book/ )
 cargo tree --depth 1
 ```
 
-**Expected:** `exchange_core` alone, resolving to a `(path = ...)` source under `module/`.
+**Expected:** `exchange_core`, `exchange_conserve`, `exchange_idem`, each resolving to a `(path = ...)` source under `module/`.
 
 ### Workarounds
 
@@ -36,14 +36,14 @@ cargo tree --depth 1
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — 1 dependency, all in-workspace path dependencies |
+| `Cargo.toml` | The dependency surface examined for this finding — 3 dependencies, all in-workspace path dependencies |
 
 ### Regenerate
 
 ```sh
-cd "$(git rev-parse --show-toplevel)"/substrate/exchange/smoke_exchange_core
+cd "$(git rev-parse --show-toplevel)"/substrate/exchange/module/smoke_exchange_book
 printf 'workaround instances:   '; ls docs/workaround/[0-9][0-9][0-9]_*.md 2>/dev/null | wc -l
 printf 'declared dependencies:  '; cargo tree --depth 1 --edges normal 2>/dev/null | tail -n +2 | wc -l
 # workaround instances:   0
-# declared dependencies:  1
+# declared dependencies:  3
 ```

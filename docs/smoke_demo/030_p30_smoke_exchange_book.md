@@ -5,7 +5,7 @@
 - **Purpose**: Grade phase P30, the wall — the one proposed demo that closes the workstream.
 - **Responsibility**: Exercise most hard problems and features together behind one golden print.
 
-**Design status**: The real build's smoke lane is named `smoke_exchange_core`, not `smoke_exchange_book`, and covers one order across five crates with a no-cross control arm — much thinner than this proposed wall's full scenario (FIFO, partials, IOC/FOK, duplicate id, halt/resume, self-trade, two-producer ring-drain determinism, ring overflow, conservation, depth_top).
+**Design status**: Built, as `module/smoke_exchange_book`, replacing the thinner `smoke_exchange_core` lane (Stage 10 of this family's refactor — see git history). Matches the proposed scenario's coverage: multi-level price-time priority, IOC/FOK disposition, duplicate-id rejection, halt/resume, self-trade prevention, two-producer ring-drain determinism, ring overflow, conservation, and `depth_get`. One divergence from the proposal's own text: escrow is real, not stubbed — this family's Stage 5 decision keeps `exchange_escrow` holding genuine balances throughout, so the wall's accounts are funded and settled for real rather than through a stand-in.
 
 ### Statement
 

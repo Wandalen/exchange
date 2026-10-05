@@ -30,5 +30,5 @@ Every crate in the `substrate/exchange` workspace.
 | [`exchange_inbound/`](exchange_inbound/readme.md) | `InboundCmd` over a `ring_factory`/`ring_handle` channel — many producers, one deterministic apply order |
 | [`exchange_escrow/`](exchange_escrow/readme.md) | Available/reserved balance partition |
 | [`exchange_core/`](exchange_core/readme.md) | `Exchange` — the facade tying book, match and escrow together |
-| [`smoke_exchange_core/`](smoke_exchange_core/readme.md) | The original single-instrument wall smoke |
+| [`smoke_exchange_book/`](smoke_exchange_book/readme.md) | P30 — the wall smoke exercising every stage in one run |
 | [`smoke_exchange_phases/`](smoke_exchange_phases/readme.md) | The P01-P29 phase-smoke ladder, one binary per phase |

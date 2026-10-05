@@ -188,4 +188,4 @@ untidy:
 
 | File | Relationship |
 |------|--------------|
-| `tests/self_match_test.rs` | T09–T12: no `Trade` carries equal self-match keys on both sides across a mixed-account flow; each of the three configured policies cancels exactly its documented side and emits the self-match cause. T13 (an FOK whose only crossing liquidity carries its own key, cancelled whole) is not yet covered — no Time-in-Force exists on `Order` yet to construct an FOK from (→ `substrate/exchange/exchange_core/task/unverified/082_implement_exchange_core.md` History) |
+| `tests/self_match_test.rs` | T09–T12: no `Trade` carries equal self-match keys on both sides across a mixed-account flow; each of the three configured policies cancels exactly its documented side and emits the self-match cause. T13 (an FOK whose only crossing liquidity carries its own key, cancelled whole) is not yet covered — no Time-in-Force exists on `Order` yet to construct an FOK from (→ `substrate/task/exchange_core/unverified/082_implement_exchange_core.md` History) |

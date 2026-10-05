@@ -63,6 +63,10 @@ pub fn rest_cancel( book : &mut Book, instrument : InstrumentId, id : OrderId ) 
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum RestReplaceError
 {
+  /// `new_resting.order.instrument` disagreed with `instrument` — nothing
+  /// was touched; the order named by `old_id` is still resting exactly as
+  /// it was.
+  InstrumentMismatch,
   /// `old_id` was not resting on `instrument` — nothing to replace.
   Missing,
   /// The replacement was refused by [`Book::insert`]: a zero-remaining
@@ -77,6 +81,7 @@ impl core::fmt::Display for RestReplaceError
   {
     match self
     {
+      Self::InstrumentMismatch => write!( f, "new_resting's own instrument disagrees with the instrument argument" ),
       Self::Missing => write!( f, "no order with that id is resting on this instrument" ),
       Self::Refused => write!( f, "the replacement was refused; the original order is unchanged" ),
     }
@@ -98,6 +103,8 @@ impl core::error::Error for RestReplaceError {}
 ///
 /// # Errors
 ///
+/// [`RestReplaceError::InstrumentMismatch`] if `new_resting.order.instrument`
+/// disagrees with `instrument` — checked first, before anything is touched.
 /// [`RestReplaceError::Missing`] if `old_id` is not resting on `instrument`.
 /// [`RestReplaceError::Refused`] if `new_resting` is refused by
 /// [`Book::insert`] — the original stays exactly as it was.
@@ -132,6 +139,20 @@ impl core::error::Error for RestReplaceError {}
 /// ```
 pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : OrderId, new_resting : Resting ) -> Result< Resting, RestReplaceError >
 {
+  // Fix(BUG-001): new_resting's own order.instrument was never checked against the
+  // instrument argument before being handed to insert(), which has no instrument
+  // parameter of its own to catch the disagreement.
+  // Root cause: `instrument` was read only for the cancel() lookup; insert() derives
+  // its target book purely from new_resting.order.instrument, so the two values were
+  // never compared anywhere in the function.
+  // Pitfall: when a selector parameter and a payload's own embedded field encode the
+  // same identity, trusting only one of them lets a caller act on a different target
+  // than the one the lookup already confirmed — assert they agree before either is used.
+  if new_resting.order.instrument != instrument
+  {
+    return Err( RestReplaceError::InstrumentMismatch );
+  }
+
   let Some( old ) = book.cancel( instrument, old_id )
   else
   {

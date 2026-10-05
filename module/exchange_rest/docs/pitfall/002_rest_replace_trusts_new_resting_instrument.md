@@ -1,55 +1,61 @@
-# Pitfall: `rest_replace` trusts `new_resting`'s own instrument
+# Pitfall: `rest_replace` trusted `new_resting`'s own instrument (fixed — BUG-001)
 
 ### Scope
 
-- **Purpose**: Name a specific mistake this crate does not yet guard against.
-- **Responsibility**: Documenting that `rest_replace`'s `instrument` parameter is never cross-checked against `new_resting.order.instrument`, honestly, rather than implying a guard that isn't there.
+- **Purpose**: Record a mistake this crate *did* make, found and closed as BUG-001, so the reasoning survives as a lesson rather than vanishing once the diff landed.
+- **Responsibility**: Documenting that `rest_replace`'s `instrument` parameter was never cross-checked against `new_resting.order.instrument` until the fix below — historical record, not a live warning.
 - **In Scope**: `rest_replace`'s own `instrument`/`new_resting` parameter pair.
 
-### Statement
+### Statement (as it was)
 
 A replace is supposed to move one order, atomically, from its old slot to a
-new one on the *same* instrument's book. If a caller passes a `new_resting`
-whose own `order.instrument` disagrees with the `instrument` argument,
-nothing stops it: the old order is cancelled from `instrument`'s book, and
-the new one is inserted onto whatever book `new_resting.order.instrument`
-actually names — silently moving an order onto a different instrument's
+new one on the *same* instrument's book. If a caller passed a `new_resting`
+whose own `order.instrument` disagreed with the `instrument` argument,
+nothing stopped it: the old order was cancelled from `instrument`'s book,
+and the new one was inserted onto whatever book `new_resting.order.instrument`
+actually named — silently moving an order onto a different instrument's
 book entirely, with no error.
 
-### Why this crate does not yet guard against it
+### Why the gap existed, and why the fix lives inside `rest_replace`
 
-[`rest_replace`] uses its `instrument` parameter only for the
+[`rest_replace`] used its `instrument` parameter only for the
 [`Book::cancel`] lookup (`book.cancel( instrument, old_id )`). The subsequent
 [`Book::insert`] of `new_resting` derives its target instrument internally
-from `new_resting.order.instrument` — there is no assertion, `debug_assert`,
-or runtime check that the two agree, unlike the `Missing`/`Refused` paths
+from `new_resting.order.instrument` — there was no assertion, `debug_assert`,
+or runtime check that the two agreed, unlike the `Missing`/`Refused` paths
 `rest_replace` already guards carefully (see
 [`001_replace_leaves_old_rest_in_place.md`](001_replace_leaves_old_rest_in_place.md)).
 
-This is consistent with — and arguably required by — this crate's own
-documented "thin wrapper, no validation" philosophy (see this crate's module
-doc, "Thin, not the proposal's full orchestration"): validation is meant to
-be a facade-level concern, not this crate's own. But no facade validates it
-either, yet: `exchange_core`'s own `exchange_step` never dispatches
-`InboundCmd::Replace` to `rest_replace` at all right now (deferred for an
-unrelated reason — see
-[`../../../exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md`](../../../exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md)),
-which happens to make this gap unreachable through the facade today, but
-does not close it: a direct caller of `rest_replace`, or a future facade
-that wires `Replace` through without adding its own instrument check, would
-still hit it.
+This crate's own documented "thin wrapper, no validation" philosophy (see
+its module doc, "Thin, not the proposal's full orchestration") argues for
+deferring validation to a facade — but that framing is about not
+consolidating `exchange_core`'s *external-state* orchestration here
+(idempotency sets, cap registries, the escrow ledger). An instrument-match
+check needs none of that: both values it compares (`instrument`,
+`new_resting.order.instrument`) are already this function's own parameters.
+Deferring a check on a function's own two arguments to some future caller
+would have left every caller — including `exchange_inbound::inbound_apply`'s
+real, already-tested `InboundCmd::Replace` arm, confirmed during BUG-001's
+filing to forward both values straight through with no check of its own —
+exposed until that caller remembered to add one. Fixed at the leaf instead:
+`rest_replace` now asserts the two agree before touching the book at all,
+returning `RestReplaceError::InstrumentMismatch` on disagreement.
 
-**Not verified, deliberately**: no test in
-[`tests/exchange_rest_test.rs`](../../tests/exchange_rest_test.rs) exercises
-a mismatched-instrument `rest_replace` call, because there is no guard to
-assert against — writing one would either lock in the bug's own silent
-behavior as if it were intended, or assert a failure with no fix attached.
-Named here as an open gap instead, per this family's own "named rather than
-silently absent" convention.
+**Verified**: [`tests/exchange_rest_test.rs`](../../tests/exchange_rest_test.rs)'s
+`rest_replace_refuses_a_new_resting_for_a_different_instrument` and
+`exchange_inbound`'s own
+`replace_refuses_a_new_resting_for_a_different_instrument` both exercise the
+mismatch directly. Full investigation, root cause, and fix diff:
+[`../../../../../task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md`](../../../../../task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md)
+— relocated to the External Task Layout (`substrate/task/exchange_rest/bug/`,
+outside this repo); `completed/` is BUG-001's terminal location, but
+re-resolve via `substrate/task/exchange_rest/bug/readme.md`'s own index if
+this link ever goes stale regardless.
 
 ### Sources
 
 | File | Relationship |
 |------|--------------|
-| `../../src/lib.rs:133-151` | `rest_replace`'s real implementation — the `instrument` parameter's only use is the `cancel` call |
-| `../../../exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md` | The facade-level decision that makes this gap unreachable through `exchange_core` today, without fixing it |
+| `../../src/lib.rs:62-72,133-151` | `rest_replace`'s real implementation, pre- and post-fix — the `InstrumentMismatch` check now sits first, before `cancel` |
+| `../../../../../task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md` | BUG-001 — full Hypothesis/Evidence/Root Cause/Fix Location record (External Task Layout, outside this repo) |
+| `../../../exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md` | The facade-level decision that made this gap unreachable through `exchange_core` specifically — never a reason the gap was safe elsewhere |

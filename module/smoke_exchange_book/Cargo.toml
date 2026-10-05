@@ -1,0 +1,15 @@
+[package]
+name = "smoke_exchange_book"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Wall smoke — every stage in one run, against the P30 golden block"
+publish = false
+
+[dependencies]
+exchange_core = { path = "../exchange_core" }
+exchange_conserve = { path = "../exchange_conserve" }
+exchange_idem = { path = "../exchange_idem" }
+
+[lints]
+workspace = true

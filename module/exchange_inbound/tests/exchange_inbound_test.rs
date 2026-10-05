@@ -166,3 +166,25 @@ fn replace_of_a_missing_order_reports_missing()
   let outcome = inbound_apply( &mut book, SelfMatchPolicy::CancelResting, cmd ).unwrap();
   assert!( matches!( outcome, InboundOutcome::Replaced( Err( RestReplaceError::Missing ) ) ) );
 }
+
+// BUG-001 substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md — bug_reproducer: this crate's own
+// `InboundCmd::Replace` carries `instrument` and `new_resting` as two independently-settable
+// fields and forwards both straight to `exchange_rest::rest_replace` with no check of its own
+// (see that function's own bug_reproducer in `exchange_rest_test.rs`) — a second, real, tested
+// call site sharing the exact same gap, found while filing BUG-001's Search More Instances step.
+#[ test ]
+fn replace_refuses_a_new_resting_for_a_different_instrument()
+{
+  let mut book = Book::new();
+  assert!( book.insert( resting( 1, Side::Sell, "2.00", 4, Tif::Gtc ) ) );
+
+  let mismatched = resting( 1, Side::Sell, "2.10", 6, Tif::Gtc );
+  let mismatched = Resting { order : Order { instrument : InstrumentId( 2 ), ..mismatched.order }, ..mismatched };
+  let cmd = InboundCmd::Replace { instrument : INSTRUMENT, old_id : OrderId( 1 ), new_resting : mismatched };
+
+  let outcome = inbound_apply( &mut book, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+
+  assert!( matches!( outcome, InboundOutcome::Replaced( Err( RestReplaceError::InstrumentMismatch ) ) ) );
+  assert_eq!( book.best( InstrumentId( 2 ), Side::Sell ), None, "the mismatched replacement must not land on instrument 2" );
+  assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 1 ), "order 1 is back on its own instrument, unchanged" );
+}
