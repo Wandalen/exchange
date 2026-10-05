@@ -60,7 +60,7 @@ one blended price. Charging the worst level for all of it, or the best, are both
 plausible-looking implementations, and
 `each_trade_executes_at_its_own_makers_price` is what separates them.
 
-The rule itself lives in [`exchange_types`](../exchange_types/readme.md) as
+The rule itself lives in [`exchange_fill`](../exchange_fill/readme.md) as
 `Trade::executed_price`, taking both prices and returning one, so that changing
 it is an edit in one place with one test on it rather than a search for an
 expression inlined in a loop.
@@ -111,7 +111,7 @@ this crate's own [`docs/pitfall/001_fok_that_fills_part_then_rejects.md`](docs/p
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_stp`, `exchange_tif`, `exchange_types`, `exact_arith` |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_stp`, `exchange_tif`, `exchange_types`, `exact_arith` |
 | [`src/lib.rs`](src/lib.rs) | `cross`, `Crossing`, the crossing predicate, and self-match policy/cancellation types |
 | [`tests/crossing_test.rs`](tests/crossing_test.rs) | Test Matrix T05–T07 — full fill, partial fill, and no cross |
 | [`tests/tif_test.rs`](tests/tif_test.rs) | Test Matrix — IOC's GTC parity, and FOK's probe-then-commit matrix |

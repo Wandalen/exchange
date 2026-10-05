@@ -5,7 +5,7 @@
 - **Purpose**: Index every `pub` item this crate declares against the doc instance that explains it.
 - **Responsibility**: One row per public declaration, pointing at its owning collection — never restating what that collection already says.
 - **In Scope**: This crate's own `pub` surface.
-- **Out of Scope**: Items declared elsewhere and merely used here (`Event`/`EventKind` are re-exported, not declared here — see `exchange_types`'s own `docs/` for their definition).
+- **Out of Scope**: Items declared elsewhere and merely used here (`Event`/`EventKind` are re-exported, not declared here — see `exchange_fill`'s own `docs/` for their definition).
 
 ### Module Index
 

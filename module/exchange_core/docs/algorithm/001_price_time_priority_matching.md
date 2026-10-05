@@ -75,7 +75,7 @@ silently absorbed.
   sweeping several levels would then pay one price for all of them, the two
   choices are not interchangeable at depth. Each trade therefore executes at
   its own maker's price, never at one blended price. The rule lives in
-  `exchange_types` as `Trade::executed_price`, taking both prices and
+  `exchange_fill` as `Trade::executed_price`, taking both prices and
   returning one, so it has a single home rather than being an expression
   inlined in the match loop.
 - **Book representation** is a **sorted `Vec` per side**, best at index 0. The

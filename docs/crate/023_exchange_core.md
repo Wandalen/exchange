@@ -7,7 +7,7 @@
 - **In Scope**: Composition only. Does not import `ring_*` — that edge stays on `exchange_inbound`.
 - **Out of Scope**: Owning any hard problem of its own.
 
-**Design status**: Built as the real `exchange_core` crate — the facade, depending on `exchange_types`, `exchange_book`, `exchange_match`, `exchange_escrow`, `exchange_id`, `exchange_seq`, `exchange_tif`, and `exact_arith` directly (`module/exchange_core/Cargo.toml`; previously recorded here with only the first four plus `exact_arith` — stale, confirmed against the real manifest and `cargo tree --depth 1`).
+**Design status**: Built as the real `exchange_core` crate — the facade, depending on `exchange_types`, `exchange_book`, `exchange_fill`, `exchange_match`, `exchange_order`, `exchange_side`, `exchange_escrow`, `exchange_id`, `exchange_seq`, `exchange_tif`, and `exact_arith` directly (`module/exchange_core/Cargo.toml`; `exchange_fill`/`exchange_order`/`exchange_side` added when `exchange_types`' own re-export aggregator role retired, since the facade's re-exports of `Trade`/`Event`/etc. now source from the real leaf crates directly instead).
 
 ### Statement
 

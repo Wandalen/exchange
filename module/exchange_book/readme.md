@@ -5,9 +5,11 @@ The resting order book — two sides, each in published order, best at the front
 ```rust
 use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
-use exchange_id::InstrumentId;
+use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_order::Order;
+use exchange_seq::Sequence;
+use exchange_side::Side;
 use exchange_tif::Tif;
-use exchange_types::{ AccountId, Order, OrderId, Sequence, Side };
 
 const INSTRUMENT : InstrumentId = InstrumentId( 1 );
 
@@ -113,7 +115,7 @@ believes is gone.
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_types`, `exchange_level`, `exchange_id`, `exact_arith` |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_id`, `exchange_level`, `exchange_side`, `exact_arith` |
 | [`src/lib.rs`](src/lib.rs) | `Book`, `Resting`, and the one ranking function |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/pitfall/` | The 2 "Book" pitfalls that are purely this crate's own storage choice and indexing |
@@ -123,4 +125,4 @@ believes is gone.
 
 ## Related
 
-- [`exchange_types/`](../exchange_types/readme.md) — the orders this book holds
+- [`exchange_order/`](../exchange_order/readme.md) — the orders this book holds

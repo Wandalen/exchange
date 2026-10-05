@@ -89,7 +89,7 @@ Full comparison against `matchcore`, `orderbook-rs`, and `limitbook`:
 | [`exchange_cap/`](module/exchange_cap/readme.md) | The limit on rests and levels per book |
 | [`exchange_spec/`](module/exchange_spec/readme.md) | Tick, lot, the asset pair, and the halt flag on one instrument |
 | [`exchange_stats/`](module/exchange_stats/readme.md) | Running rest/fill/reject/cancel counters |
-| [`exchange_types/`](module/exchange_types/readme.md) | `notional`/`obligation` — the one piece of logic left; re-exports the rest |
+| [`exchange_types/`](module/exchange_types/readme.md) | `Price`, `TypeError`, `notional`/`obligation` — the settlement logic; no longer re-exports anything else |
 | [`exchange_order/`](module/exchange_order/readme.md) | One order record — instrument and time-in-force included, plus the `Obligation` it carries |
 | [`exchange_idem/`](module/exchange_idem/readme.md) | Refuses a duplicate `OrderId` before it reaches the book |
 | [`exchange_fill/`](module/exchange_fill/readme.md) | `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause` — the event-stream vocabulary |

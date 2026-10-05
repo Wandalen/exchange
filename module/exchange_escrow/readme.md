@@ -75,7 +75,7 @@ one side of the partition without the other.
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_types` and `exact_arith` |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_types`, `exact_arith` |
 | [`src/lib.rs`](src/lib.rs) | `Escrow`, `Account`, `Holding`, `Conserved`, and settlement |
 | `docs/definition/` | Module Index — every `pub` item against where it's documented |
 | `docs/item/` | The exposed surface, as built, against the proposal's own `EscrowPort` |

@@ -7,7 +7,7 @@
 - **In Scope**: The idempotency check `exchange_idem` is proposed to own.
 - **Out of Scope**: Any other admission check (capacity, halt, snap, …).
 
-**Design status**: Not implemented as named — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` now only re-exports it) has a completely different variant set: `ZeroQuantity`, `NegativePrice`, `UnknownAccount`, `InsufficientFunds`, `ObligationUnrepresentable`, `ReservationUnrepresentable`. None of these 9 proposed variants exist by this name in the real code.
+**Design status**: Not implemented as named — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` re-exported it for a time, now retired) has a completely different variant set: `ZeroQuantity`, `NegativePrice`, `UnknownAccount`, `InsufficientFunds`, `ObligationUnrepresentable`, `ReservationUnrepresentable`. None of these 9 proposed variants exist by this name in the real code.
 
 ### Statement
 

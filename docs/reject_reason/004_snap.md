@@ -7,7 +7,7 @@
 - **In Scope**: The tick/lot admission check `exchange_spec` is proposed to own, calling into workstream 006's snap functions.
 - **Out of Scope**: Any rounding or snapping performed silently — a mismatch here is a reject, never a quiet correction.
 
-**Design status**: Not implemented as named — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` now only re-exports it) has a completely different variant set: `ZeroQuantity`, `NegativePrice`, `UnknownAccount`, `InsufficientFunds`, `ObligationUnrepresentable`, `ReservationUnrepresentable`. None of these 9 proposed variants exist by this name in the real code. No `InstrumentSpec`, tick, or lot concept exists at all in the real crates.
+**Design status**: Not implemented as named — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` re-exported it for a time, now retired) has a completely different variant set: `ZeroQuantity`, `NegativePrice`, `UnknownAccount`, `InsufficientFunds`, `ObligationUnrepresentable`, `ReservationUnrepresentable`. None of these 9 proposed variants exist by this name in the real code. No `InstrumentSpec`, tick, or lot concept exists at all in the real crates.
 
 ### Statement
 

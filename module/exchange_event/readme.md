@@ -2,7 +2,9 @@
 
 The event stream's push/drain/len/clear surface — for workstream 010 to read
 fills, rejects, and cancel-acks without writing wallets directly. Depends on
-`exchange_types` only.
+`exchange_fill` only (`exchange_types` re-exported `Event`/`EventKind` for a
+time; that re-export is retired as of 2026-10-05, so this crate now depends
+on `exchange_fill` directly instead).
 
 ```rust
 use exchange_event::{ Event, event_drain, event_push };
@@ -15,7 +17,7 @@ assert!( drained.is_empty() && events.is_empty() );
 ## Why this crate exists despite being marked "Folded" centrally
 
 `docs/crate/019_exchange_event.md` records `Event`/`EventKind` as already
-folded into `exchange_types`, with `exchange_core::events()` as the
+folded into `exchange_fill`, with `exchange_core::events()` as the
 accessor — true, and not re-litigated here. But `events()` returns a
 borrowed `&[Event]`, never an owned drain: this crate adds the genuinely
 missing pieces — `event_push`/`event_drain`/`event_len`/`event_clear`
@@ -41,7 +43,7 @@ and
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — depends on `exchange_types` only |
+| [`Cargo.toml`](Cargo.toml) | Manifest — depends on `exchange_fill` only |
 | [`src/lib.rs`](src/lib.rs) | Re-exports `Event`/`EventKind`; adds `event_push`/`event_drain`/`event_len`/`event_clear` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/decisions/` | Why `EventDrain` and `EventError` are not part of this build |

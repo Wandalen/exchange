@@ -27,8 +27,9 @@ let order = Order
 
 The real `Order` lived in `exchange_types` with five fields, missing
 `instrument` and `tif` against the source design. Both are added here; every
-other field is unchanged. `exchange_types` still re-exports `Order` so
-existing callers keep resolving.
+other field is unchanged. `exchange_types` re-exported `Order` for a time so
+existing callers kept resolving — that re-export is retired now (2026-10-05)
+and every call site depends on this crate directly.
 
 ## Closes feature 3
 
@@ -70,5 +71,5 @@ the submission boundary instead.
 - [`exchange_id/`](../exchange_id/readme.md) — supplies `InstrumentId`/`OrderId`/`AccountId`
 - [`exchange_side/`](../exchange_side/readme.md) — supplies `Side`
 - [`exchange_tif/`](../exchange_tif/readme.md) — supplies `Tif`
-- [`exchange_types/`](../exchange_types/readme.md) — re-exports `Order`/`Obligation`, keeps `obligation`/`notional`
+- [`exchange_types/`](../exchange_types/readme.md) — depends on this crate forward now; kept `obligation`/`notional`, retired its re-export of `Order`/`Obligation` in 2026-10-05
 - [`exchange_level/`](../exchange_level/readme.md) — holds `Order` in a FIFO queue at one price

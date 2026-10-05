@@ -53,7 +53,7 @@
 //!
 //! It does not decide who is next — [`exchange_book`] hands out its side
 //! best-first and this crate takes from the front. It does not decide the
-//! executed price — [`exchange_types::Trade::executed_price`] owns that rule.
+//! executed price — [`exchange_fill::Trade::executed_price`] owns that rule.
 //! It does not touch escrow: reservations move in the escrow ledger, driven
 //! by the trades this crate returns. Splitting it this way is what keeps the
 //! matching loop
@@ -154,7 +154,7 @@ impl Crossing
 
 /// One order [`SelfMatchPolicy`] withdrew rather than let trade or rest.
 ///
-/// Always cause self-match — see `exchange_types::CancelCause::SelfMatch`.
+/// Always cause self-match — see `exchange_fill::CancelCause::SelfMatch`.
 /// This crate does not construct that event itself, since it never touches
 /// escrow or the event stream (see the module documentation); it reports
 /// what happened so a caller that does can.

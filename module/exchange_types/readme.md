@@ -1,18 +1,19 @@
 # exchange_types
 
-The exact-settlement logic every other crate shares — `notional`/`obligation`
-— plus re-exports of the family's own vocabulary types, now declared in
-their own dedicated crates. Nothing here acts on `Trade`/`Event` directly
-any more; that moved to `exchange_fill` (see Extraction, below).
+The exact-settlement logic every other crate shares — `Price`, `TypeError`,
+`notional`, `obligation` — and nothing else. Every vocabulary type this
+crate used to re-export now has its own dedicated crate, and every former
+consumer imports from that crate directly (see Extraction, below). Nothing
+here acts on `Trade`/`Event` directly any more; that moved to
+`exchange_fill`.
 
 ```rust
-use exchange_types::{ notional, Side };
+use exchange_types::notional;
 use exact_arith::{ Money, Quantity };
 
 let price = Money::parse( "2.50" ).unwrap();
 let quantity = Quantity::from_int( 4 ).unwrap();
 assert_eq!( notional( price, quantity ).unwrap(), Money::parse( "10" ).unwrap() );
-assert_eq!( Side::Buy.opposite(), Side::Sell );
 ```
 
 ## Two prohibitions, and where they come from
@@ -56,26 +57,30 @@ The multiply happens in `i128` and the result is narrowed back to `Backing`,
 so an intermediate that exceeds the width is `NotionalOutOfRange` rather than a
 wrap.
 
-## Extraction — shrinking, not static
+## Extraction — retired as a re-export aggregator
 
 `Side`, `AccountId`, `OrderId`, `Sequence` moved out in Stage 1; `Order` and
 `Obligation` moved out next, to `exchange_order`, gaining the `instrument`/
 `tif` fields the real struct was missing. `Trade`, `Event`, `EventKind`,
 `RejectReason` and `CancelCause` moved out next again, to `exchange_fill`,
-gaining a `taker_side` field on `Trade`. All eleven are re-exported here
-unchanged. `notional`/`TypeError`/`obligation` stay — this crate now depends
-forward on `exchange_order` (and, for the event-stream vocabulary,
-`exchange_fill`) for the types that logic operates on, rather than the
-reverse. Whether/when this crate retires entirely, once every type it once
-declared has moved out, is an open question tracked in the project's own
-refactor plan, not yet decided.
+gaining a `taker_side` field on `Trade`. All eleven were re-exported here
+unchanged for a time, so every existing `use exchange_types::{ ... }` kept
+resolving through the move — but every call site has since been cut over to
+the leaf crate directly, and the re-export block is gone. This crate's own
+`Amount` alias was dropped the same way: the real `Amount` lives in
+`exchange_order`, so a caller that needs it now reaches it there.
+`notional`/`TypeError`/`obligation` stay — this crate depends forward on
+`exchange_order` and `exchange_side` for the types `obligation`'s own
+signature and body name, as private imports rather than public re-exports,
+rather than the reverse. The crate itself is not retiring — this narrowed
+Price/TypeError/notional/obligation role is its settled, permanent shape.
 
 ## Responsibility Table
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `exact_arith`, `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_seq` |
-| [`src/lib.rs`](src/lib.rs) | The shared vocabulary re-exports, `notional`, and the obligation rule |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exact_arith`, `exchange_order`, `exchange_side`; dev-only `exchange_id`, `exchange_tif` |
+| [`src/lib.rs`](src/lib.rs) | `Price`, `TypeError`, `notional`, and the obligation rule — nothing re-exported |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
@@ -85,4 +90,4 @@ refactor plan, not yet decided.
 ## Related
 
 - [`exact_arith/`](https://github.com/Wandalen/exact/blob/master/module/exact_arith/readme.md) — every price and balance in this crate
-- [`exchange_order/`](../exchange_order/readme.md) — `Order`/`Obligation` now live there; this crate re-exports and depends forward on it
+- [`exchange_order/`](../exchange_order/readme.md) — `Order`/`Obligation`/`Amount` now live there; this crate depends forward on it for the two names `obligation`'s own signature needs

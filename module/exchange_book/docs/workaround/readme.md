@@ -13,17 +13,21 @@ External constraints `exchange_book` absorbs.
 
 **None.**
 
-`exchange_book` depends on `exchange_types`, `exchange_level`,
-`exchange_id`, and `exact_arith`, and zero published crates — the order
+`exchange_book` depends on `exchange_id`, `exchange_level`,
+`exchange_side`, and `exact_arith`, and zero published crates — the order
 book's price levels and matching queue are built directly on the shared
 exchange vocabulary, the per-level storage crate, and the exact-arithmetic
-facade rather than a third-party book implementation. Verify with:
+facade rather than a third-party book implementation. (`exchange_types` was
+a real dependency here too before its 2026-10-05 retirement — `Side` and
+`OrderId` arrived via its re-export; both now come from `exchange_side` and
+`exchange_id` directly, so `exchange_types` dropped out of this list
+entirely.) Verify with:
 
 ```bash
 cd module/exchange_book && cargo tree --depth 1
 ```
 
-**Expected:** `exchange_types`, `exchange_level`, `exchange_id`, and
+**Expected:** `exchange_id`, `exchange_level`, `exchange_side`, and
 `exact_arith`, all resolving to `(path = ...)` sources under `module/`.
 
 ### Workarounds
@@ -36,7 +40,7 @@ above).
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — `exchange_types`, `exchange_level`, `exchange_id`, `exact_arith` — all in-workspace path dependencies |
+| `Cargo.toml` | The dependency surface examined for this finding — `exchange_id`, `exchange_level`, `exchange_side`, `exact_arith` — all in-workspace path dependencies |
 
 ### Regenerate
 

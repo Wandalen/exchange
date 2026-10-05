@@ -60,7 +60,7 @@ everything else. Its own logic is the sequencing:
 
 | Crate | Tier | Owns |
 |-------|------|------|
-| [`exchange_types`](../exchange_types/readme.md) | 0 | Orders, trades, obligations, events, `notional` |
+| [`exchange_types`](../exchange_types/readme.md) | 0 | `Price`, `TypeError`, `notional`/`obligation` |
 | [`exchange_book`](../exchange_book/readme.md) | 1 | The resting book and its published order |
 | [`exchange_match`](../exchange_match/readme.md) | 2 | The crossing loop and the executed-price rule |
 | [`exchange_escrow`](../exchange_escrow/readme.md) | 2 | The reservation ledger and settlement |

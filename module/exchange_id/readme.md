@@ -14,9 +14,11 @@ assert_eq!( OrderId( 7 ), id );
 ## Extracted from `exchange_types`
 
 `AccountId` and `OrderId` lived in `exchange_types` until this crate split
-out; `exchange_types` now depends on this crate and re-exports both, so every
-existing `use exchange_types::{ AccountId, OrderId }` still resolves.
-`InstrumentId` is new here and unused until the multi-instrument book lands.
+out; `exchange_types` depended on this crate and re-exported both for a
+time, so `use exchange_types::{ AccountId, OrderId }` kept resolving — that
+re-export is retired now (2026-10-05), and every call site depends on this
+crate directly. `InstrumentId` is new here and unused until the
+multi-instrument book lands.
 
 ## Closes feature 1
 
@@ -47,5 +49,5 @@ the full reasoning.
 
 ## Related
 
-- [`exchange_types/`](../exchange_types/readme.md) — re-exports `AccountId`/`OrderId` for existing callers
+- [`exchange_types/`](../exchange_types/readme.md) — depended on this crate and re-exported `AccountId`/`OrderId` until retiring that re-export in 2026-10-05
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p01_id`, this crate's phase smoke

@@ -7,7 +7,7 @@
 - **In Scope**: The fallback arm of the reject-reason closed set.
 - **Out of Scope**: Standing in for a cause that should instead get its own named variant once it is understood.
 
-**Design status**: Not implemented as named — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` now only re-exports it) has a completely different variant set and has no catch-all arm; every real variant names a specific cause.
+**Design status**: Not implemented as named — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` re-exported it for a time, now retired) has a completely different variant set and has no catch-all arm; every real variant names a specific cause.
 
 ### Statement
 

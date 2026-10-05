@@ -13,19 +13,24 @@ External constraints `exchange_match` absorbs.
 
 **None.**
 
-`exchange_match` depends on `exchange_types`, `exchange_book`,
-`exchange_stp`, `exchange_tif`, and `exact_arith`, and zero published
-crates — price-time matching, self-trade policy, and time-in-force are
-each built directly on the shared exchange vocabulary and the order book
-it matches against, rather than a third-party matching engine. Verify
-with:
+`exchange_match` depends on `exchange_book`, `exchange_fill`, `exchange_id`,
+`exchange_order`, `exchange_side`, `exchange_stp`, `exchange_tif`,
+`exchange_types`, and `exact_arith`, and zero published crates —
+price-time matching, self-trade policy, and time-in-force are each built
+directly on the shared exchange vocabulary and the order book it matches
+against, rather than a third-party matching engine. (Before the
+2026-10-05 `exchange_types` retirement this was five crates, not nine —
+`exchange_fill`, `exchange_id`, `exchange_order`, and `exchange_side`
+arrived once their types had to be named directly instead of through the
+old re-export.) Verify with:
 
 ```bash
 cd module/exchange_match && cargo tree --depth 1
 ```
 
-**Expected:** `exchange_types`, `exchange_book`, `exchange_stp`,
-`exchange_tif`, and `exact_arith`, all resolving to `(path = ...)`
+**Expected:** `exchange_book`, `exchange_fill`, `exchange_id`,
+`exchange_order`, `exchange_side`, `exchange_stp`, `exchange_tif`,
+`exchange_types`, and `exact_arith`, all resolving to `(path = ...)`
 sources under `module/`.
 
 ### Workarounds
@@ -38,7 +43,7 @@ above).
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — `exchange_types`, `exchange_book`, `exchange_stp`, `exchange_tif`, `exact_arith` — all in-workspace path dependencies |
+| `Cargo.toml` | The dependency surface examined for this finding — `exchange_book`, `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_stp`, `exchange_tif`, `exchange_types`, `exact_arith` — all in-workspace path dependencies |
 
 ### Regenerate
 
@@ -47,5 +52,5 @@ cd "$(git rev-parse --show-toplevel)"/substrate/exchange/module/exchange_match
 printf 'workaround instances:   '; ls docs/workaround/[0-9][0-9][0-9]_*.md 2>/dev/null | wc -l
 printf 'declared dependencies:  '; cargo tree --depth 1 --edges normal 2>/dev/null | tail -n +2 | wc -l
 # workaround instances:   0
-# declared dependencies:  5
+# declared dependencies:  9
 ```

@@ -5,7 +5,7 @@
 - **Purpose**: Record which crates `exchange_core` compiles against.
 - **Responsibility**: `exchange_core` → `exchange_spec`, `exchange_book`, `exchange_rest`, `exchange_match`, `exchange_depth`, `exchange_halt`, `exchange_event`, `exchange_snap`, `exchange_stats`, `exchange_inbound`.
 
-**Design status**: The real `exchange_core` crate depends on `exchange_types`, `exchange_book`, `exchange_match`, `exchange_escrow`, and `exact_arith` directly — a much narrower edge than proposed, since most of the listed dependencies (`spec`, `rest`, `depth`, `halt`, `snap`, `stats`, `inbound`) have no real counterpart to depend on. See `../crate/023_exchange_core.md`.
+**Design status**: The real `exchange_core` crate depends on `exchange_types`, `exchange_book`, `exchange_fill`, `exchange_match`, `exchange_order`, `exchange_side`, `exchange_escrow`, and `exact_arith` directly (the last three added when `exchange_types`' own re-export aggregator role retired) — narrower than the ten-crate edge proposed here, though several of those ten (`spec`, `rest`, `depth`, `halt`, `event`, `snap`, `stats`, `inbound`) do have a real counterpart by now; see `../crate/023_exchange_core.md` for the fuller, more current accounting.
 
 ### Statement
 

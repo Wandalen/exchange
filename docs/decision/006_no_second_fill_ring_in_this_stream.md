@@ -7,7 +7,7 @@
 - **In Scope**: `exchange_event`'s drain stays a plain in-memory drain for now.
 - **Out of Scope**: Building a second ring speculatively inside 002 — named explicitly as both a "not_a_002_crate" item and a pitfall.
 
-**Design status**: Held by omission — no second ring exists anywhere in the real crates, consistent with this decision; `exchange_event` is folded into `exchange_types`/`exchange_core::events()` as a plain drain.
+**Design status**: Held by omission — no second ring exists anywhere in the real crates, consistent with this decision; `exchange_event` wraps `exchange_core::events()` as a plain drain, over `Event`/`EventKind` types that live in `exchange_fill`.
 
 ### Statement
 

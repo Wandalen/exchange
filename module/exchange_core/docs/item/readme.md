@@ -28,15 +28,19 @@ with `exchange_id`'s/`exchange_escrow`'s own `docs/item/readme.md`).
 | `exchange_book` | `Book, Resting` |
 | `exchange_depth` | `Depth, DepthError, LevelView` |
 | `exchange_escrow` | `Account, Conserved, Escrow, EscrowError, Holding` |
+| `exchange_fill` | `CancelCause, Event, EventKind, RejectReason, Trade` |
 | `exchange_halt` | `HaltError` |
-| `exchange_id` | `InstrumentId` |
+| `exchange_id` | `AccountId, InstrumentId, OrderId` |
 | `exchange_inbound` | `BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject, inbound_ring` |
 | `exchange_match` | `Crossing, MatchError, SelfMatchCancellation, SelfMatchPolicy` |
+| `exchange_order` | `Amount, Obligation, Order` |
+| `exchange_seq` | `Sequence` |
+| `exchange_side` | `Side` |
 | `exchange_snap` | `BookSnap, RestRow` |
 | `exchange_spec` | `AssetId, InstrumentSpec, SpecError` |
 | `exchange_stats` | `BookStats` |
 | `exchange_tif` | `Tif` — now caller-selectable (re-export restored once `exchange_step` made TIF a real per-order field instead of a hardcoded `Gtc`) |
-| `exchange_types` | `AccountId, Amount, CancelCause, Event, EventKind, Obligation, Order, OrderId, Price, RejectReason, Sequence, Side, Trade, TypeError, notional, obligation` |
+| `exchange_types` | `Price, TypeError, notional, obligation` — narrowed from sixteen items to these four when its eleven-type re-export retired on 2026-10-05; the other twelve now come from their owning leaf crate's own row above (`AccountId`/`OrderId` moved to `exchange_id`, `Amount`/`Obligation`/`Order` to `exchange_order`, `Sequence` to `exchange_seq`, `Side` to `exchange_side`, `CancelCause`/`Event`/`EventKind`/`RejectReason`/`Trade` to `exchange_fill`) |
 
 `exchange_seq::seq_next` and `exchange_rest::rest_place` are used internally
 (a private `use`, not `pub use`) and are not part of the re-exported surface —

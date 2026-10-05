@@ -13,17 +13,22 @@ External constraints `exchange_escrow` absorbs.
 
 **None.**
 
-`exchange_escrow` depends on `exchange_types` and `exact_arith`, and
+`exchange_escrow` depends on `exchange_fill`, `exchange_id`,
+`exchange_order`, `exchange_side`, `exchange_types`, and `exact_arith`, and
 zero published crates — held-funds accounting is expressed directly over
 the shared exchange vocabulary and exact-arithmetic facade rather than a
-third-party ledger or wallet library. Verify with:
+third-party ledger or wallet library. (Before the 2026-10-05 `exchange_types`
+retirement this was just `exchange_types` and `exact_arith` — the other four
+arrived only once their types had to be named directly instead of through
+the old re-export.) Verify with:
 
 ```bash
 # from this crate's root ( substrate/exchange/exchange_escrow/ )
 cargo tree --depth 1
 ```
 
-**Expected:** `exchange_types` and `exact_arith`, both resolving to
+**Expected:** `exchange_fill`, `exchange_id`, `exchange_order`,
+`exchange_side`, `exchange_types`, and `exact_arith`, all resolving to
 `(path = ...)` sources under `module/`.
 
 ### Workarounds
@@ -36,7 +41,7 @@ above).
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — `exchange_types`, `exact_arith` — both in-workspace path dependencies |
+| `Cargo.toml` | The dependency surface examined for this finding — `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_types`, `exact_arith` — all in-workspace path dependencies |
 
 ### Regenerate
 
@@ -45,5 +50,5 @@ cd "$(git rev-parse --show-toplevel)"/substrate/exchange/module/exchange_escrow
 printf 'workaround instances:   '; ls docs/workaround/[0-9][0-9][0-9]_*.md 2>/dev/null | wc -l
 printf 'declared dependencies:  '; cargo tree --depth 1 --edges normal 2>/dev/null | tail -n +2 | wc -l
 # workaround instances:   0
-# declared dependencies:  2
+# declared dependencies:  6
 ```

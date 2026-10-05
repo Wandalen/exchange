@@ -5,7 +5,7 @@
 - **Purpose**: Allow, cancel-oldest, or cancel-newest — one rule.
 - **Responsibility**: Apply one named policy whenever an account would trade against itself.
 
-**Design status**: Held — `exchange_match` has `SelfMatchPolicy` and `SelfMatchCancellation`, and `exchange_types::CancelCause::SelfMatch` covers the resulting cancellation.
+**Design status**: Held — `exchange_match` has `SelfMatchPolicy` and `SelfMatchCancellation`, and `exchange_fill::CancelCause::SelfMatch` covers the resulting cancellation.
 
 ### Statement
 

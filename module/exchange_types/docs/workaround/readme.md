@@ -13,20 +13,22 @@ External constraints `exchange_types` absorbs.
 
 **None.**
 
-`exchange_types` depends on five in-workspace crates — `exact_arith`,
-`exchange_id`, `exchange_order`, `exchange_side`, `exchange_seq` — and zero
-published crates. The shared order/side/price vocabulary is expressed
-directly in terms of the exact-arithmetic facade's own types, and the root
-id/order/side/sequence types are re-exported from the crates that now own
-them, rather than this crate re-deriving any of them. Verify with:
+`exchange_types` depends on three in-workspace crates — `exact_arith`,
+`exchange_order`, `exchange_side` — plus `exchange_id`/`exchange_tif` as
+dev-only dependencies for its own tests, and zero published crates. The
+price/notional/obligation vocabulary is expressed directly in terms of the
+exact-arithmetic facade's own types and the two leaf crates `obligation`'s
+signature names (`Order`, `Side`), privately imported rather than
+re-exported — this crate no longer re-exports anything it does not itself
+declare. Verify with:
 
 ```bash
-cd module/exchange_types && cargo tree --depth 1
+cd module/exchange_types && cargo tree --depth 1 --edges normal
 ```
 
-**Expected:** `exact_arith`, `exchange_id`, `exchange_order`,
-`exchange_side`, `exchange_seq` — all five resolving to a `(path = ...)`
-source under `module/`, no third-party crate line.
+**Expected:** `exact_arith`, `exchange_order`, `exchange_side` — all three
+resolving to a `(path = ...)` source under `module/`, no third-party crate
+line.
 
 ### Workarounds
 
@@ -38,7 +40,7 @@ above).
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — five in-workspace crates, no third-party |
+| `Cargo.toml` | The dependency surface examined for this finding — three in-workspace crates (normal deps), no third-party |
 
 ### Regenerate
 
@@ -47,5 +49,5 @@ cd "$(git rev-parse --show-toplevel)"/substrate/exchange/module/exchange_types
 printf 'workaround instances:   '; ls docs/workaround/[0-9][0-9][0-9]_*.md 2>/dev/null | wc -l
 printf 'declared dependencies:  '; cargo tree --depth 1 --edges normal 2>/dev/null | tail -n +2 | wc -l
 # workaround instances:   0
-# declared dependencies:  5
+# declared dependencies:  3
 ```

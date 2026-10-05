@@ -7,7 +7,7 @@
 - **In Scope**: Admission refused because the account could not lock the required funds or asset.
 - **Out of Scope**: Any book-side condition (capacity, halt, duplicate, snap).
 
-**Design status**: Partially held — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` now only re-exports it) does carry this concept, just under different, more specific names: `InsufficientFunds`, `ObligationUnrepresentable`, and `ReservationUnrepresentable` each cover a distinct way an escrow reservation can fail, rather than one bare `Escrow` catch-all.
+**Design status**: Partially held — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` re-exported it for a time, now retired) does carry this concept, just under different, more specific names: `InsufficientFunds`, `ObligationUnrepresentable`, and `ReservationUnrepresentable` each cover a distinct way an escrow reservation can fail, rather than one bare `Escrow` catch-all.
 
 ### Statement
 

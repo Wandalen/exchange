@@ -14,7 +14,7 @@ Every crate in the `substrate/exchange` workspace.
 | [`exchange_tif/`](exchange_tif/readme.md) | `Tif { Gtc, Ioc, Fok }` — time-in-force disposition |
 | [`exchange_spec/`](exchange_spec/readme.md) | `InstrumentSpec` — tick, lot, asset pair, halt flag |
 | [`exchange_stats/`](exchange_stats/readme.md) | `BookStats` — running rest/fill/reject/cancel counters for the hot path |
-| [`exchange_types/`](exchange_types/readme.md) | `notional`/`obligation`/`TypeError` — the one piece of logic left; re-exports `Order`/`Trade` and friends from their own crates |
+| [`exchange_types/`](exchange_types/readme.md) | `notional`/`obligation`/`TypeError`/`Price` — the settlement logic; no longer re-exports `Order`/`Trade` and friends, which now live solely in their own crates |
 | [`exchange_order/`](exchange_order/readme.md) | `Order`, `Obligation` — one order record, instrument and tif included |
 | [`exchange_idem/`](exchange_idem/readme.md) | `IdSet` — refuse a duplicate `OrderId` before it reaches the book |
 | [`exchange_fill/`](exchange_fill/readme.md) | `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause` — the event-stream vocabulary |

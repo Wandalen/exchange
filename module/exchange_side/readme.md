@@ -12,8 +12,9 @@ assert_eq!( Side::Buy.opposite(), Side::Sell );
 ## Extracted from `exchange_types`
 
 `Side` lived in `exchange_types` until this crate split out; `exchange_types`
-now depends on this crate and re-exports it, so every existing
-`use exchange_types::Side` still resolves.
+still depends on this crate today, and re-exported `Side` for a time so
+every existing `use exchange_types::Side` kept resolving — that re-export
+is retired now (2026-10-05).
 
 ## Closes feature 2
 
@@ -44,5 +45,5 @@ moving it onto the type.
 
 ## Related
 
-- [`exchange_types/`](../exchange_types/readme.md) — re-exports `Side` for existing callers
+- [`exchange_types/`](../exchange_types/readme.md) — still depends on this crate; re-exported `Side` for existing callers until retiring that re-export in 2026-10-05
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p02_side`, this crate's phase smoke

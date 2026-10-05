@@ -16,8 +16,8 @@ per-declaration split is deferred).
 
 | Item | Kind | Signature |
 |------|------|-----------|
-| `Event` | struct (re-export) | `{ sequence, order, account, kind }` — from `exchange_types` |
-| `EventKind` | enum (re-export) | `{ OrderAccepted{side,price,quantity,reserved}, OrderRejected{reason}, Trade(Trade), OrderCancelled{cause,quantity,released} }` — from `exchange_types` |
+| `Event` | struct (re-export) | `{ sequence, order, account, kind }` — from `exchange_fill` |
+| `EventKind` | enum (re-export) | `{ OrderAccepted{side,price,quantity,reserved}, OrderRejected{reason}, Trade(Trade), OrderCancelled{cause,quantity,released} }` — from `exchange_fill` |
 | `event_push` | fn | `(&mut Vec<Event>, Event)` |
 | `event_drain` | fn | `(&mut Vec<Event>) -> Vec<Event>` |
 | `event_len` | fn | `(&[Event]) -> usize` |
@@ -32,7 +32,7 @@ already records the fold between Prompt 3's proposed
 struct-plus-enum shape — not repeated here. What this crate adds on top of
 that already-documented fold: all four plain-`Vec<Event>` functions the
 proposal names for it — `event_push`/`event_drain`/`event_len`/
-`event_clear` — none of which `exchange_types` or
+`event_clear` — none of which `exchange_fill` or
 `exchange_core::Exchange::events()` (a borrowed `&[Event]` only) provides.
 No `EventDrain` type or `EventError` — both need a bounded-capacity queue
 to have meaning, and no such type exists anywhere in the real build; see

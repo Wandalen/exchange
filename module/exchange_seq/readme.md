@@ -14,8 +14,9 @@ assert!( second > first );
 ## Extracted from `exchange_types`
 
 `Sequence` lived in `exchange_types` until this crate split out;
-`exchange_types` now depends on this crate and re-exports it, so every
-existing `use exchange_types::Sequence` still resolves. [`seq_next`] is new:
+`exchange_types` depended on this crate and re-exported it for a time, so
+`use exchange_types::Sequence` kept resolving — that re-export is retired
+now (2026-10-05). [`seq_next`] is new:
 it gives the increment a name and a home, replacing the raw `u64` counter
 `exchange_core` previously incremented by hand — `Exchange::emit`
 (`module/exchange_core/src/lib.rs`) now calls it instead.
@@ -47,6 +48,6 @@ for why.
 
 ## Related
 
-- [`exchange_types/`](../exchange_types/readme.md) — re-exports `Sequence` for existing callers
+- [`exchange_types/`](../exchange_types/readme.md) — re-exported `Sequence` until retiring that re-export in 2026-10-05
 - [`exchange_core/`](../exchange_core/readme.md) — calls `seq_next` once per emitted event
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p08_seq`, this crate's phase smoke

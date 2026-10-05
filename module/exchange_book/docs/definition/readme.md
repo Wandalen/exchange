@@ -5,7 +5,7 @@
 - **Purpose**: Index every `pub` item this crate declares against the doc instance that explains it.
 - **Responsibility**: One row per public declaration, pointing at its owning collection — never restating what that collection already says.
 - **In Scope**: This crate's own `pub` surface.
-- **Out of Scope**: Items declared elsewhere and merely used here (`InstrumentId` from `exchange_id`; `OrderId`/`Side` from `exchange_types`; `Quantity`/`Price` from `exact_arith`; `Level`/`level_*` from `exchange_level`, which `Resting` type-aliases and `insert`/`cancel` call into).
+- **Out of Scope**: Items declared elsewhere and merely used here (`InstrumentId`/`OrderId` from `exchange_id`; `Side` from `exchange_side`; `Quantity`/`Price` from `exact_arith`; `Level`/`level_*` from `exchange_level`, which `Resting` type-aliases and `insert`/`cancel` call into).
 
 ### Module Index
 

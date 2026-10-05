@@ -14,7 +14,8 @@ assert_eq!( Trade::executed_price( maker, generous_taker ), maker );
 ## Extraction
 
 `Trade`, `Event`, `EventKind`, `RejectReason` and `CancelCause` moved here
-from `exchange_types`, which re-exports all five unchanged. `CancelCause`
+from `exchange_types`, which re-exported all five unchanged for a time —
+that re-export is retired now (2026-10-05). `CancelCause`
 moved alongside `EventKind` even though the plan's own text only names the
 other four — `EventKind::OrderCancelled` holds a `CancelCause`, so leaving it
 behind would have forced a circular dependency back up to `exchange_types`.
@@ -56,6 +57,6 @@ context available at all, only the trades themselves.
 ## Related
 
 - [`exchange_order/`](../exchange_order/readme.md) — supplies `Obligation`, which `EventKind` carries
-- [`exchange_types/`](../exchange_types/readme.md) — re-exports this crate's five items unchanged, keeps `notional`/`obligation`
+- [`exchange_types/`](../exchange_types/readme.md) — kept `notional`/`obligation`; its re-export of this crate's five items is retired as of 2026-10-05
 - [`exchange_conserve/`](../exchange_conserve/readme.md) — consumes `Trade.taker_side` to classify a batch
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p16_fill`, this crate's phase smoke

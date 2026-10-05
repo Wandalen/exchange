@@ -94,8 +94,11 @@ real build's starting point: those 4 crates, plus the `exchange_core` facade and
 `core_exchange.txt` is a later, independent, far more granular pass: 23 crates instead
 of 4, one responsibility per crate rather than four coarse ones. As of 2026-10-03, that
 full granularity has been built — all 23 proposed crates are now real, alongside the
-original `exchange_types` (kept as a re-export aggregator, not retired) and
-`exchange_core`. See [`../module/readme.md`](../module/readme.md) for the authoritative,
+original `exchange_types` and `exchange_core`. `exchange_types` carried the other 23's
+types as a re-export aggregator for a time; as of 2026-10-05 that aggregator role has
+itself been retired — every former consumer now imports each type from its real owning
+crate directly, and `exchange_types` keeps only the `Price`/`TypeError`/`notional`/
+`obligation` logic it always declared itself. See [`../module/readme.md`](../module/readme.md) for the authoritative,
 current crate list. This corpus continues to document the 23-crate proposal as the
 record of what was proposed, the same way the sibling workstream 006 corpus documents
 its own 15-crate proposal in [`../../exact/docs/`](../../exact/docs/readme.md) after that
@@ -104,10 +107,13 @@ one was built in full.
 ## Design status summary
 
 As of 2026-10-03, all 23 proposed crates are built as their own real crates. The
-pre-existing `exchange_types` persists too, now as a thin re-export aggregator for the
-types that moved out of it (`AccountId`/`OrderId` → `exchange_id`, `Side` →
+pre-existing `exchange_types` persisted too, for a time, as a thin re-export aggregator
+for the types that moved out of it (`AccountId`/`OrderId` → `exchange_id`, `Side` →
 `exchange_side`, `Sequence` → `exchange_seq`, and others — see each crate's own
-"Extracted from `exchange_types`" note). Two enum-level naming corrections surfaced
+"Extracted from `exchange_types`" note). As of 2026-10-05, that aggregator role is
+retired: every consumer of those types now imports each one from its real owning crate
+directly, and `exchange_types` is narrowed to the `Price`/`TypeError`/`notional`/
+`obligation` logic it declared itself from the start. Two enum-level naming corrections surfaced
 while building this corpus and remain accurate, recorded in their own files rather than
 here: real `Side` is `Buy`/`Sell` not `Bid`/`Ask`
 ([`side/001_bid.md`](side/001_bid.md)), and real `SelfMatchPolicy` is

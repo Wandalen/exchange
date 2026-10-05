@@ -12,13 +12,15 @@ External constraints `exchange_event` absorbs.
 ### Overview
 
 **None.** `exchange_event` depends on one sibling workspace crate
-(`exchange_types`) only. Verify with:
+(`exchange_fill`) only. (That dependency was `exchange_types` before its
+2026-10-05 retirement — `Event`/`EventKind` arrived via its re-export; both
+now come from `exchange_fill` directly.) Verify with:
 
 ```bash
 cd module/exchange_event && cargo tree --depth 1
 ```
 
-**Expected:** `exchange_types`, in-workspace, no external crate.
+**Expected:** `exchange_fill`, in-workspace, no external crate.
 
 ### Sources
 

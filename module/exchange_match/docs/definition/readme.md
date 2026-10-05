@@ -5,7 +5,7 @@
 - **Purpose**: Index every `pub` item this crate declares against the doc instance that explains it.
 - **Responsibility**: One row per public declaration, pointing at its owning collection — never restating what that collection already says.
 - **In Scope**: This crate's own `pub` surface, including `SelfMatchPolicy`, re-exported here from `exchange_stp` rather than declared.
-- **Out of Scope**: Items declared elsewhere and merely used here (`Book` from `exchange_book`; `tif_requires_full` from `exchange_tif`; `AccountId`/`Order`/`OrderId`/`Price`/`Side`/`Trade`/`notional` from `exchange_types`; `Quantity`/`KindError` from `exact_arith`).
+- **Out of Scope**: Items declared elsewhere and merely used here (`Book` from `exchange_book`; `tif_requires_full` from `exchange_tif`; `AccountId`/`OrderId` from `exchange_id`; `Order` from `exchange_order`; `Side` from `exchange_side`; `Trade` from `exchange_fill`; `Price`/`notional` from `exchange_types`; `Quantity`/`KindError` from `exact_arith`).
 
 ### Module Index
 

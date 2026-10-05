@@ -7,7 +7,7 @@
 - **In Scope**: The drain itself. Not a ring — a second ring for fills is later, not now.
 - **Out of Scope**: Being a ring.
 
-**Design status**: Built, in its own `exchange_event` crate — adds the owned `event_push`/`event_drain`/`event_len`/`event_clear` drain surface over the `Event`/`EventKind` types that stay in `exchange_types`; no `EventDrain` type or `EventError`. Verified built-vs-proposed comparison: [`../../module/exchange_event/docs/item/readme.md`](../../module/exchange_event/docs/item/readme.md).
+**Design status**: Built, in its own `exchange_event` crate — adds the owned `event_push`/`event_drain`/`event_len`/`event_clear` drain surface over the `Event`/`EventKind` types, which live in `exchange_fill` and are re-exported from here; no `EventDrain` type or `EventError`. Verified built-vs-proposed comparison: [`../../module/exchange_event/docs/item/readme.md`](../../module/exchange_event/docs/item/readme.md).
 
 ### Statement
 

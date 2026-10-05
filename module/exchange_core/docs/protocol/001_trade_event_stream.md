@@ -202,7 +202,7 @@ deciding either decides both.
 | File | Relationship |
 |------|--------------|
 | `src/lib.rs` | `emit` — the sole event writer; `postings` derives the audit log from the stream |
-| `../../../exchange_types/src/lib.rs` | `Event`/`EventKind` — the message shapes this protocol fixes |
+| `../../../exchange_fill/src/lib.rs` | `Event`/`EventKind` — the message shapes this protocol fixes |
 
 ### Tests
 
