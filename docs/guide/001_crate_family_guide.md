@@ -92,7 +92,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   use exchange_stp::{ SelfMatchPolicy, stp_name };
   assert_eq!( stp_name( SelfMatchPolicy::CancelIncoming ), "cancel_incoming" );
   ```
-- **`exchange_tif`** — `Tif { Gtc, Ioc, Fok }`, `tif_rests`, `tif_requires_full`. Read by `exchange_match::cross` in exactly one place each; see that crate's own module doc.
+- **`exchange_tif`** — `Tif { Gtc, Ioc, Fok, PostOnly }`, `tif_rests`, `tif_requires_full`, `tif_takes`. `exchange_match::cross` gates FOK and refuses a taking post-only; `exchange_core` drops a non-resting remainder; see `exchange_match`'s own module doc.
   ```rust
   use exchange_tif::{ Tif, tif_rests };
   assert!( !tif_rests( Tif::Ioc ) );

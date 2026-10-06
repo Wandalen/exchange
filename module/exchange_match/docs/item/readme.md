@@ -20,9 +20,10 @@ per-declaration split is deferred).
 | `Crossing::is_complete` | fn | `(&self) -> bool` |
 | `Crossing::filled` | fn | `(&self) -> Result<Quantity, KindError>` |
 | `SelfMatchCancellation` | struct | `{ order: OrderId, account: AccountId, quantity: Quantity }` (`Copy`) |
-| `MatchError` | enum | `{ Quantity(KindError), BookDesynchronized, Conservation(ConserveError) }` — plus `Display`, `core::error::Error`, `From<KindError>`, `From<ConserveError>`; the third variant added when `exchange_conserve::conserve_assert` was wired into `cross_inner`, as defense-in-depth |
+| `MatchError` | enum | `{ Quantity(KindError), BookDesynchronized, Conservation(ConserveError), PostOnlyWouldTake }` — plus `Display`, `core::error::Error`, `From<KindError>`, `From<ConserveError>`; the third variant added when `exchange_conserve::conserve_assert` was wired into `cross_inner`, as defense-in-depth; the fourth with `Tif::PostOnly` |
 | `SelfMatchPolicy` | enum | `pub use exchange_stp::SelfMatchPolicy;` — `{ CancelResting, CancelIncoming, CancelBoth }`, re-exported unchanged |
 | `cross` | fn | `(book: &mut Book, incoming: &Order, policy: SelfMatchPolicy) -> Result<Crossing, MatchError>` |
+| `would_take` | fn | `(book: &Book, incoming: &Order) -> bool` |
 
 ### Differs from the proposal
 
@@ -59,6 +60,10 @@ real build:
   incoming order's own remainder for any TIF, so "drop any remainder" was
   already the behavior; only whether a *caller* later rests that remainder
   differs, which is `exchange_rest`'s/`exchange_core`'s decision.
+- **Post-only is refused in `cross`.** A `Tif::PostOnly` order for which
+  `would_take` holds returns `MatchError::PostOnlyWouldTake` with `book`
+  untouched — the one reachable `MatchError`. `exchange_core` checks
+  `would_take` first, so it reports a rejection instead.
 - `MatchError { Quantity(KindError), BookDesynchronized }` — 2 variants,
   neither matching the proposal's `Halted`/`Escrow`/`Conserve`/`Empty` by
   name. Each variant's own doc comment states why it is practically

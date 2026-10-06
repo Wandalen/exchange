@@ -11,7 +11,7 @@ Every crate in the `substrate/exchange` workspace.
 | [`exchange_seq/`](exchange_seq/readme.md) | `Sequence` and `seq_next` — time priority without a clock |
 | [`exchange_cap/`](exchange_cap/readme.md) | `BookCaps` — a configurable limit on book growth |
 | [`exchange_stp/`](exchange_stp/readme.md) | `SelfMatchPolicy` — how a self-match resolves |
-| [`exchange_tif/`](exchange_tif/readme.md) | `Tif { Gtc, Ioc, Fok }` — time-in-force disposition |
+| [`exchange_tif/`](exchange_tif/readme.md) | `Tif { Gtc, Ioc, Fok, PostOnly }` — time-in-force disposition |
 | [`exchange_spec/`](exchange_spec/readme.md) | `InstrumentSpec` — tick, lot, asset pair, halt flag |
 | [`exchange_stats/`](exchange_stats/readme.md) | `BookStats` — running rest/fill/reject/cancel counters for the hot path |
 | [`exchange_types/`](exchange_types/readme.md) | `notional`/`obligation`/`TypeError`/`Price` — the settlement logic; no longer re-exports `Order`/`Trade` and friends, which now live solely in their own crates |

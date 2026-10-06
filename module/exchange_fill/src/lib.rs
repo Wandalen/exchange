@@ -153,6 +153,9 @@ pub enum RejectReason
   /// configured `max_levels`. Only reachable for an instrument with caps
   /// registered — see `exchange_cap`.
   LevelsFull,
+  /// A post-only order would have taken liquidity on arrival — see
+  /// `exchange_tif::Tif::PostOnly`.
+  PostOnlyWouldTake,
 }
 
 /// Why a remainder was withdrawn.

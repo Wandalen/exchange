@@ -107,7 +107,7 @@ pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
 pub use exchange_stats::BookStats;
 use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add };
 pub use exchange_tif::Tif;
-use exchange_tif::tif_rests;
+use exchange_tif::{ tif_rests, tif_takes };
 pub use exchange_types::{ Price, TypeError, notional, obligation };
 
 /// What came of a submission.
@@ -574,6 +574,12 @@ impl Exchange
     if self.specs.get( &order.instrument ).is_some_and( exchange_halt::halt_is )
     {
       return Err( self.reject_counted( &order, RejectReason::Halted ) );
+    }
+    // `cross` refuses a taking post-only order too, but without an event —
+    // checked here so the refusal is on record.
+    if !tif_takes( order.tif ) && exchange_match::would_take( &self.book, &order )
+    {
+      return Err( self.reject_counted( &order, RejectReason::PostOnlyWouldTake ) );
     }
 
     // 2. Dry-run the whole operation — reserve, cross, settle every trade,

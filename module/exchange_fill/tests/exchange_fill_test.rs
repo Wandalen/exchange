@@ -93,6 +93,7 @@ fn reject_reason_is_still_exhaustively_matchable()
     RejectReason::Halted => "halted",
     RejectReason::RestsFull => "rests_full",
     RejectReason::LevelsFull => "levels_full",
+    RejectReason::PostOnlyWouldTake => "post_only_would_take",
   };
   assert_eq!( name, "zero_quantity" );
 }

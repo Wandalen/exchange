@@ -14,6 +14,6 @@
 | `Tif` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `tif_rests` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `tif_requires_full` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `tif_takes` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
-No decisions collection — this crate matches the proposal exactly, see
-[`../item/readme.md`](../item/readme.md).
+Why post-only is a `Tif` value: [`../decisions/readme.md`](../decisions/readme.md).

@@ -7,12 +7,13 @@ fill. This plan checks whether that pin is load-bearing rather than redundant.
 
 ```bash
 # In module/exchange_tif/src/lib.rs, in tif_rests,
-# replace  matches!( tif, Tif::Gtc )  with  true  (and the parameter with  _tif )
+# replace  matches!( tif, Tif::Gtc | Tif::PostOnly )  with  true  (and the parameter with  _tif )
 cargo test -p exchange_tif --all-features 2>&1 | grep -E 'FAILED|test result'
 ```
 
-**Expected:** `only_gtc_rests` and `p03_tif_disposition` both fail — IOC now
-reports as resting, which neither test accepts.
+**Expected:** `only_gtc_and_post_only_rest` and `p03_tif_disposition` both
+fail — IOC now reports as resting, which neither test accepts. (Before
+post-only, the first test was `only_gtc_rests`.)
 
 **Observed 2026-10-02:** exactly that —
 

@@ -18,7 +18,7 @@ per-declaration split is deferred).
 |------|------|-----------|
 | `Trade` | struct | `{ taker: OrderId, taker_account: AccountId, taker_side: Side, maker: OrderId, maker_account: AccountId, price: Price, quantity: Quantity }` |
 | `Trade::executed_price` | fn (assoc.) | `(maker: Price, _taker: Price) -> Price` |
-| `RejectReason` | enum | `{ ZeroQuantity, NegativePrice, UnknownAccount, InsufficientFunds, ObligationUnrepresentable, ReservationUnrepresentable, Halted, RestsFull, LevelsFull }` — the last two added for `exchange_cap`'s `exchange_core` wiring |
+| `RejectReason` | enum | `{ ZeroQuantity, NegativePrice, UnknownAccount, InsufficientFunds, ObligationUnrepresentable, ReservationUnrepresentable, Halted, RestsFull, LevelsFull, PostOnlyWouldTake }` — `RestsFull`/`LevelsFull` added for `exchange_cap`'s `exchange_core` wiring, `PostOnlyWouldTake` for `Tif::PostOnly` |
 | `CancelCause` | enum | `{ Request, SelfMatch }` |
 | `Event` | struct | `{ sequence: Sequence, order: OrderId, account: AccountId, kind: EventKind }` |
 | `EventKind` | enum | `{ OrderAccepted{side,price,quantity,reserved}, OrderRejected{reason}, Trade(Trade), OrderCancelled{cause,quantity,released} }` |

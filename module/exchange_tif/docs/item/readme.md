@@ -16,16 +16,19 @@ per-declaration split is deferred).
 
 | Item | Kind | Signature |
 |------|------|-----------|
-| `Tif` | enum | `{ Gtc, Ioc, Fok }` |
+| `Tif` | enum | `{ Gtc, Ioc, Fok, PostOnly }` |
 | `tif_rests` | fn | `(Tif) -> bool` |
 | `tif_requires_full` | fn | `(Tif) -> bool` |
+| `tif_takes` | fn | `(Tif) -> bool` |
 
-### Matches the proposal exactly
+### Matches the proposal, plus post-only
 
 The source design's exposed-item list
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:546-548`,
 catalogued at
 [`../../../../docs/exposed_item/003_exchange_tif_items.md`](../../../../docs/exposed_item/003_exchange_tif_items.md))
 names `Tif { Gtc, Ioc, Fok }` plus `tif_rests`/`tif_requires_full` — all
-three are built as named. Which callers consult which function:
+three are built as named. `Tif::PostOnly` and `tif_takes` are additions — see
+[`../decisions/001_post_only_is_a_tif.md`](../decisions/001_post_only_is_a_tif.md).
+Which callers consult which function:
 [`../../readme.md`](../../readme.md), "Wiring".

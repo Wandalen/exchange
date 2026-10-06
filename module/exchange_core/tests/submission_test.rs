@@ -1058,6 +1058,36 @@ fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
   assert_eq!( exchange.stats_get().cancels, 1 );
 }
 
+/// A post-only order that would take is rejected on record and reserves
+/// nothing; one that would not take rests.
+#[ test ]
+fn a_post_only_order_rests_or_is_rejected_but_never_takes()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
+  let reservations = exchange.escrow().reservation_count();
+
+  let post_only = | price | Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy, price : money( price ), quantity : qty( 4 ), tif : Tif::PostOnly };
+
+  let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, post_only( "2.50" ) );
+  assert_eq!( taking, Err( ExchangeError::Rejected( RejectReason::PostOnlyWouldTake ) ) );
+  assert_eq!( exchange.escrow().reservation_count(), reservations, "a refused order reserves nothing" );
+  assert!( matches!
+  (
+    exchange.events().last().unwrap().kind,
+    EventKind::OrderRejected { reason : RejectReason::PostOnlyWouldTake },
+  ) );
+
+  let resting = submit_tif( &mut exchange, &mut producer, &mut consumer, post_only( "2.45" ) ).unwrap();
+  assert!( resting.trades.is_empty() );
+  assert_eq!( resting.resting, qty( 4 ) );
+  assert_eq!( exchange.book().len(), 2 );
+}
+
 /// An IOC taker that only partially fills must not rest its remainder —
 /// `exchange_match::cross` never inserts a remainder for any TIF by its own
 /// design (see that crate's module doc); whether a caller rests one is the

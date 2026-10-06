@@ -6,6 +6,7 @@ use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_idem::{ IdemError, IdSet };
 use exchange_inbound::{ inbound_apply, inbound_drain, inbound_flush, inbound_overflow_reject, inbound_ring, InboundApplyError, InboundCmd, InboundOutcome };
+use exchange_match::MatchError;
 use exchange_order::Order;
 use exchange_rest::RestReplaceError;
 use exchange_seq::Sequence;
@@ -169,6 +170,20 @@ fn an_ioc_place_never_rests_its_remainder()
   assert_eq!( crossing.trades.len(), 0 );
   assert!( !crossing.is_complete(), "nothing to cross against, so the whole quantity is unfilled" );
   assert!( book.is_empty(), "IOC must not rest the unfilled remainder" );
+}
+
+#[ test ]
+fn a_post_only_place_that_would_take_is_refused_and_never_rests()
+{
+  let mut book = Book::new();
+  let mut seen = IdSet::new();
+  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ) ).unwrap();
+
+  let cmd = InboundCmd::Place( resting( 2, Side::Buy, "1.00", 5, Tif::PostOnly ) );
+  let error = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap_err();
+
+  assert_eq!( error, InboundApplyError::Match( MatchError::PostOnlyWouldTake ) );
+  assert_eq!( book.len(), 1, "only the original ask rests" );
 }
 
 #[ test ]

@@ -170,9 +170,9 @@ pub enum InboundOutcome
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum InboundApplyError
 {
-  /// [`exchange_match::cross`] itself refused — see that function's own
-  /// documented guarantee for why this is unreachable through any path this
-  /// crate exercises.
+  /// [`exchange_match::cross`] itself refused. Reachable only as
+  /// [`MatchError::PostOnlyWouldTake`]; see that function's own doc for why
+  /// every other variant is not.
   Match( MatchError ),
   /// [`InboundCmd::Place`] named an id that is already claimed by an earlier,
   /// not-yet-cancelled `Place` — a retried submission, not a new order. See
@@ -299,8 +299,8 @@ pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< Inbou
 /// # Errors
 ///
 /// [`InboundApplyError::Match`] exactly when `exchange_match::cross` itself
-/// would return one — unreachable through any path this crate exercises,
-/// same as that function's own documented guarantee.
+/// returns one — in practice a post-only order that would take, with `book`
+/// untouched.
 /// [`InboundApplyError::Idem`] if [`InboundCmd::Place`] names an id `seen`
 /// already claims.
 pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
