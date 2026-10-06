@@ -1,28 +1,18 @@
 //! Plain id types for instruments, orders and accounts.
 //!
 //! A root of the dependency tree: no dependency on any other `exchange_*`
-//! crate, and none of the three types here knows anything about a book,
-//! a price, or a side. Without a dedicated id type the book would carry raw
-//! `u64`s, and a raw number can never be lifted into a snapshot or a
-//! cross-crate contract without first deciding, somewhere ad hoc, what it
-//! identifies.
+//! crate, and no knowledge of books, prices or sides. A dedicated type per
+//! identity keeps a raw `u64` from crossing a crate boundary without saying
+//! what it identifies.
 //!
-//! `AccountId` and `OrderId` moved here verbatim from `exchange_types`, which
-//! still re-exports both so existing callers are unaffected; `InstrumentId`
-//! is new — `exchange_book::Book` keys its own storage by it directly, one
-//! per instrument.
+//! # Not built: `IdError::Zero`
 //!
-//! # Not built: a zero check
-//!
-//! The source design names an `IdError::Zero`, rejecting a raw id of zero.
-//! Every field here stays `pub`, so a fallible constructor alongside direct
-//! tuple construction (`OrderId( 0 )`) would be a check with a hole already
-//! built into it — enforced on one path, bypassed on the other. No real
-//! caller has ever needed id zero to be invalid, so the check is left out
-//! rather than shipped half-enforced; `*_from_raw` below is infallible.
+//! The source design rejects a raw id of zero. Every field here is `pub`, so
+//! a fallible `*_from_raw` would guard one path while `OrderId( 0 )` bypasses
+//! it — the conversions stay infallible instead. See
+//! `docs/decisions/001_no_id_error.md`.
 
-/// The identity of an instrument. `exchange_book::Book` keys its own storage
-/// by it, one per instrument.
+/// The identity of an instrument. `exchange_book::Book` keys its storage by it.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash ) ]
 pub struct InstrumentId( pub u64 );
 
@@ -30,11 +20,8 @@ pub struct InstrumentId( pub u64 );
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash ) ]
 pub struct OrderId( pub u64 );
 
-/// The identity of a participant.
-///
-/// A plain number this crate owns, and deliberately not a handle borrowed
-/// from anywhere else — see `exchange_types`' module documentation on the
-/// family's ECS prohibition.
+/// The identity of a participant — a plain number, never a handle borrowed
+/// from an ECS (see `exchange_types`' module documentation).
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash ) ]
 pub struct AccountId( pub u64 );
 

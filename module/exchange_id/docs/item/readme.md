@@ -28,18 +28,10 @@ per-declaration split is deferred).
 
 ### Matches the proposal, except `IdError`
 
-The source design's own exposed-item list
+The source design's exposed-item list
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:535-540`,
-also catalogued centrally at
+catalogued at
 [`../../../../docs/exposed_item/001_exchange_id_items.md`](../../../../docs/exposed_item/001_exchange_id_items.md))
-names `InstrumentId(u64)`/`OrderId(u64)`/`AccountId(u64)` plus both
-`_from_raw`/`_raw` conversion pairs for each — every one of those nine items
-is built here exactly as named (the central catalog's own note that these
-were "folded into `exchange_types`" with public-field tuple structs instead
-of opaque newtypes predates this crate's real Stage 1 build and is now
-stale — see the thinned pointer at
-[`../../../../docs/exposed_item/001_exchange_id_items.md`](../../../../docs/exposed_item/001_exchange_id_items.md)).
-
-The one real divergence is `IdError { Zero }`, which does not exist here —
-see
+names the three id types and a `_from_raw`/`_raw` pair for each — all nine
+are built as named. `IdError { Zero }` is not — see
 [`../decisions/001_no_id_error.md`](../decisions/001_no_id_error.md).

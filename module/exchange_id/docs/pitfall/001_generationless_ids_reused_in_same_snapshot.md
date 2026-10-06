@@ -13,22 +13,15 @@ reference to the order it used to name — a snapshot, a log entry, or a UI
 element holding the old id can suddenly start pointing at an unrelated new
 order, which looks like data corruption rather than an id-reuse bug.
 
-### Design status — not structurally enforced
+### Design status — guarded by the facade, not by the type
 
-`OrderId( pub u64 )` (`src/lib.rs`) is a bare newtype — its own doc comment
-states the intended invariant ("fixed at submission and never reassigned")
-but nothing in the type itself stops a caller from constructing the same
-raw value twice. This differs from
-[`../decisions/001_no_id_error.md`](../decisions/001_no_id_error.md)'s
-`IdError::Zero` case: that pitfall is avoided by a deliberate choice not to
-add a check; this one isn't yet avoided at all, because no id allocator
-exists anywhere in the real build for it to guard — every caller today
-constructs `OrderId` literals directly (`OrderId( 1 )`, test fixtures,
-etc.), so reissue hasn't been possible to trigger yet, not because it's
-prevented. Whichever crate eventually owns id allocation (none does today)
-is where a generation field or a seen-ids set would need to live; recorded
-here, against `exchange_id`'s own type, because that's where the field
-itself would be added if this is ever closed.
+`OrderId( pub u64 )` (`src/lib.rs`) carries no generation, so the type alone
+cannot detect reissue. Through `exchange_core` it cannot happen: `step_place`
+ignores the submitted id and mints a fresh one from a counter that only goes
+up (`claim_order`). A caller driving `exchange_inbound::inbound_apply`
+directly picks its own ids, and `exchange_idem::idem_remove` deliberately
+frees a cancelled id for resubmission — there, reuse stays possible. A
+generation field, if ever needed, would be added to this crate's type.
 
 ### Sources
 

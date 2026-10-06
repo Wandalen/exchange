@@ -24,7 +24,7 @@ fn direct_construction_still_round_trips()
   assert_eq!( InstrumentId( 7 ).0, 7 );
 }
 
-/// Distinct raw values never collide across the three id types or each other.
+/// Distinct raw values give distinct, ordered ids.
 #[ test ]
 fn ids_are_ordered_and_distinct()
 {
