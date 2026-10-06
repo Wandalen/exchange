@@ -58,6 +58,13 @@ everything else. Its own logic is the sequencing:
 4. **settle** — each trade, in order, releasing price improvement to the buyer;
 5. **dispose** — the remainder rests; every step emits its event.
 
+Every escrow move goes through the `EscrowPort` trait — `reserve`, `settle`,
+`release` — with `exchange_escrow::Escrow` as the default implementation
+(`Exchange::new()`); `Exchange::with_escrow` accepts any other.
+[`tests/escrow_port_test.rs`](tests/escrow_port_test.rs) uses it to grade the
+five steps against a scripted escrow. See
+[ADR-002](docs/decisions/002_escrow_reached_through_escrow_port.md).
+
 | Crate | Tier | Owns |
 |-------|------|------|
 | [`exchange_types`](../exchange_types/readme.md) | 0 | `Price`, `TypeError`, `notional`/`obligation` |
@@ -134,9 +141,10 @@ reversible behind the same interfaces.
 | File | Responsibility |
 |------|-----------------|
 | [`Cargo.toml`](Cargo.toml) | Manifest — every crate this facade depends on and re-exports |
-| [`src/lib.rs`](src/lib.rs) | `Exchange`, the ring-fed `exchange_step` path, and the re-export block |
+| [`src/lib.rs`](src/lib.rs) | `Exchange`, the `EscrowPort` trait, the ring-fed `exchange_step` path, and the re-export block |
 | [`docs/`](docs/readme.md) | Scope, related crates, and open trade-offs |
 | [`tests/submission_test.rs`](tests/submission_test.rs) | Test Matrix T11 — the path end to end, replay, and the postings audit |
+| [`tests/escrow_port_test.rs`](tests/escrow_port_test.rs) | The five steps' escrow ordering and all-or-nothing commit, against a scripted `EscrowPort` |
 | [`tests/contract_test.rs`](tests/contract_test.rs) | Test Matrix T12 — no ECS type and no float, over the whole family's source |
 | [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan — book-insert guard, walk-completeness guard, order-id/reservation guard |
 | [`task/`](task/) | Crate-scoped work items |

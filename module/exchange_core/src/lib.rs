@@ -31,6 +31,14 @@
 //! output and the audit record both, so a mutation with no event is a fact the
 //! record cannot reproduce.
 //!
+//! # Escrow is a port
+//!
+//! Steps 2, 4 and every release reach escrow only through [`EscrowPort`] —
+//! `reserve`, `settle`, `release` — with [`Escrow`] as the default
+//! implementation. That is what lets `tests/escrow_port_test.rs` drive the
+//! five steps against a scripted escrow instead of engineering real balance
+//! edge cases. The port's own doc names the three rules the dry run relies on.
+//!
 //! # `exchange_step` replaces `submit`
 //!
 //! The old `Exchange::submit( account, side, price, quantity )` is gone.
