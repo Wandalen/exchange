@@ -23,17 +23,12 @@ per-declaration split is deferred).
 
 ### Matches the proposal exactly
 
-The source design's own exposed-item list
+The source design's exposed-item list
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:587-590`,
-also catalogued centrally at
+catalogued at
 [`../../../../docs/exposed_item/010_exchange_cap_items.md`](../../../../docs/exposed_item/010_exchange_cap_items.md))
 names `BookCaps { max_rests, max_levels }`, `cap_check_rest`,
 `cap_check_level`, and `CapError { RestsFull, LevelsFull }` — all four are
-built here exactly as named, field-for-field and variant-for-variant. The
-central catalog's own note that "no real crate exists for this" predates
-this crate's real build and is now stale — see the thinned pointer at
-[`../../../../docs/crate/010_exchange_cap.md`](../../../../docs/crate/010_exchange_cap.md).
-
-The one thing not yet done is wiring: nothing in `exchange_book` calls either
-check function yet (see this crate's own `readme.md`, "Genuinely new") — that
-is a caller-side gap, not a divergence in this crate's own exposed surface.
+built as named, field-for-field and variant-for-variant. The caller is
+`exchange_core` — see [`../../readme.md`](../../readme.md), "Wired into
+`exchange_core`".

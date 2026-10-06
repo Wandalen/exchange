@@ -6,7 +6,7 @@ whether that pin is load-bearing rather than redundant.
 ## M1 — the rest-cap refusal is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_cap/src/lib.rs, in cap_check_rest,
+# In module/exchange_cap/src/lib.rs, in cap_check_rest,
 # replace the body with  Ok( () )  (and both parameters with  _caps / _current_rests )
 cargo test -p exchange_cap --all-features 2>&1 | grep -E 'FAILED|test result'
 ```

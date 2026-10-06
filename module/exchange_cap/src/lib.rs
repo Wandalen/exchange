@@ -1,13 +1,9 @@
 //! A limit on how large a book may grow, with a named refusal past it.
 //!
-//! A root of the dependency tree: no dependency on any other `exchange_*`
-//! crate, and this crate does not itself match or walk the book — it is the
-//! one check `exchange_rest` consults before accepting a new resting order
-//! or opening a new price level. Without a cap, a book either grows without
-//! bound or silently drops an order nothing else reports as missing.
-//!
-//! Genuinely new: no capacity limit exists anywhere in the real crates today.
-//! This closes hard problem 17 (capacity) and feature 20 (`BookCaps`, `Full`).
+//! A root of the dependency tree. This crate only checks: `exchange_core`
+//! calls [`cap_check_rest`]/[`cap_check_level`] before an order rests and
+//! reports a refusal as `RejectReason::RestsFull`/`LevelsFull`. Without a cap,
+//! a book either grows without bound or silently drops an order.
 
 /// The two limits a book may be configured with.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
