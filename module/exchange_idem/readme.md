@@ -34,6 +34,11 @@ computed and then only checked by a `debug_assert!`, silently compiled out
 in release builds (`exchange_inbound/BUG-003`). `idem_insert`/`idem_remove`
 close that gap exactly where it lives.
 
+## Generic over the key
+
+`IdSet< K = OrderId >`: any hashable key works, `OrderId` by default. A caller
+that assigns `OrderId` itself keys it by `( AccountId, ClientOrderId )`.
+
 ## `idem_remove` exists so a cancelled id can be resubmitted
 
 Without it, a legitimate cancel-then-resubmit under the same id would be
