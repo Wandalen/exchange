@@ -8,7 +8,7 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, CancelCause, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
+  AccountId, AssetId, CancelCause, ClientOrderId, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
   InstrumentId, Money, Obligation, Order, OrderId, Producer, Quantity, Receipt, RejectReason, Resting,
   SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
 };
@@ -57,7 +57,7 @@ fn submit
   quantity : Quantity,
 ) -> Result< Receipt, ExchangeError >
 {
-  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc };
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc, client : None };
   let resting = Resting { order, remaining : quantity, arrival : Sequence( 0 ) };
   let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
   assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
@@ -1049,13 +1049,53 @@ fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
 
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
 
-  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : money( "2.50" ), quantity : qty( 4 ), tif : Tif::Gtc };
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : money( "2.50" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
   inbound_flush( &mut producer, [ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
   let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
   assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.is_empty() ) );
 
   assert_eq!( exchange.book().len(), 1, "the resting sell was withdrawn and the buy rested instead" );
   assert_eq!( exchange.stats_get().cancels, 1 );
+}
+
+/// A retry under the same `ClientOrderId` is refused even after the original
+/// filled; another account may use the same value; a rejected attempt does
+/// not claim it.
+#[ test ]
+fn a_retry_under_the_same_client_id_is_refused()
+{
+  let mut exchange = market();
+  exchange.open_account( AccountId( 3 ), money( "1" ), qty( 0 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let tagged = | account, side, price, client | Order
+  {
+    id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price : money( price ), quantity : qty( 4 ), tif : Tif::Gtc,
+    client : Some( ClientOrderId( client ) ),
+  };
+
+  let first = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) ).unwrap();
+  assert_eq!( first.client, Some( ClientOrderId( 7 ) ) );
+
+  let retry = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) );
+  assert_eq!( retry, Err( ExchangeError::Rejected( RejectReason::DuplicateClientId ) ) );
+  assert_eq!( exchange.book().len(), 1, "the retry never rested a second order" );
+
+  // Another account's 7 is its own; this one fills the original completely.
+  let other = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 2 ), Side::Buy, "2.50", 7 ) ).unwrap();
+  assert!( other.is_complete() );
+
+  let after_fill = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) );
+  assert_eq!( after_fill, Err( ExchangeError::Rejected( RejectReason::DuplicateClientId ) ), "filled is still placed" );
+
+  // A rejected attempt claims nothing: account 3 cannot afford it now, and
+  // the same id is accepted once it can.
+  let poor = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 3 ), Side::Buy, "2.50", 9 ) );
+  assert_eq!( poor, Err( ExchangeError::Rejected( RejectReason::InsufficientFunds ) ) );
+  exchange.open_account( AccountId( 3 ), money( "100" ), qty( 0 ) ).unwrap();
+  assert!( submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 3 ), Side::Buy, "2.50", 9 ) ).is_ok() );
 }
 
 /// A post-only order that would take is rejected on record and reserves
@@ -1071,7 +1111,7 @@ fn a_post_only_order_rests_or_is_rejected_but_never_takes()
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
   let reservations = exchange.escrow().reservation_count();
 
-  let post_only = | price | Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy, price : money( price ), quantity : qty( 4 ), tif : Tif::PostOnly };
+  let post_only = | price | Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy, price : money( price ), quantity : qty( 4 ), tif : Tif::PostOnly, client : None };
 
   let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, post_only( "2.50" ) );
   assert_eq!( taking, Err( ExchangeError::Rejected( RejectReason::PostOnlyWouldTake ) ) );
@@ -1107,6 +1147,7 @@ fn an_ioc_taker_never_rests_its_remainder_through_the_facade()
   {
     id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
     price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Ioc,
+    client : None,
   };
   let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
 
@@ -1153,6 +1194,7 @@ fn a_fok_taker_rejects_whole_against_a_thin_book_through_the_facade()
   {
     id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
     price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Fok,
+    client : None,
   };
   let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
 

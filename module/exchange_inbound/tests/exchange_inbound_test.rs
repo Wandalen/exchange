@@ -25,6 +25,7 @@ fn resting( id : u64, side : Side, price : &str, quantity : i64, tif : Tif ) -> 
     {
       id : OrderId( id ), instrument : INSTRUMENT, account : AccountId( id ),
       side, price : Money::parse( price ).unwrap(), quantity, tif,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( id ),

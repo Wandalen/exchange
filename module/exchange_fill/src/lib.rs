@@ -156,6 +156,9 @@ pub enum RejectReason
   /// A post-only order would have taken liquidity on arrival — see
   /// `exchange_tif::Tif::PostOnly`.
   PostOnlyWouldTake,
+  /// The account already placed an order under this `ClientOrderId` — a
+  /// retry, not a new order.
+  DuplicateClientId,
 }
 
 /// Why a remainder was withdrawn.

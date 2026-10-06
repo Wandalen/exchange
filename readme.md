@@ -29,7 +29,7 @@ let mut ends = ring.ends();
 let ( mut producer, mut consumer ) = ends.split();
 
 let place = | account, side, price, quantity | InboundCmd::Place
-( Resting { order : Order { id : OrderId( 0 ), instrument, account, side, price, quantity, tif : Tif::Gtc }, remaining : quantity, arrival : Sequence::ZERO } );
+( Resting { order : Order { id : OrderId( 0 ), instrument, account, side, price, quantity, tif : Tif::Gtc, client : None }, remaining : quantity, arrival : Sequence::ZERO } );
 
 inbound_flush( &mut producer, [ place( seller, Side::Sell, price, four ) ] );
 exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming );

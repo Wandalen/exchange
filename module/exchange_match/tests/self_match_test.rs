@@ -30,6 +30,7 @@ fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -
     price : Money::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
+    client : None,
   }
 }
 

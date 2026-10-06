@@ -16,7 +16,8 @@ assert_eq!( OrderId( 7 ), id );
 
 The exchange assigns `OrderId`; the submitter picks `ClientOrderId` before it
 knows one, so a retry after a lost acknowledgement carries the same value.
-Unique per `AccountId`. Not in the source design.
+Unique per `AccountId`; `exchange_core` refuses a repeat. Not in the source
+design.
 
 ## Not built: `IdError::Zero`
 

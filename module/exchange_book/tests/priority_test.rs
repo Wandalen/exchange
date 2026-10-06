@@ -38,6 +38,7 @@ fn rest_on( instrument : InstrumentId, id : u64, side : Side, price : &str, quan
       price : Money::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),

@@ -94,6 +94,7 @@ fn reject_reason_is_still_exhaustively_matchable()
     RejectReason::RestsFull => "rests_full",
     RejectReason::LevelsFull => "levels_full",
     RejectReason::PostOnlyWouldTake => "post_only_would_take",
+    RejectReason::DuplicateClientId => "duplicate_client_id",
   };
   assert_eq!( name, "zero_quantity" );
 }

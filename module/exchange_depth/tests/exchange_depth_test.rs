@@ -26,6 +26,7 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
       price : Money::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),

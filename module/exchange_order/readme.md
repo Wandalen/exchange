@@ -1,7 +1,7 @@
 # exchange_order
 
-One order record — a resting order or a taker — with its instrument and
-time-in-force. Depends on `exchange_id`, `exchange_side`, `exchange_tif`, and
+One order record — a resting order or a taker — with its instrument,
+time-in-force, and the submitter's own id. Depends on `exchange_id`, `exchange_side`, `exchange_tif`, and
 `exact_arith` — nothing else.
 
 ```rust
@@ -20,6 +20,7 @@ let order = Order
   price : Money::parse( "1.25" ).unwrap(),
   quantity : Quantity::from_int( 4 ).unwrap(),
   tif : Tif::Gtc,
+  client : None,
 };
 ```
 
@@ -30,6 +31,12 @@ The real `Order` lived in `exchange_types` with five fields, missing
 other field is unchanged. `exchange_types` re-exported `Order` for a time so
 existing callers kept resolving — that re-export is retired now (2026-10-05)
 and every call site depends on this crate directly.
+
+## `client`, added
+
+`client : Option< ClientOrderId >` is the submitter's own id for the order —
+not in the source design. `exchange_core` refuses an account's second order
+under the same one, so a retry after a lost acknowledgement cannot rest twice.
 
 ## Closes feature 3
 

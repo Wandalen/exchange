@@ -23,6 +23,7 @@ fn order() -> Order
     price : Money::parse( "1.25" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
     tif : Tif::Ioc,
+    client : None,
   }
 }
 

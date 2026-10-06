@@ -17,7 +17,7 @@ let order = | id, price : &str, quantity | Order
 {
   id : OrderId( id ), instrument : InstrumentId( 1 ), account : AccountId( id ),
   side : Side::Sell, price : Money::parse( price ).unwrap(),
-  quantity : Quantity::from_int( quantity ).unwrap(), tif : Tif::Gtc,
+  quantity : Quantity::from_int( quantity ).unwrap(), tif : Tif::Gtc, client : None,
 };
 
 let mut book = Book::new();

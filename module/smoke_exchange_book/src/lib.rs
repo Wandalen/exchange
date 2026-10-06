@@ -107,7 +107,7 @@ pub fn units( whole : i64 ) -> Quantity
 /// value here is never observed.
 fn order( account : AccountId, side : Side, price : Money, quantity : Quantity, tif : Tif ) -> Order
 {
-  Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif }
+  Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif, client : None }
 }
 
 /// The ring-fed equivalent of a direct submission — push one `Place`, step

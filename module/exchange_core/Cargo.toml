@@ -25,6 +25,7 @@ exchange_snap = { path = "../exchange_snap" }
 exchange_event = { path = "../exchange_event" }
 exchange_stats = { path = "../exchange_stats" }
 exchange_rest = { path = "../exchange_rest" }
+exchange_idem = { path = "../exchange_idem" }
 exchange_inbound = { path = "../exchange_inbound" }
 exact_arith = { path = "../../../exact/module/exact_arith" }
 

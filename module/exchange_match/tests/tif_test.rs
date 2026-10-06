@@ -31,6 +31,7 @@ fn order( id : u64, side : Side, price : &str, quantity : i64, tif : Tif ) -> Or
     price : Money::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif,
+    client : None,
   }
 }
 

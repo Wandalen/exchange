@@ -89,7 +89,8 @@ pub use exchange_depth::{ Depth, DepthError, LevelView };
 pub use exchange_escrow::{ Account, Conserved, Escrow, EscrowError, Holding };
 pub use exchange_fill::{ CancelCause, Event, EventKind, RejectReason, Trade };
 pub use exchange_halt::HaltError;
-pub use exchange_id::{ AccountId, InstrumentId, OrderId };
+pub use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
+use exchange_idem::{ IdSet, idem_insert, idem_seen };
 pub use exchange_inbound::
 {
   BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
@@ -116,6 +117,8 @@ pub struct Receipt
 {
   /// The id assigned to the submitted order.
   pub order : OrderId,
+  /// The submitter's own id for it, echoed back.
+  pub client : Option< ClientOrderId >,
   /// The trades it generated, in the order they were generated. Empty when
   /// the order crossed nothing — which is an outcome, not a failure.
   pub trades : Vec< Trade >,
@@ -315,6 +318,7 @@ pub struct Exchange
   specs : BTreeMap< InstrumentId, InstrumentSpec >,
   caps : BTreeMap< InstrumentId, BookCaps >,
   stats : BookStats,
+  clients : IdSet< ( AccountId, ClientOrderId ) >,
 }
 
 impl Exchange
@@ -468,7 +472,12 @@ impl Exchange
   /// # `exchange_step` owns sequencing
   ///
   /// A [`Resting`] inside an incoming [`InboundCmd::Place`] is a *draft*, not
-  /// a finished order — its `order.id` and `arrival` are never trusted. This
+  /// a finished order — its `order.id` and `arrival` are never trusted.
+  /// `order.client` is: it is the submitter's own id, so an account's second
+  /// placement under the same one is refused as
+  /// [`RejectReason::DuplicateClientId`]. Claimed once the order is accepted
+  /// and never released — a retry of a filled or cancelled order is still a
+  /// retry. The set grows with every client-tagged order. This
   /// is the single-threaded apply side of the ring (see `exchange_inbound`'s
   /// own module doc, "Two producers without two threads on one ring"), so it
   /// is the only place with authoritative access to `claim_order`'s
@@ -539,6 +548,14 @@ impl Exchange
   fn step_place( &mut self, draft : Order, policy : SelfMatchPolicy ) -> Result< Receipt, ExchangeError >
   {
     let order = Order { id : self.claim_order(), ..draft };
+
+    // 0. A retry of an order this account already placed. First, so a retry
+    // is named as one whatever else changed since the original.
+    if let Some( client ) = order.client
+      && idem_seen( &self.clients, ( order.account, client ) )
+    {
+      return Err( self.reject_counted( &order, RejectReason::DuplicateClientId ) );
+    }
 
     // 1. Validate. Unchanged from the old `submit`'s own step 1 — see that
     // method's former `Fix(a_negative_price_is_refused_before_it_can_rest)`
@@ -649,6 +666,10 @@ impl Exchange
     // pure `cross`, and nothing else touches `self.escrow`/`self.book` in
     // between.
     let reserved = self.escrow.reserve( &order ).expect( "already validated by the dry run above" );
+    if let Some( client ) = order.client
+    {
+      idem_insert( &mut self.clients, ( order.account, client ) ).expect( "checked unseen in step 0" );
+    }
     let arrival = self.emit
     (
       order.id, order.account,
@@ -777,7 +798,7 @@ impl Exchange
       stats_rest_add( &mut self.stats, 1 );
     }
 
-    Ok( Receipt { order : order.id, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
+    Ok( Receipt { order : order.id, client : order.client, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
   }
 
   /// [`Self::reject`], plus the stats counter [`Self::exchange_step`] keeps.

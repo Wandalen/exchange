@@ -34,6 +34,7 @@ fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -
     price : money( price ),
     quantity : qty( quantity ),
     tif : Tif::Gtc,
+    client : None,
   }
 }
 
@@ -618,11 +619,13 @@ fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
   {
     id : OrderId( 10 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ), side : Side::Buy,
     price : money( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
+    client : None,
   };
   let seller = Order
   {
     id : OrderId( 11 ), instrument : InstrumentId( 1 ), account : AccountId( 2 ), side : Side::Sell,
     price : money( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
+    client : None,
   };
   escrow.reserve( &buyer ).unwrap();
   escrow.reserve( &seller ).unwrap();
