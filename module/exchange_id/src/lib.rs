@@ -1,4 +1,5 @@
-//! Plain id types for instruments, orders and accounts.
+//! Plain id types for instruments, orders and accounts, plus the submitter's
+//! own order id.
 //!
 //! A root of the dependency tree: no dependency on any other `exchange_*`
 //! crate, and no knowledge of books, prices or sides. A dedicated type per
@@ -19,6 +20,14 @@ pub struct InstrumentId( pub u64 );
 /// The identity of an order, fixed at submission and never reassigned.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash ) ]
 pub struct OrderId( pub u64 );
+
+/// The submitter's own name for an order — FIX's `ClOrdID`.
+///
+/// Distinct from [`OrderId`], which the exchange assigns: the submitter picks
+/// this one before it knows the [`OrderId`], so a retry can carry the same
+/// value and be recognised. Unique per [`AccountId`], not globally.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash ) ]
+pub struct ClientOrderId( pub u64 );
 
 /// The identity of a participant — a plain number, never a handle borrowed
 /// from an ECS (see `exchange_types`' module documentation).
@@ -49,6 +58,20 @@ pub const fn order_from_raw( raw : u64 ) -> OrderId
 /// `OrderId` back to its raw form.
 #[ must_use ]
 pub const fn order_raw( id : OrderId ) -> u64
+{
+  id.0
+}
+
+/// `ClientOrderId` out of its raw form.
+#[ must_use ]
+pub const fn client_from_raw( raw : u64 ) -> ClientOrderId
+{
+  ClientOrderId( raw )
+}
+
+/// `ClientOrderId` back to its raw form.
+#[ must_use ]
+pub const fn client_raw( id : ClientOrderId ) -> u64
 {
   id.0
 }

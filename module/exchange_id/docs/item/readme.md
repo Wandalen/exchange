@@ -19,12 +19,15 @@ per-declaration split is deferred).
 | `InstrumentId` | struct | `( pub u64 )` |
 | `OrderId` | struct | `( pub u64 )` |
 | `AccountId` | struct | `( pub u64 )` |
+| `ClientOrderId` | struct | `( pub u64 )` |
 | `instrument_from_raw` | fn | `(u64) -> InstrumentId` |
 | `instrument_raw` | fn | `(InstrumentId) -> u64` |
 | `order_from_raw` | fn | `(u64) -> OrderId` |
 | `order_raw` | fn | `(OrderId) -> u64` |
 | `account_from_raw` | fn | `(u64) -> AccountId` |
 | `account_raw` | fn | `(AccountId) -> u64` |
+| `client_from_raw` | fn | `(u64) -> ClientOrderId` |
+| `client_raw` | fn | `(ClientOrderId) -> u64` |
 
 ### Matches the proposal, except `IdError`
 
@@ -35,3 +38,6 @@ catalogued at
 names the three id types and a `_from_raw`/`_raw` pair for each — all nine
 are built as named. `IdError { Zero }` is not — see
 [`../decisions/001_no_id_error.md`](../decisions/001_no_id_error.md).
+
+`ClientOrderId` and its pair are additions: the submitter's own id, so a
+retried placement can be recognised.
