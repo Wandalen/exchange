@@ -356,3 +356,20 @@ fn orders_on_one_instrument_never_leak_into_another()
   assert!( book.cancel( other, OrderId( 2 ) ).is_some() );
   assert_eq!( book.len(), 1 );
 }
+
+/// `account_rests` counts one account's orders across both sides of one
+/// instrument, and nothing on another instrument.
+#[ test ]
+fn account_rests_counts_both_sides_of_one_instrument()
+{
+  let mine = | resting : Resting | Resting { order : Order { account : AccountId( 9 ), ..resting.order }, ..resting };
+  let mut book = Book::new();
+  assert!( book.insert( mine( rest( 1, Side::Buy, "1.00", 1, 1 ) ) ) );
+  assert!( book.insert( mine( rest( 2, Side::Sell, "2.00", 1, 2 ) ) ) );
+  assert!( book.insert( rest( 3, Side::Buy, "1.00", 1, 3 ) ) );
+  assert!( book.insert( mine( rest_on( InstrumentId( 2 ), 4, Side::Buy, "1.00", 1, 4 ) ) ) );
+
+  assert_eq!( book.account_rests( INSTRUMENT, AccountId( 9 ) ), 2 );
+  assert_eq!( book.account_rests( INSTRUMENT, AccountId( 3 ) ), 1 );
+  assert_eq!( book.account_rests( INSTRUMENT, AccountId( 7 ) ), 0 );
+}

@@ -57,10 +57,10 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
 
 ## Roots (Tier 0) — zero dependencies on any other `exchange_*` crate
 
-- **`exchange_cap`** — `BookCaps { max_rests, max_levels }` plus `cap_check_rest`/`cap_check_level`, each returning `CapError::{RestsFull, LevelsFull}`. `exchange_core` checks both before an order rests, against caps set per instrument with `Exchange::caps_set`.
+- **`exchange_cap`** — `BookCaps { max_rests, max_levels, max_account_rests }` plus `cap_check_rest`/`cap_check_level`/`cap_check_account`, each returning `CapError::{RestsFull, LevelsFull, AccountFull}`. `exchange_core` checks all three before an order rests, against caps set per instrument with `Exchange::caps_set`.
   ```rust
   use exchange_cap::{ BookCaps, CapError, cap_check_rest };
-  let caps = BookCaps { max_rests : 2, max_levels : 2 };
+  let caps = BookCaps { max_rests : 2, max_levels : 2, max_account_rests : 4 };
   assert_eq!( cap_check_rest( caps, 2 ), Err( CapError::RestsFull ) );
   ```
 - **`exchange_id`** — `InstrumentId`/`OrderId`/`AccountId`, plus `*_from_raw`/`*_raw` accessors. The id vocabulary every other crate builds on.

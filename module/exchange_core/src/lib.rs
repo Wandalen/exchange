@@ -84,7 +84,7 @@ pub use exact_arith::
 };
 pub use exchange_book::{ Book, Resting };
 pub use exchange_cap::BookCaps;
-use exchange_cap::{ cap_check_level, cap_check_rest, CapError };
+use exchange_cap::{ cap_check_account, cap_check_level, cap_check_rest, CapError };
 pub use exchange_depth::{ Depth, DepthError, LevelView };
 pub use exchange_escrow::{ Account, Conserved, Escrow, EscrowError, Holding };
 pub use exchange_fill::{ CancelCause, Event, EventKind, RejectReason, Trade };
@@ -659,6 +659,11 @@ impl Exchange
           return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
         }
       }
+      let current_account_rests = dry_book.account_rests( order.instrument, order.account );
+      if let Err( error ) = cap_check_account( caps, current_account_rests )
+      {
+        return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
+      }
     }
 
     // 3. The dry run above succeeded in full — replay it for real. Every
@@ -1029,7 +1034,8 @@ impl Exchange
     }
   }
 
-  /// [`RejectReason::RestsFull`]/[`RejectReason::LevelsFull`] translation —
+  /// [`RejectReason::RestsFull`]/[`RejectReason::LevelsFull`]/
+  /// [`RejectReason::AccountFull`] translation —
   /// its own function rather than folded into [`Self::reason_for`] since
   /// [`CapError`] and [`EscrowError`] are unrelated source types with no
   /// shared variant to combine.
@@ -1039,6 +1045,7 @@ impl Exchange
     {
       CapError::RestsFull => RejectReason::RestsFull,
       CapError::LevelsFull => RejectReason::LevelsFull,
+      CapError::AccountFull => RejectReason::AccountFull,
     }
   }
 }

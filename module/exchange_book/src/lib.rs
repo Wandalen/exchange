@@ -75,7 +75,7 @@
 //! unaffected by either that change or the instrument-keying one above it.
 
 use exact_arith::{ Price, Quantity };
-use exchange_id::{ InstrumentId, OrderId };
+use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_level::{ Level, level_empty_is, level_len, level_new, level_pop_front, level_push, level_remove };
 use exchange_side::{ Side, side_ahead };
 
@@ -331,6 +331,17 @@ impl Book
   pub fn level_count( &self, instrument : InstrumentId, side : Side ) -> usize
   {
     self.levels( instrument, side ).len()
+  }
+
+  /// How many orders `account` currently rests on `instrument`'s book, both
+  /// sides — what `exchange_cap::cap_check_account` needs as
+  /// `current_account_rests`. A walk of the instrument's book.
+  #[ must_use ]
+  pub fn account_rests( &self, instrument : InstrumentId, account : AccountId ) -> usize
+  {
+    self.side( instrument, Side::Buy ).chain( self.side( instrument, Side::Sell ) )
+      .filter( | resting | resting.order.account == account )
+      .count()
   }
 
   /// `instrument`'s own levels on `side`, or an empty slice if nothing has

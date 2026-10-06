@@ -95,6 +95,7 @@ fn reject_reason_is_still_exhaustively_matchable()
     RejectReason::LevelsFull => "levels_full",
     RejectReason::PostOnlyWouldTake => "post_only_would_take",
     RejectReason::DuplicateClientId => "duplicate_client_id",
+    RejectReason::AccountFull => "account_full",
   };
   assert_eq!( name, "zero_quantity" );
 }

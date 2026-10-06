@@ -8,7 +8,7 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, CancelCause, ClientOrderId, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
+  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
   InstrumentId, Money, Obligation, Order, OrderId, Producer, Quantity, Receipt, RejectReason, Resting,
   SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
 };
@@ -1056,6 +1056,29 @@ fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
 
   assert_eq!( exchange.book().len(), 1, "the resting sell was withdrawn and the buy rested instead" );
   assert_eq!( exchange.stats_get().cancels, 1 );
+}
+
+/// An account at its rest cap is refused on record; another account is not,
+/// and the capped account can still take liquidity.
+#[ test ]
+fn an_account_at_its_rest_cap_cannot_rest_another_order()
+{
+  let mut exchange = market();
+  exchange.caps_set( INSTRUMENT, BookCaps { max_rests : 10, max_levels : 10, max_account_rests : 2 } );
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 1 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1.00" ), qty( 1 ) ).unwrap();
+
+  let third = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.05" ), qty( 1 ) );
+  assert_eq!( third, Err( ExchangeError::Rejected( RejectReason::AccountFull ) ) );
+  assert_eq!( exchange.book().len(), 2 );
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.00" ), qty( 1 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.00" ), qty( 1 ) ).unwrap();
+  assert!( taking.is_complete(), "a fully filled order never rests, so the cap does not apply" );
 }
 
 /// A retry under the same `ClientOrderId` is refused even after the original
