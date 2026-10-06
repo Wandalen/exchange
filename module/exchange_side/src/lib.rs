@@ -12,7 +12,7 @@
 //! The source design names the variants `Bid`/`Ask`; the real type has
 //! always been `Buy`/`Sell`, because what the rest of the family reasons
 //! about is the economic action, not the order-book-display term for it —
-//! [`exchange_types::obligation`] branches on "a buy owes cash, a sell owes
+//! `exchange_types::obligation` branches on "a buy owes cash, a sell owes
 //! the asset," which reads directly off `Buy`/`Sell` and would need a mental
 //! translation off `Bid`/`Ask`. Renaming the type would touch every one of
 //! the family's five real crates plus workstream 010's consumer for a label
