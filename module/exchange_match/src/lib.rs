@@ -104,7 +104,7 @@ use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::Order;
-use exchange_side::Side;
+use exchange_side::{ Side, side_accepts };
 use exchange_tif::tif_requires_full;
 use exchange_types::{ Price, notional };
 
@@ -235,20 +235,6 @@ impl From< ConserveError > for MatchError
   }
 }
 
-/// Whether `incoming` is willing to trade at `resting`'s price.
-///
-/// A buy crosses an ask priced at or below its limit; a sell crosses a bid
-/// priced at or above. Equality crosses in both directions — an order at
-/// exactly the other side's price is a match, not a near miss.
-fn crosses( incoming : &Order, resting_price : Price ) -> bool
-{
-  match incoming.side
-  {
-    Side::Buy => resting_price <= incoming.price,
-    Side::Sell => resting_price >= incoming.price,
-  }
-}
-
 /// Whether every currency amount this fill implies can be expressed exactly.
 ///
 /// Two amounts, not one. The trade settles at the maker's price, and a *taking
@@ -342,7 +328,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       break;
     };
 
-    if !crosses( incoming, best.order.price )
+    if !side_accepts( incoming.side, incoming.price, best.order.price )
     {
       break;
     }

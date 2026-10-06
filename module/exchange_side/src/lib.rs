@@ -3,6 +3,9 @@
 //! A root of the dependency tree, with no knowledge of price. A dedicated
 //! type keeps bid and ask from collapsing into a bare `bool`.
 //!
+//! The two side-dependent price rules live here once, generic over the price
+//! type: [`side_ahead`] for book priority, [`side_accepts`] for a limit.
+//!
 //! # Naming — `Buy`/`Sell`, not `Bid`/`Ask`
 //!
 //! The source design names the variants `Bid`/`Ask`. The family reasons
@@ -54,4 +57,28 @@ pub const fn side_is_bid( side : Side ) -> bool
 pub const fn side_is_ask( side : Side ) -> bool
 {
   matches!( side, Side::Sell )
+}
+
+/// Whether price `a` ranks ahead of `b` on `side`'s book — higher for bids,
+/// lower for asks.
+#[ must_use ]
+pub fn side_ahead< P : PartialOrd >( side : Side, a : P, b : P ) -> bool
+{
+  match side
+  {
+    Side::Buy => a > b,
+    Side::Sell => a < b,
+  }
+}
+
+/// Whether an order on `side` limited at `limit` accepts a trade at `price` —
+/// at or below the limit for a buy, at or above for a sell. Equality accepts.
+#[ must_use ]
+pub fn side_accepts< P : PartialOrd >( side : Side, limit : P, price : P ) -> bool
+{
+  match side
+  {
+    Side::Buy => price <= limit,
+    Side::Sell => price >= limit,
+  }
 }

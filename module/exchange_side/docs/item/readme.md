@@ -21,6 +21,8 @@ per-declaration split is deferred).
 | `side_opposite` | fn | `(Side) -> Side` |
 | `side_is_bid` | fn | `(Side) -> bool` |
 | `side_is_ask` | fn | `(Side) -> bool` |
+| `side_ahead` | fn | `<P : PartialOrd>(Side, P, P) -> bool` |
+| `side_accepts` | fn | `<P : PartialOrd>(Side, P, P) -> bool` |
 
 ### Matches the proposal's full function list; one naming divergence
 
@@ -31,3 +33,7 @@ catalogued at
 names `Side { Bid, Ask }` with `side_opposite`/`side_is_bid`/`side_is_ask` —
 all three functions are built as named. Only the variant names diverge — see
 [`../decisions/001_buy_sell_not_bid_ask.md`](../decisions/001_buy_sell_not_bid_ask.md).
+
+`side_ahead`/`side_accepts` are not in the proposal: they hold the book's
+priority rule and the crossing rule, previously restated in `exchange_book`
+and `exchange_match`.
