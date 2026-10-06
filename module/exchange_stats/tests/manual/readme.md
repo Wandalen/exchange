@@ -7,7 +7,7 @@ are load-bearing rather than redundant.
 ## M1 — `stats_fill_add` actually mutates the counter
 
 ```bash
-# In substrate/exchange/module/exchange_stats/src/lib.rs, in stats_fill_add,
+# In module/exchange_stats/src/lib.rs, in stats_fill_add,
 # replace the body with  let _ = ( stats, n );
 cargo test -p exchange_stats --all-features 2>&1 | grep -E 'FAILED|test result'
 ```
@@ -31,7 +31,7 @@ Reverted; see Run Record.
 ## M2 — `stats_snapshot` actually copies the live state, not a fixed value
 
 ```bash
-# In substrate/exchange/module/exchange_stats/src/lib.rs, in stats_snapshot,
+# In module/exchange_stats/src/lib.rs, in stats_snapshot,
 # replace the body with  let _ = stats; BookStats::default()
 cargo test -p exchange_stats --all-features 2>&1 | grep -E 'FAILED|test result'
 ```

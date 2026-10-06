@@ -1,35 +1,20 @@
-//! Running counters for the hot path: how many rests, fills, and rejects a
-//! book has seen.
+//! Running counters for the hot path: rests, fills, rejects and cancels.
 //!
-//! A root of the dependency tree: no dependency on any other `exchange_*`
-//! crate. Without this crate, the only record of what the match loop did is
-//! the full event log — answering "how many rejects so far" means re-scanning
-//! every event rather than reading a number that was already being kept.
+//! A root of the dependency tree. `exchange_core` bumps the counters on every
+//! step and serves them through `Exchange::stats_get`, so a caller reads a
+//! number instead of re-scanning the event log.
 //!
-//! The source design names `exchange_id` as a dependency; nothing here
-//! actually needs an id type — every counter is a plain running total, not
-//! keyed by any identity — so the dependency is not taken. Recorded as this
-//! crate's own [`docs/decisions`](docs/decisions) entry rather than matched
-//! silently.
-//!
-//! # Genuinely new: `stats_rest_add`, `cancels`, `stats_cancel_add`
-//!
-//! The source design's own `BookStats` shape is
-//! `{ rests, fills, rejects, cancels }` (`core_exchange.txt:648`), but its
-//! exposed-item *function* list names only
-//! `stats_zero`/`stats_fill_add`/`stats_reject_add`/`stats_snapshot` —
-//! leaving both `rests` and `cancels` with no function that increments
-//! either. A field nothing can ever set past zero is not a counter,
-//! so `stats_rest_add` and `stats_cancel_add` are both added for symmetry
-//! with `stats_fill_add`/`stats_reject_add`, not left as gaps the proposal's
-//! own function list happened to miss.
+//! The source design lists `exchange_id` as a dependency; no counter is keyed
+//! by an id, so it is not taken — see
+//! `docs/decisions/001_no_exchange_id_dependency.md`. Its function list also
+//! has no incrementer for `rests` or `cancels`; [`stats_rest_add`] and
+//! [`stats_cancel_add`] fill that gap.
 
-/// Running counts for one book: how many rests, fills, and rejects it has
-/// seen since the last [`stats_zero`].
+/// Running counts since the last [`stats_zero`].
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, Default ) ]
 pub struct BookStats
 {
-  /// Orders that joined the book and are still (or were) resting.
+  /// Orders that came to rest on the book.
   pub rests : u64,
   /// Trades produced.
   pub fills : u64,
