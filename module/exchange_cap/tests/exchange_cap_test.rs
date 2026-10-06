@@ -19,11 +19,29 @@ fn a_rest_at_the_cap_is_refused()
   assert_eq!( cap_check_rest( CAPS, 2 ), Err( CapError::RestsFull ) );
 }
 
+/// T01 — a level below the cap is accepted.
+#[ test ]
+fn a_level_below_the_cap_is_accepted()
+{
+  assert_eq!( cap_check_level( CAPS, 0 ), Ok( () ) );
+  assert_eq!( cap_check_level( CAPS, 1 ), Ok( () ) );
+}
+
 /// T01 — the level cap is checked and refused independently of the rest cap.
 #[ test ]
 fn a_level_at_the_cap_is_refused()
 {
   assert_eq!( cap_check_level( CAPS, 2 ), Err( CapError::LevelsFull ) );
+}
+
+/// T01 — a zero cap refuses the very first rest and level.
+#[ test ]
+fn a_zero_cap_refuses_everything()
+{
+  let caps = BookCaps { max_rests : 0, max_levels : 0 };
+
+  assert_eq!( cap_check_rest( caps, 0 ), Err( CapError::RestsFull ) );
+  assert_eq!( cap_check_level( caps, 0 ), Err( CapError::LevelsFull ) );
 }
 
 /// Phase P12 — with a rest cap of 2, a third rest is refused.
