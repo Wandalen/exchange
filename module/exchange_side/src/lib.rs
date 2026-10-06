@@ -1,24 +1,15 @@
 //! Which side of the book an order stands on.
 //!
-//! A root of the dependency tree: no dependency on any other `exchange_*`
-//! crate, and no knowledge of price. Without a dedicated type, bid and ask
-//! collapse into a bare `bool`, losing the name at every call site.
-//!
-//! `Side` moved here verbatim from `exchange_types`, which still re-exports
-//! it so existing callers are unaffected.
+//! A root of the dependency tree, with no knowledge of price. A dedicated
+//! type keeps bid and ask from collapsing into a bare `bool`.
 //!
 //! # Naming — `Buy`/`Sell`, not `Bid`/`Ask`
 //!
-//! The source design names the variants `Bid`/`Ask`; the real type has
-//! always been `Buy`/`Sell`, because what the rest of the family reasons
-//! about is the economic action, not the order-book-display term for it —
-//! `exchange_types::obligation` branches on "a buy owes cash, a sell owes
-//! the asset," which reads directly off `Buy`/`Sell` and would need a mental
-//! translation off `Bid`/`Ask`. Renaming the type would touch every one of
-//! the family's five real crates plus workstream 010's consumer for a label
-//! change with no behavioural benefit, so it stays. [`side_is_bid`] and
-//! [`side_is_ask`] below give the source's own vocabulary a home for callers
-//! that want it, without moving it onto the type itself.
+//! The source design names the variants `Bid`/`Ask`. The family reasons
+//! about the economic action — `exchange_types::obligation` reads "a buy owes
+//! cash, a sell owes the asset" straight off `Buy`/`Sell` — so the variants
+//! keep those names, and [`side_is_bid`]/[`side_is_ask`] cover the source's
+//! vocabulary. See `docs/decisions/001_buy_sell_not_bid_ask.md`.
 
 /// Which side of the book an order stands on.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash ) ]
@@ -44,8 +35,7 @@ impl Side
   }
 }
 
-/// The side an incoming order matches against — a free-function form of
-/// [`Side::opposite`], named per the source design's noun-verb convention.
+/// Free-function form of [`Side::opposite`], under the source design's name.
 #[ must_use ]
 pub const fn side_opposite( side : Side ) -> Side
 {

@@ -24,13 +24,10 @@ per-declaration split is deferred).
 
 ### Matches the proposal's full function list; one naming divergence
 
-The source design's own exposed-item list
+The source design's exposed-item list
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:542-544`,
-also catalogued centrally at
+catalogued at
 [`../../../../docs/exposed_item/002_exchange_side_items.md`](../../../../docs/exposed_item/002_exchange_side_items.md))
 names `Side { Bid, Ask }` with `side_opposite`/`side_is_bid`/`side_is_ask` —
-all three functions are built here exactly as named (the central catalog's
-claim that `side_is_bid`/`side_is_ask` don't exist predates their addition
-to this crate and is now stale). The one real, deliberate divergence is the
-enum's variant names — see
+all three functions are built as named. Only the variant names diverge — see
 [`../decisions/001_buy_sell_not_bid_ask.md`](../decisions/001_buy_sell_not_bid_ask.md).

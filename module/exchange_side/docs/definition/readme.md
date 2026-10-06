@@ -12,6 +12,7 @@
 | Item | Kind | Declared | Documented in |
 |------|------|----------|----------------|
 | `Side` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `Side::opposite` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `side_opposite` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `side_is_bid` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `side_is_ask` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
