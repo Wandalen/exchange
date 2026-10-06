@@ -1,11 +1,7 @@
 # Exposed Item: exchange_id
 
 **Design status**: Built as its own real crate, matching the proposal's
-full named item list except `IdError`. (Superseded note: this file
-previously described a pre-Stage-1 state where everything was folded into
-`exchange_types` with no `InstrumentId` and no conversion functions —
-Stage 1's real build resolved all of that; only the `IdError` gap is
-still real.)
+full named item list except `IdError`.
 
 Full, verified exposed-surface listing moved to
 [`../../module/exchange_id/docs/item/readme.md`](../../module/exchange_id/docs/item/readme.md).

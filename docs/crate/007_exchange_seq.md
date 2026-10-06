@@ -2,9 +2,6 @@
 
 **Design status**: Built as its own real crate — see
 [`../../module/exchange_seq/readme.md`](../../module/exchange_seq/readme.md).
-(Superseded note: this file previously said "Folded into `exchange_types`";
-Stage 1's real build split `exchange_seq` out as a standalone crate, with a
-real public `seq_next` — `exchange_core::Exchange::emit` calls it directly.)
 
 Purpose/boundary/dependency content moved to
 [`../../module/exchange_seq/docs/item/readme.md`](../../module/exchange_seq/docs/item/readme.md).

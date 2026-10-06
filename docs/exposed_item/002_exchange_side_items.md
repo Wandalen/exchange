@@ -2,9 +2,7 @@
 
 **Design status**: Built as its own real crate, matching the proposal's
 full named function list (`side_opposite`, `side_is_bid`, `side_is_ask`
-all exist). (Superseded note: this file previously claimed `side_is_bid`/
-`side_is_ask` didn't exist — they were added since. Only the enum variant
-naming still diverges: `Buy`/`Sell`, not `Bid`/`Ask`.)
+all exist). Only the variant names diverge: `Buy`/`Sell`, not `Bid`/`Ask`.
 
 Full, verified exposed-surface listing moved to
 [`../../module/exchange_side/docs/item/readme.md`](../../module/exchange_side/docs/item/readme.md).

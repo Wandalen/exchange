@@ -3,12 +3,8 @@
 **Design status**: Built as its own real crate — see
 [`../../module/exchange_seq/docs/item/readme.md`](../../module/exchange_seq/docs/item/readme.md)
 for the full as-built-vs-proposed listing.
-
-(Superseded note: this file previously claimed "Folded into `exchange_types`"
-with "No `seq_zero`/`seq_next`/`seq_cmp` functions exist" — both false now.
-`exchange_seq` is a standalone crate with a real public `seq_next` function;
-only `seq_cmp` and `SeqError` were actually declined, see
-[`../../module/exchange_seq/docs/decisions/001_no_seq_cmp_or_seq_error.md`](../../module/exchange_seq/docs/decisions/001_no_seq_cmp_or_seq_error.md).)
+Only `seq_cmp` and `SeqError` are declined — see
+[`../../module/exchange_seq/docs/decisions/001_no_seq_cmp_or_seq_error.md`](../../module/exchange_seq/docs/decisions/001_no_seq_cmp_or_seq_error.md).
 
 ### Sources
 

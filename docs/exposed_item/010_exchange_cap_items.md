@@ -5,15 +5,6 @@ exactly — see
 [`../../module/exchange_cap/docs/item/readme.md`](../../module/exchange_cap/docs/item/readme.md)
 for the full as-built-vs-proposed listing.
 
-(Superseded note: this file previously claimed "Not built — no real crate
-exists for this" — false now. `BookCaps`, `cap_check_rest`,
-`cap_check_level`, and `CapError` all exist exactly as proposed; see the
-pitfall redistribution at
-[`../../module/exchange_cap/docs/pitfall/001_full_drops_order_returns_ok.md`](../../module/exchange_cap/docs/pitfall/001_full_drops_order_returns_ok.md)
-for how the `Full`-is-an-error guarantee is verified. `exchange_book`'s own
-Vec-growth not yet consulting the cap is caller-side wiring, not a gap in
-this crate.)
-
 ### Sources
 
 | File | Relationship |

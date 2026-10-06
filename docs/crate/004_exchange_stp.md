@@ -2,12 +2,8 @@
 
 **Design status**: Built as its own real crate — see
 [`../../module/exchange_stp/readme.md`](../../module/exchange_stp/readme.md).
-
-(Superseded note: this file previously said "Folded into `exchange_match`";
-`SelfMatchPolicy` has since moved out to this standalone crate,
-`exchange_stp`, with `exchange_match` now re-exporting it instead of owning
-it. `SelfMatchCancellation` — the match-outcome record, not pure policy
-vocabulary — stayed in `exchange_match`.)
+`exchange_match` re-exports `SelfMatchPolicy` and keeps
+`SelfMatchCancellation`, the match-outcome record.
 
 Purpose/boundary/dependency content moved to
 [`../../module/exchange_stp/docs/item/readme.md`](../../module/exchange_stp/docs/item/readme.md).

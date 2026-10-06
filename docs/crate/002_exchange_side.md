@@ -2,10 +2,8 @@
 
 **Design status**: Built as its own real crate — see
 [`../../module/exchange_side/readme.md`](../../module/exchange_side/readme.md).
-(Superseded note: this file previously said "Folded into `exchange_types`,
-held exactly as proposed"; Stage 1's real build split `exchange_side` out
-as a standalone crate, and the enum variants are `Buy`/`Sell`, not `Bid`/
-`Ask` — see the crate's own `docs/decisions/001_buy_sell_not_bid_ask.md`.)
+The variants are `Buy`/`Sell`, not `Bid`/`Ask` — see the crate's own
+`docs/decisions/001_buy_sell_not_bid_ask.md`.
 
 Purpose/boundary/dependency content moved to
 [`../../module/exchange_side/docs/item/readme.md`](../../module/exchange_side/docs/item/readme.md).
