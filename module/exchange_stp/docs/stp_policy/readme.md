@@ -19,7 +19,7 @@ this crate is the one place `SelfMatchPolicy` is owned.
 |------|-----------------|
 | [`001_allow.md`](001_allow.md) | Self-trade crosses normally — not built |
 | [`002_canceloldest.md`](002_canceloldest.md) | Resting side withdrawn, incoming continues — held by role as `CancelResting` |
-| [`003_cancelnewest.md`](003_cancelnewest.md) | Incoming side withdrawn, resting untouched — held by role as `CancelIncoming`, the one hardcoded in `exchange_core` |
+| [`003_cancelnewest.md`](003_cancelnewest.md) | Incoming side withdrawn, resting untouched — held by role as `CancelIncoming` |
 
 ### Regenerate
 
