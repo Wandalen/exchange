@@ -670,7 +670,15 @@ impl Exchange
         cancellation.order, cancellation.account,
         EventKind::OrderCancelled { cause : CancelCause::SelfMatch, quantity : cancellation.quantity, released },
       );
-      incoming_cancelled |= cancellation.order == order.id;
+      if cancellation.order == order.id
+      {
+        incoming_cancelled = true;
+      }
+      else
+      {
+        // A resting order withdrawn here is a cancel like any other.
+        stats_cancel_add( &mut self.stats, 1 );
+      }
     }
 
     // 5. Rest the remainder, reservation retained — via `exchange_rest::rest_place`

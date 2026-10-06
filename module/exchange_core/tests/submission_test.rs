@@ -1037,6 +1037,27 @@ fn a_self_match_cancelled_order_is_not_reported_complete()
   );
 }
 
+/// A resting order withdrawn by self-match prevention counts as a cancel;
+/// the incoming one does not, since it never rested.
+#[ test ]
+fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : money( "2.50" ), quantity : qty( 4 ), tif : Tif::Gtc };
+  inbound_flush( &mut producer, [ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
+  let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
+  assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.is_empty() ) );
+
+  assert_eq!( exchange.book().len(), 1, "the resting sell was withdrawn and the buy rested instead" );
+  assert_eq!( exchange.stats_get().cancels, 1 );
+}
+
 /// An IOC taker that only partially fills must not rest its remainder —
 /// `exchange_match::cross` never inserts a remainder for any TIF by its own
 /// design (see that crate's module doc); whether a caller rests one is the
