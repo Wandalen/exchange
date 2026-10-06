@@ -1,8 +1,9 @@
 //! Running counters for the hot path: rests, fills, rejects and cancels.
 //!
 //! A root of the dependency tree. `exchange_core` bumps the counters on every
-//! step and serves them through `Exchange::stats_get`, so a caller reads a
-//! number instead of re-scanning the event log.
+//! step, per instrument and in total, and serves them through
+//! `Exchange::stats_get`/`stats_get_for`, so a caller reads a number instead
+//! of re-scanning the event log.
 //!
 //! The source design lists `exchange_id` as a dependency; no counter is keyed
 //! by an id, so it is not taken — see

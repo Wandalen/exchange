@@ -15,7 +15,8 @@ assert_eq!( stats_snapshot( &stats ).fills, 2 );
 ## Wired into `exchange_core`
 
 `step_place`/`step_one` bump the counters on every step;
-`Exchange::stats_get` returns a snapshot.
+`Exchange::stats_get` returns the exchange-wide snapshot, `stats_get_for`
+one instrument's.
 
 ## Diverges from the proposal
 
@@ -39,4 +40,4 @@ assert_eq!( stats_snapshot( &stats ).fills, 2 );
 
 ## Related
 
-- [`exchange_core/`](../exchange_core/readme.md) — the real caller, via `step_place`/`step_one`/`stats_get`
+- [`exchange_core/`](../exchange_core/readme.md) — the real caller, via `step_place`/`step_one`/`stats_get`/`stats_get_for`

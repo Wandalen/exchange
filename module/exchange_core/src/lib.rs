@@ -106,7 +106,7 @@ pub use exchange_side::Side;
 pub use exchange_snap::{ BookSnap, RestRow };
 pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
 pub use exchange_stats::BookStats;
-use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add };
+use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add, stats_snapshot, stats_zero };
 pub use exchange_tif::Tif;
 use exchange_tif::{ tif_rests, tif_takes };
 pub use exchange_types::{ Price, TypeError, notional, obligation };
@@ -318,6 +318,7 @@ pub struct Exchange
   specs : BTreeMap< InstrumentId, InstrumentSpec >,
   caps : BTreeMap< InstrumentId, BookCaps >,
   stats : BookStats,
+  instrument_stats : BTreeMap< InstrumentId, BookStats >,
   clients : IdSet< ( AccountId, ClientOrderId ) >,
 }
 
@@ -462,7 +463,15 @@ impl Exchange
   #[ must_use ]
   pub fn stats_get( &self ) -> BookStats
   {
-    exchange_stats::stats_snapshot( &self.stats )
+    stats_snapshot( &self.stats )
+  }
+
+  /// [`Self::stats_get`], for `instrument` alone. All zero for an instrument
+  /// nothing has touched yet.
+  #[ must_use ]
+  pub fn stats_get_for( &self, instrument : InstrumentId ) -> BookStats
+  {
+    self.instrument_stats.get( &instrument ).map_or_else( stats_zero, stats_snapshot )
   }
 
   /// Drain `consumer` and apply every command it yields, in drain order, with
@@ -531,9 +540,12 @@ impl Exchange
       InboundCmd::Place( draft ) => StepOutcome::Placed( self.step_place( draft.order, policy ) ),
       InboundCmd::Cancel { id, .. } =>
       {
-        let result = self.cancel( id );
-        if result.is_ok() { stats_cancel_add( &mut self.stats, 1 ); }
-        StepOutcome::Cancelled( result )
+        let result = self.cancel_resting( id );
+        if let Ok( resting ) = &result
+        {
+          self.count( resting.order.instrument, stats_cancel_add, 1 );
+        }
+        StepOutcome::Cancelled( result.map( | resting | resting.remaining ) )
       },
       InboundCmd::Replace { .. } => StepOutcome::ReplaceNotWired,
     }
@@ -684,7 +696,7 @@ impl Exchange
       .expect( "already produced by the identical dry run above — cross is pure" );
 
     // 4. Settle each trade in the step that generated it.
-    stats_fill_add( &mut self.stats, crossing.trades.len() as u64 );
+    self.count( order.instrument, stats_fill_add, crossing.trades.len() as u64 );
     for trade in &crossing.trades
     {
       self.escrow.settle( trade, order.side, order.price ).expect( "already validated by the dry run above" );
@@ -709,7 +721,7 @@ impl Exchange
       else
       {
         // A resting order withdrawn here is a cancel like any other.
-        stats_cancel_add( &mut self.stats, 1 );
+        self.count( order.instrument, stats_cancel_add, 1 );
       }
     }
 
@@ -800,16 +812,23 @@ impl Exchange
         rest_place( &mut self.book, Resting { order, remaining : resting, arrival } ),
         "order id came from this exchange's own next_order counter, which never repeats",
       );
-      stats_rest_add( &mut self.stats, 1 );
+      self.count( order.instrument, stats_rest_add, 1 );
     }
 
     Ok( Receipt { order : order.id, client : order.client, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
   }
 
+  /// Bump a counter for `instrument` and for the exchange as a whole.
+  fn count( &mut self, instrument : InstrumentId, add : fn( &mut BookStats, u64 ), n : u64 )
+  {
+    add( &mut self.stats, n );
+    add( self.instrument_stats.entry( instrument ).or_insert_with( stats_zero ), n );
+  }
+
   /// [`Self::reject`], plus the stats counter [`Self::exchange_step`] keeps.
   fn reject_counted( &mut self, order : &Order, reason : RejectReason ) -> ExchangeError
   {
-    stats_reject_add( &mut self.stats, 1 );
+    self.count( order.instrument, stats_reject_add, 1 );
     self.reject( order, reason )
   }
 
@@ -841,6 +860,12 @@ impl Exchange
   /// cannot undo.
   pub fn cancel( &mut self, id : OrderId ) -> Result< Quantity, ExchangeError >
   {
+    self.cancel_resting( id ).map( | resting | resting.remaining )
+  }
+
+  /// [`Self::cancel`], returning the withdrawn order whole.
+  fn cancel_resting( &mut self, id : OrderId ) -> Result< Resting, ExchangeError >
+  {
     let ( account, instrument ) = self.book.iter().find( | resting | resting.order.id == id )
       .map( | resting | ( resting.order.account, resting.order.instrument ) )
       .ok_or( ExchangeError::NotResting( id ) )?;
@@ -854,7 +879,7 @@ impl Exchange
       EventKind::OrderCancelled { cause : CancelCause::Request, quantity : resting.remaining, released },
     );
 
-    Ok( resting.remaining )
+    Ok( resting )
   }
 
   /// Everything that has happened, in order.

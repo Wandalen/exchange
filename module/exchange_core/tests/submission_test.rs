@@ -1058,6 +1058,41 @@ fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
   assert_eq!( exchange.stats_get().cancels, 1 );
 }
 
+/// Each instrument keeps its own counters; the exchange-wide ones are their
+/// sum.
+#[ test ]
+fn stats_are_kept_per_instrument_and_in_total()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+  let other = InstrumentId( 2 );
+
+  let on = | instrument, account, side, quantity | Order
+  {
+    id : OrderId( 0 ), instrument, account, side, price : money( "2.50" ), quantity : qty( quantity ), tif : Tif::Gtc,
+    client : None,
+  };
+
+  let resting = submit_tif( &mut exchange, &mut producer, &mut consumer, on( INSTRUMENT, AccountId( 1 ), Side::Sell, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 1 ), Side::Sell, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 0 ) ).unwrap_err();
+
+  inbound_flush( &mut producer, [ InboundCmd::Cancel { instrument : INSTRUMENT, id : resting.order } ] );
+  assert!( matches!( exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming )[ 0 ], StepOutcome::Cancelled( Ok( _ ) ) ) );
+
+  let first = exchange.stats_get_for( INSTRUMENT );
+  let second = exchange.stats_get_for( other );
+  assert_eq!( ( first.rests, first.fills, first.rejects, first.cancels ), ( 1, 0, 0, 1 ) );
+  assert_eq!( ( second.rests, second.fills, second.rejects, second.cancels ), ( 1, 1, 1, 0 ) );
+  assert_eq!( exchange.stats_get_for( InstrumentId( 9 ) ), exchange_core::BookStats::default() );
+
+  let total = exchange.stats_get();
+  assert_eq!( ( total.rests, total.fills, total.rejects, total.cancels ), ( 2, 1, 1, 1 ) );
+}
+
 /// An account at its rest cap is refused on record; another account is not,
 /// and the capped account can still take liquidity.
 #[ test ]

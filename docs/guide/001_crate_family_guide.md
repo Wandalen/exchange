@@ -80,7 +80,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   use exchange_side::Side;
   assert_eq!( Side::Buy.opposite(), Side::Sell );
   ```
-- **`exchange_stats`** — `BookStats { rests, fills, rejects, cancels }`, a running counter so a caller doesn't have to re-scan the event log. Wired since Stage 9: `Exchange::stats_get` calls `stats_snapshot` directly, and `step_place`/`step_one` call `stats_rest_add`/`stats_fill_add`/`stats_reject_add`/`stats_cancel_add` on every step.
+- **`exchange_stats`** — `BookStats { rests, fills, rejects, cancels }`, a running counter so a caller doesn't have to re-scan the event log. Wired since Stage 9: `Exchange::stats_get` (exchange-wide) and `stats_get_for` (one instrument) call `stats_snapshot` directly, and `step_place`/`step_one` call `stats_rest_add`/`stats_fill_add`/`stats_reject_add`/`stats_cancel_add` on every step.
   ```rust
   use exchange_stats::{ stats_fill_add, stats_snapshot, stats_zero };
   let mut stats = stats_zero();
