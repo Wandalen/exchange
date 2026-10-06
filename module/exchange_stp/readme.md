@@ -23,6 +23,14 @@ select. Its other two policies are kept under role names — `CancelResting`
 which the source does not name. See
 [`docs/decisions/001_no_allow_resting_incoming_naming.md`](docs/decisions/001_no_allow_resting_incoming_naming.md).
 
+## Not built: `DecrementAndCancel`, STP groups
+
+`DecrementAndCancel` shrinks both orders by the smaller quantity, so a
+surviving order needs a partial escrow release and a "reduced" event — neither
+exists, the same blocker `exchange_core` names for `Replace`. STP groups (one
+key across several accounts) need an account-to-group registry with no owner
+in this family; the policy keys on `AccountId`.
+
 ## Responsibility Table
 
 | File | Responsibility |

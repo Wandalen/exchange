@@ -25,6 +25,12 @@ one instrument's.
 - `stats_rest_add`/`stats_cancel_add` are added: the proposal's function list
   leaves `rests` and `cancels` with no incrementer.
 
+## Not built: traded volume
+
+A running `Quantity` sum can overflow, which would put a fallible step into
+the hot path after trades have already settled. Every trade event carries its
+quantity, so volume stays derivable from the log.
+
 ## Responsibility Table
 
 | File | Responsibility |
