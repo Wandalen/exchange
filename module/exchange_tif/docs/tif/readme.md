@@ -17,9 +17,9 @@ crate is the one place `Tif` is owned.
 
 | File | Responsibility |
 |------|-----------------|
-| [`001_gtc.md`](001_gtc.md) | Rests until filled or cancelled — the only reachable disposition today |
-| [`002_ioc.md`](002_ioc.md) | Fills what it can now, discards the rest — real type, not yet wired into `cross`/`submit` |
-| [`003_fok.md`](003_fok.md) | Fills completely or rejects, book unchanged — real, tested, and gated by `exchange_match::cross` |
+| [`001_gtc.md`](001_gtc.md) | Rests until filled or cancelled |
+| [`002_ioc.md`](002_ioc.md) | Fills what it can now, discards the rest — dropped by `exchange_core`/`exchange_inbound` |
+| [`003_fok.md`](003_fok.md) | Fills completely or rejects, book unchanged — gated by `exchange_match::cross` |
 
 ### Regenerate
 

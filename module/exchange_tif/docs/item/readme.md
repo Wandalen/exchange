@@ -22,16 +22,10 @@ per-declaration split is deferred).
 
 ### Matches the proposal exactly
 
-The source design's own exposed-item list
+The source design's exposed-item list
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:546-548`,
-also catalogued centrally at
+catalogued at
 [`../../../../docs/exposed_item/003_exchange_tif_items.md`](../../../../docs/exposed_item/003_exchange_tif_items.md))
 names `Tif { Gtc, Ioc, Fok }` plus `tif_rests`/`tif_requires_full` — all
-three items are built here exactly as named. The central catalog's own note
-that "no real crate exists for this" predates this crate's real build and
-is now stale — see the thinned pointer at
-[`../../../../docs/crate/003_exchange_tif.md`](../../../../docs/crate/003_exchange_tif.md).
-
-Caller-side wiring gap, not a divergence in this crate's own surface: see
-this crate's own [`../../readme.md`](../../readme.md), "Genuinely new", for
-exactly which real callers consult which function today.
+three are built as named. Which callers consult which function:
+[`../../readme.md`](../../readme.md), "Wiring".
