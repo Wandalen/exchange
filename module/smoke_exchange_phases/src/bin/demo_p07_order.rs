@@ -1,6 +1,6 @@
 //! Phase P07 — an order claims a sequence on arrival; a zero-quantity order is refused at submission. Golden: `seq=1 zq=1` then `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_core::
 {
   AccountId, Exchange, InboundCmd, Resting, SelfMatchPolicy, Side, StepOutcome, inbound_flush, inbound_ring,
@@ -15,7 +15,7 @@ fn main()
   let order = Order
   {
     id : OrderId( 1 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ),
-    side : Side::Buy, price : Money::parse( "1" ).unwrap(), quantity : Quantity::from_int( 1 ).unwrap(),
+    side : Side::Buy, price : Price::parse( "1" ).unwrap(), quantity : Quantity::from_int( 1 ).unwrap(),
     tif : Tif::Gtc,
     client : None,
   };

@@ -14,7 +14,7 @@
 //! here because each one shaped a specific choice below:
 //!
 //! 1. **Aliasing the live book.** [`RestRow`] holds only `Copy` values
-//!    (`OrderId`, `Money`, `Quantity`) taken *out of* each `Resting`, never a
+//!    (`OrderId`, `Price`, `Quantity`) taken *out of* each `Resting`, never a
 //!    reference into `Book`'s own storage — a cancel or fill after
 //!    [`snap_take`] can never reach back into an already-taken [`BookSnap`].
 //! 2. **A checksum riding hash-bucket order.** `Book`'s own representation
@@ -32,7 +32,7 @@
 //! `exchange_order` as a dependency and `SnapError { Full }` as part of the
 //! exposed surface, and this crate takes neither.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
 use exchange_side::Side;
@@ -44,7 +44,7 @@ pub struct RestRow
   /// The resting order's identity.
   pub order : OrderId,
   /// The price it rests at.
-  pub price : Money,
+  pub price : Price,
   /// What remains of it, unfilled.
   pub qty : Quantity,
 }

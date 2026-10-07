@@ -1,7 +1,7 @@
 //! Phase P27 — a snapshot taken before a live cancel still shows the
 //! cancelled row afterward. Golden: `snap=1 live=0` then `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -16,7 +16,7 @@ fn main()
   let quantity = Quantity::from_int( 3 ).unwrap();
   assert!( book.insert( Resting
   {
-    order : Order { id : OrderId( 1 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ), side : Side::Buy, price : Money::parse( "1.00" ).unwrap(), quantity, tif : Tif::Gtc, client : None },
+    order : Order { id : OrderId( 1 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ), side : Side::Buy, price : Price::parse( "1.00" ).unwrap(), quantity, tif : Tif::Gtc, client : None },
     remaining : quantity,
     arrival : Sequence( 1 ),
   } ), "fresh id, must succeed" );

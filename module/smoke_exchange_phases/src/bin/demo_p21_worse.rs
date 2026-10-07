@@ -1,7 +1,7 @@
 //! Phase P21 — a worse price level is never touched while a better one
 //! still has quantity to give. Golden: `untouched=1` then `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::cross;
@@ -19,7 +19,7 @@ fn order( id : u64, side : Side, price : &str, quantity : i64 ) -> Order
     instrument : InstrumentId( 1 ),
     account : AccountId( id ),
     side,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
     client : None,

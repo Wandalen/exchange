@@ -2,7 +2,7 @@
 //! crossing pair without ever producing a self-fill. Golden: `self=0` then
 //! `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::cross;
@@ -20,7 +20,7 @@ fn order( id : u64, side : Side, quantity : i64 ) -> Order
     instrument : InstrumentId( 1 ),
     account : AccountId( 1 ), // same account on both sides
     side,
-    price : Money::parse( "1.00" ).unwrap(),
+    price : Price::parse( "1.00" ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
     client : None,

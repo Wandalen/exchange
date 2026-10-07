@@ -6,7 +6,7 @@
 //! no-cross case distinguishes a matching engine from a machine that pairs
 //! whatever it is handed.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::{ Crossing, MatchError, SelfMatchPolicy, cross as cross_with_policy };
@@ -33,7 +33,7 @@ fn order( id : u64, side : Side, price : &str, quantity : i64 ) -> Order
     instrument : InstrumentId( 1 ),
     account : AccountId( id ),
     side,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
     client : None,
@@ -203,8 +203,8 @@ fn each_trade_executes_at_its_own_makers_price()
 
   let crossing = cross( &mut book, &order( 3, Side::Buy, "3.00", 4 ) ).unwrap();
 
-  let prices : Vec< Money > = crossing.trades.iter().map( | trade | trade.price ).collect();
-  assert_eq!( prices, vec![ Money::parse( "1" ).unwrap(), Money::parse( "2" ).unwrap() ] );
+  let prices : Vec< Price > = crossing.trades.iter().map( | trade | trade.price ).collect();
+  assert_eq!( prices, vec![ Price::parse( "1" ).unwrap(), Price::parse( "2" ).unwrap() ] );
 }
 
 /// Both sides travel in the trade, and the aggressor is the incoming order.

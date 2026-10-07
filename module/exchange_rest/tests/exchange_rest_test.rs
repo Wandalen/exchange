@@ -8,7 +8,7 @@
 //! genuinely new operation and gets the deeper coverage, including the
 //! rollback path a plain cancel-then-insert can't offer atomically.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -25,7 +25,7 @@ fn order( id : u64, side : Side, price : &str, quantity : i64 ) -> Order
     instrument : InstrumentId( 1 ),
     account : AccountId( id ),
     side,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
     client : None,
@@ -98,9 +98,9 @@ fn rest_replace_swaps_price_and_quantity_atomically()
 
   let old = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Sell, "2.60", 6, 20 ) ).unwrap();
 
-  assert_eq!( old.order.price, Money::parse( "2.50" ).unwrap(), "the returned value is the pre-replace order" );
+  assert_eq!( old.order.price, Price::parse( "2.50" ).unwrap(), "the returned value is the pre-replace order" );
   let now = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
-  assert_eq!( now.order.price, Money::parse( "2.60" ).unwrap() );
+  assert_eq!( now.order.price, Price::parse( "2.60" ).unwrap() );
   assert_eq!( now.remaining, qty( 6 ) );
   assert_eq!( book.len(), 1, "exactly one order rests — not the old plus the new" );
 }
@@ -155,7 +155,7 @@ fn rest_replace_refused_by_a_colliding_id_restores_the_original()
   assert_eq!( book.len(), 2, "neither order was lost" );
   let restored = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
   assert_eq!( restored.order.id, OrderId( 1 ), "order 1 is back, unchanged" );
-  assert_eq!( restored.order.price, Money::parse( "2.50" ).unwrap() );
+  assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap() );
   assert_eq!( restored.remaining, qty( 4 ) );
 }
 
@@ -172,7 +172,7 @@ fn rest_replace_refused_by_zero_quantity_restores_the_original()
 
   assert_eq!( error, RestReplaceError::Refused );
   let restored = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
-  assert_eq!( restored.order.price, Money::parse( "2.50" ).unwrap(), "rolled back to the pre-replace order" );
+  assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap(), "rolled back to the pre-replace order" );
   assert_eq!( restored.remaining, qty( 4 ) );
 }
 
@@ -226,5 +226,5 @@ fn rest_replace_refuses_a_new_resting_for_a_different_instrument()
   assert_eq!( book.best( InstrumentId( 2 ), Side::Sell ), None, "the mismatched replacement must not land on instrument 2" );
   let restored = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
   assert_eq!( restored.order.id, OrderId( 1 ), "order 1 is back on its own instrument, unchanged" );
-  assert_eq!( restored.order.price, Money::parse( "2.50" ).unwrap() );
+  assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap() );
 }

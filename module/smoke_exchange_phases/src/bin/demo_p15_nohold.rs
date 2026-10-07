@@ -1,6 +1,6 @@
 //! Phase P15 — a failed hold never reaches the book. Golden: `n=0` then `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_escrow::Escrow;
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -21,7 +21,7 @@ fn main()
     instrument : InstrumentId( 1 ),
     account : buyer,
     side : Side::Buy,
-    price : Money::parse( "2.50" ).unwrap(),
+    price : Price::parse( "2.50" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
     tif : Tif::Gtc,
     client : None,

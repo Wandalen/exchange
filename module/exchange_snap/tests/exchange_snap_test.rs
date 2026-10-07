@@ -1,7 +1,7 @@
 //! Test Matrix T01 — snapshot content, ordering, and independence from the
 //! live book (pitfalls 001–003: aliasing, hash order, clock reads).
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -21,7 +21,7 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
       instrument : InstrumentId( 1 ),
       account : AccountId( id ),
       side,
-      price : Money::parse( price ).unwrap(),
+      price : Price::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
       client : None,
@@ -57,7 +57,7 @@ fn snap_take_copies_every_resting_order_with_its_remaining_quantity()
 
   assert_eq!( snap.rows, vec!
   [
-    RestRow { order : OrderId( 1 ), price : Money::parse( "1.00" ).unwrap(), qty : Quantity::from_int( 3 ).unwrap() },
+    RestRow { order : OrderId( 1 ), price : Price::parse( "1.00" ).unwrap(), qty : Quantity::from_int( 3 ).unwrap() },
   ] );
   assert_eq!( snap_len( &snap ), 1 );
 }

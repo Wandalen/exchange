@@ -7,7 +7,7 @@
 //! same adaptation on the same formatter. `0.95` has a non-zero fraction and
 //! prints unchanged.
 
-use exact_arith::{ Money, Quantity, money_fmt };
+use exact_arith::{ Price, Quantity, price_fmt };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -23,7 +23,7 @@ fn rest( id : u64, price : &str ) -> Resting
     order : Order
     {
       id : OrderId( id ), instrument : InstrumentId( 1 ), account : AccountId( id ),
-      side : Side::Buy, price : Money::parse( price ).unwrap(), quantity, tif : Tif::Gtc,
+      side : Side::Buy, price : Price::parse( price ).unwrap(), quantity, tif : Tif::Gtc,
       client : None,
     },
     remaining : quantity,
@@ -42,7 +42,7 @@ fn main()
   assert!( book.insert( rest( 2, "1.00" ) ), "fresh id, must succeed" );
 
   let prices : Vec< String > = book.side( instrument, Side::Buy )
-  .map( | resting | money_fmt( resting.order.price ) )
+  .map( | resting | price_fmt( resting.order.price ) )
   .collect();
   let line = prices.join( "," );
 

@@ -19,9 +19,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Manifests path-depend on `../exact` and `../ring`. Pinned: `exact` master made
-  # `Price` its own type (b1df42d), and this repo still treats it as `Money`.
-  EXACT_REV: 75995b00279a9202217a08315175372bd555ea89
+  # Manifests path-depend on `../exact` and `../ring`; pinned so a change there
+  # breaks CI only when the pin moves.
+  EXACT_REV: fd1b3d1e9e3a5b6f0967e6cba38127b6c638abf8
   RING_REV: 8ce53986356d291161aa7fdecdafc686b79a4a7e
 
 jobs:

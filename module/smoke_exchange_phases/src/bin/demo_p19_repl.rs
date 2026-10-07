@@ -1,7 +1,7 @@
 //! Phase P19 — replace is atomic: the old order is gone exactly when the new
 //! one stands, never both, never neither. Golden: `old=0 new=1` then `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -18,7 +18,7 @@ fn order( id : u64, price : &str, quantity : i64 ) -> Order
     instrument : InstrumentId( 1 ),
     account : AccountId( 1 ),
     side : Side::Buy,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
     client : None,

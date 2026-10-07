@@ -8,7 +8,7 @@
 //! zero-padding of one price differs from the transcript's own hand-written
 //! example.
 
-use exact_arith::{ Money, Quantity, money_fmt, qty_fmt };
+use exact_arith::{ Price, Quantity, price_fmt, qty_fmt };
 use exchange_book::{ Book, Resting };
 use exchange_depth::depth_top;
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -22,7 +22,7 @@ fn rest( id : u64, price : &str, quantity : i64 ) -> Resting
   let quantity = Quantity::from_int( quantity ).unwrap();
   Resting
   {
-    order : Order { id : OrderId( id ), instrument : InstrumentId( 1 ), account : AccountId( id ), side : Side::Buy, price : Money::parse( price ).unwrap(), quantity, tif : Tif::Gtc, client : None },
+    order : Order { id : OrderId( id ), instrument : InstrumentId( 1 ), account : AccountId( id ), side : Side::Buy, price : Price::parse( price ).unwrap(), quantity, tif : Tif::Gtc, client : None },
     remaining : quantity,
     arrival : Sequence( id ),
   }
@@ -35,7 +35,7 @@ fn main()
   assert!( book.insert( rest( 2, "0.95", 4 ) ), "fresh id, must succeed" );
 
   let depth = depth_top( &book, InstrumentId( 1 ), 2 ).unwrap();
-  let line : Vec< String > = depth.bids.iter().map( | level | format!( "{}:{}", money_fmt( level.price ), qty_fmt( level.qty ) ) ).collect();
+  let line : Vec< String > = depth.bids.iter().map( | level | format!( "{}:{}", price_fmt( level.price ), qty_fmt( level.qty ) ) ).collect();
   let line = line.join( "," );
 
   println!( "d={line}" );

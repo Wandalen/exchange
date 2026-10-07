@@ -54,17 +54,9 @@
 //! `obligation`'s own signature and body, so `exchange_order`/`exchange_side`
 //! remain real dependencies — just no longer re-exported from here.
 
-use exact_arith::{ Backing, MONEY_SCALE, Money, Quantity, pow10 };
+use exact_arith::{ Backing, MONEY_SCALE, Money, Price, Quantity, pow10 };
 use exchange_order::{ Obligation, Order };
 use exchange_side::Side;
-
-/// The price of one unit, and the type every amount of currency is expressed
-/// in.
-///
-/// An alias rather than a newtype: the ceiling, the scale and the checked
-/// operations all belong to `exact_arith`, and wrapping them here would put
-/// this crate in the position of re-deciding them.
-pub type Price = Money;
 
 /// A quantity or price this crate could not express.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
@@ -108,9 +100,9 @@ impl core::error::Error for TypeError {}
 ///
 /// ```rust
 /// use exchange_types::notional;
-/// use exact_arith::{ Money, Quantity };
+/// use exact_arith::{ Money, Price, Quantity };
 ///
-/// let price = Money::parse( "1.25" ).unwrap();
+/// let price = Price::parse( "1.25" ).unwrap();
 /// let three = Quantity::from_int( 3 ).unwrap();
 /// assert_eq!( notional( price, three ).unwrap(), Money::parse( "3.75" ).unwrap() );
 /// ```
