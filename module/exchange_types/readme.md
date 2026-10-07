@@ -1,6 +1,6 @@
 # exchange_types
 
-The exact-settlement logic every other crate shares — `Price`, `TypeError`,
+The exact-settlement logic every other crate shares — `TypeError`,
 `notional`, `obligation` — and nothing else. Every vocabulary type this
 crate used to re-export now has its own dedicated crate, and every former
 consumer imports from that crate directly (see Extraction, below). Nothing
@@ -9,9 +9,9 @@ here acts on `Trade`/`Event` directly any more; that moved to
 
 ```rust
 use exchange_types::notional;
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 
-let price = Money::parse( "2.50" ).unwrap();
+let price = Price::parse( "2.50" ).unwrap();
 let quantity = Quantity::from_int( 4 ).unwrap();
 assert_eq!( notional( price, quantity ).unwrap(), Money::parse( "10" ).unwrap() );
 ```
@@ -80,7 +80,7 @@ Price/TypeError/notional/obligation role is its settled, permanent shape.
 | File | Responsibility |
 |------|----------------|
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exact_arith`, `exchange_order`, `exchange_side`; dev-only `exchange_id`, `exchange_tif` |
-| [`src/lib.rs`](src/lib.rs) | `Price`, `TypeError`, `notional`, and the obligation rule — nothing re-exported |
+| [`src/lib.rs`](src/lib.rs) | `TypeError`, `notional`, and the obligation rule — nothing re-exported |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |

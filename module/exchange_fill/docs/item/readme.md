@@ -23,12 +23,8 @@ per-declaration split is deferred).
 | `Event` | struct | `{ sequence: Sequence, order: OrderId, account: AccountId, kind: EventKind }` |
 | `EventKind` | enum | `{ OrderAccepted{side,price,quantity,reserved}, OrderRejected{reason}, Trade(Trade), OrderCancelled{cause,quantity,released} }` |
 
-`Price`/`Quantity` here are `exact_arith::Price`/`exact_arith::Quantity` —
-re-exports of `exact_kind::{Price,Quantity}` directly, not
-`exchange_types::Price` (a separate alias for the identical underlying
-`Decimal<MONEY_SCALE>` — see `exact_kind/src/lib.rs`'s own module doc,
-"Money and Price are the same type today"). Interchangeable in practice,
-not a divergence.
+`Price`/`Quantity` here are `exact_arith::Price`/`exact_arith::Quantity`,
+re-exports of `exact_kind::{Price,Quantity}`.
 
 ### Differs from the proposal
 

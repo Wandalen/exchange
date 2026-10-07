@@ -16,7 +16,6 @@ per-declaration split is deferred).
 
 | Item | Kind | Signature | Owner |
 |------|------|-----------|-------|
-| `Price` | type alias | `= Money` | here |
 | `TypeError` | enum | `{ NotionalOutOfRange, NotionalInexact }` | here |
 | `notional` | fn | `(Price, Quantity) -> Result<Money, TypeError>` | here |
 | `obligation` | fn | `(&Order) -> Result<Obligation, TypeError>` | here |

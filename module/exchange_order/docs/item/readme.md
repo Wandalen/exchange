@@ -11,7 +11,7 @@
 
 | Item | Signature | Purpose |
 |------|-----------|---------|
-| `Amount` | `pub type Amount = Price` | Currency amount — same type as `Price`, read as a total rather than a per-unit rate |
+| `Amount` | `pub type Amount = Money` | Currency amount — a total, not a per-unit `Price` |
 | `Order` | `pub struct Order { id: OrderId, instrument: InstrumentId, account: AccountId, side: Side, price: Price, quantity: Quantity, tif: Tif, client: Option<ClientOrderId> }` | One submitted limit order, every field `pub` |
 | `Obligation` | `pub enum Obligation { Cash(Amount), Asset(Quantity) }` | What an order commits until it fills or cancels |
 
