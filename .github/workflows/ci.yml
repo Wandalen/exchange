@@ -19,6 +19,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
+  # Manifests path-depend on `../exact` and `../ring`. Pinned: `exact` master made
+  # `Price` its own type (b1df42d), and this repo still treats it as `Money`.
+  EXACT_REV: 75995b00279a9202217a08315175372bd555ea89
+  RING_REV: 8ce53986356d291161aa7fdecdafc686b79a4a7e
 
 jobs:
   test:
@@ -27,6 +31,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: exact and ring next to the checkout
+        run: |
+          git clone -q https://github.com/Wandalen/exact ../exact && git -C ../exact checkout -q "$EXACT_REV"
+          git clone -q https://github.com/Wandalen/ring ../ring && git -C ../ring checkout -q "$RING_REV"
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
@@ -41,6 +49,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: exact and ring next to the checkout
+        run: |
+          git clone -q https://github.com/Wandalen/exact ../exact && git -C ../exact checkout -q "$EXACT_REV"
+          git clone -q https://github.com/Wandalen/ring ../ring && git -C ../ring checkout -q "$RING_REV"
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: clippy
@@ -54,6 +66,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: exact and ring next to the checkout
+        run: |
+          git clone -q https://github.com/Wandalen/exact ../exact && git -C ../exact checkout -q "$EXACT_REV"
+          git clone -q https://github.com/Wandalen/ring ../ring && git -C ../ring checkout -q "$RING_REV"
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
       - name: rustdoc, warnings denied
