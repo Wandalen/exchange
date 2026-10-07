@@ -22,7 +22,7 @@
 //!
 //! # Two producers without two threads on one ring
 //!
-//! [`docs/phase/028_p28_drain.md`] asks for drain order to be deterministic
+//! `docs/phase/028_p28_drain.md` asks for drain order to be deterministic
 //! "not thread-completion-order-dependent" across **real** concurrent
 //! producers — so simulating "two producers" as one thread pushing twice,
 //! sequentially, would not exercise the property the phase cares about at
@@ -44,7 +44,7 @@
 //! [`ring_types::OverflowPolicy::DropNewest`] — a full ring's `try_push`
 //! would return `Ok(())` while silently discarding the record (see
 //! `ring_handle::Producer::try_push`'s own doc comment: "an `Ok` is not by
-//! itself evidence the record was kept"). [`docs/phase/029_p29_over.md`]
+//! itself evidence the record was kept"). `docs/phase/029_p29_over.md`
 //! wants the opposite: a full ring must come back as a **visible** rejection.
 //! [`inbound_ring`] therefore always builds with
 //! [`ring_types::OverflowPolicy::Fail`] — never the default — which is what

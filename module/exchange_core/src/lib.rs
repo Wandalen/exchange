@@ -471,8 +471,8 @@ impl Exchange
   /// a finished order — its `order.id` and `arrival` are never trusted. This
   /// is the single-threaded apply side of the ring (see `exchange_inbound`'s
   /// own module doc, "Two producers without two threads on one ring"), so it
-  /// is the only place with authoritative access to [`Self::claim_order`]'s
-  /// counter and [`Self::emit`]'s sequence — exactly mirroring how the old
+  /// is the only place with authoritative access to `claim_order`'s
+  /// counter and `emit`'s sequence — exactly mirroring how the old
   /// `submit` never took a caller-supplied id either. Producers may push a
   /// placeholder id/arrival; `exchange_step` always overwrites both with its
   /// own, so global id-uniqueness and a correct, facade-authoritative total

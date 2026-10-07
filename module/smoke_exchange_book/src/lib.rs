@@ -43,7 +43,7 @@
 //!
 //! `exact_kind::Decimal`'s `Display` trims trailing fractional zeros by
 //! design (`1.00` renders as `1`) — correct for the type, but it conflicts
-//! with the golden block's literal two-decimal text. [`two_decimals`] is
+//! with the golden block's literal two-decimal text. `two_decimals` is
 //! this lane's own concern alone; nothing about the shared type changes.
 //!
 //! # Why the four probes are isolated from the main scene

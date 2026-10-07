@@ -17,7 +17,7 @@
 //!
 //! # Why arrival and not time
 //!
-//! Ties are broken by [`Sequence`], a claimed position, and never by a clock
+//! Ties are broken by `exchange_seq::Sequence`, a claimed position, and never by a clock
 //! reading. Two orders submitted in the same instant still receive distinct,
 //! ordered positions, so there is no tie left for a tie-break to resolve
 //! wrongly. This matters more than it looks: with time priority resolved by
@@ -33,18 +33,18 @@
 //! # One book per instrument
 //!
 //! [`Book`] holds every instrument's own bids and asks side by side, never
-//! mixed — hard problem 1. [`insert`](Self::insert) reads which instrument a
+//! mixed — hard problem 1. [`insert`](Book::insert) reads which instrument a
 //! `Resting` belongs to off its own `resting.order.instrument`, so that call
 //! keeps its original shape; every other method that touches one
-//! instrument's levels — [`cancel`](Self::cancel), [`side`](Self::side),
-//! [`best`](Self::best), [`consume_best`](Self::consume_best) — has no order
+//! instrument's levels — [`cancel`](Book::cancel), [`side`](Book::side),
+//! [`best`](Book::best), [`consume_best`](Book::consume_best) — has no order
 //! to read an instrument from, so each takes one as its own first argument
 //! instead. An instrument nothing has ever inserted into behaves exactly
 //! like an empty book, with no separate registration step: the first insert
 //! for a new instrument creates its slot, the same way the first order at a
 //! new price creates its level.
 //!
-//! [`iter`](Self::iter), [`len`](Self::len), and [`is_empty`](Self::is_empty)
+//! [`iter`](Book::iter), [`len`](Book::len), and [`is_empty`](Book::is_empty)
 //! stay global, across every instrument at once — the shape their one real
 //! caller needs: `exchange_core::Exchange::cancel` finds an order by id
 //! alone, with no instrument known ahead of time, so it needs a global
@@ -53,8 +53,8 @@
 //!
 //! # Representation
 //!
-//! One sorted [`Vec`] of `(`[`InstrumentId`](exchange_id::InstrumentId)`,
-//! `[`Level`](exchange_level::Level)`)` pairs per side, per instrument — best
+//! One sorted [`Vec`] of `(`[`InstrumentId`]`,
+//! `[`Level`]`)` pairs per side, per instrument — best
 //! level at index 0 within each instrument's own side; within each level,
 //! [`exchange_level`] keeps arrival order. Instruments are sorted and found
 //! by [`partition_point`](slice::partition_point), the same way prices
