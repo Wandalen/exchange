@@ -1,8 +1,9 @@
 //! Tick, lot, the asset pair, and the halt flag on one instrument.
 //!
-//! A single-tier dependent: `exchange_id` for `InstrumentId`, `exact_arith`
-//! for the decimal grid itself. This crate does not implement snapping —
-//! [`price_snap`]/[`qty_snap`] are thin wrappers over `exact_arith`'s own
+//! A single-tier dependent: `exchange_id` for `InstrumentId`, `exact_kind`
+//! for the decimal grid itself, `exact_snap`/`exact_round` for the snap
+//! machinery. This crate does not implement snapping —
+//! [`price_snap`]/[`qty_snap`] are thin wrappers over `exact_snap`'s own
 //! `price_snap_tick`/`qty_snap_lot`, which already refuse a zero-sized grid
 //! and already pick the rounding. Reimplementing either here would be a
 //! second source of truth for one piece of arithmetic, which is exactly what
@@ -13,7 +14,9 @@
 //! closes hard problems 1 (one book per instrument), 8 (tick and lot), 18
 //! (halt), and 19 (more than one asset).
 
-use exact_arith::{ Lot, Price, Quantity, SnapError, Tick, price_snap_tick, qty_snap_lot, rounding_default };
+use exact_kind::{ Price, Quantity };
+use exact_round::rounding_default;
+use exact_snap::{ Lot, SnapError, Tick, price_snap_tick, qty_snap_lot };
 use exchange_id::InstrumentId;
 
 /// The identity of one of the two assets an instrument trades — the base
@@ -85,12 +88,12 @@ pub const fn spec_halted_is( spec : &InstrumentSpec ) -> bool
 
 /// Snap `price` to `spec`'s tick grid.
 ///
-/// Uses `exact_arith::rounding_default()` (ties-to-even) rather than a
+/// Uses `exact_round::rounding_default()` (ties-to-even) rather than a
 /// direction this crate invents on its own — `exchange_spec` has no side to
 /// reason from (a buy and a sell would want opposite directions), so picking
 /// `Down` or `Up` here would be an arbitrary bias dressed up as a default.
 /// A caller that needs a directional snap applies its own `Rounding` via
-/// `exact_arith::price_snap_tick` directly, bypassing this wrapper.
+/// `exact_snap::price_snap_tick` directly, bypassing this wrapper.
 ///
 /// # Errors
 ///
@@ -98,7 +101,7 @@ pub const fn spec_halted_is( spec : &InstrumentSpec ) -> bool
 /// range.
 ///
 /// ```rust
-/// use exact_arith::{ Price, Quantity };
+/// use exact_kind::{ Price, Quantity };
 /// use exchange_id::InstrumentId;
 /// use exchange_spec::{ AssetId, price_snap, spec_new };
 ///

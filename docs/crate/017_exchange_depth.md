@@ -8,6 +8,9 @@
 - **Out of Scope**: Any mutation — this crate only reads.
 
 **Design status**: Built, in its own `exchange_depth` crate — matches the proposal exactly. Verified built-vs-proposed comparison: [`../../module/exchange_depth/docs/item/readme.md`](../../module/exchange_depth/docs/item/readme.md).
+Also depends directly on `exact_arith` (006's facade; proposed leaf was
+`exact_kind`) — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s
+per-crate table.
 
 ### Statement
 

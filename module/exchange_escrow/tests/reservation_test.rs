@@ -5,7 +5,8 @@
 //! are right, and a customer's currency is locked away forever. Testing the
 //! cancel path is the only thing that sees it.
 
-use exact_arith::{ CEILING_WHOLE_UNITS, Money, Quantity };
+use exact_kind::{ Money, Quantity };
+use exact_scale::CEILING_WHOLE_UNITS;
 use exchange_escrow::{ Escrow, EscrowError };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, InstrumentId, OrderId };

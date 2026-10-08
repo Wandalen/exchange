@@ -4,7 +4,7 @@
 //! `Trade` itself — see that file's own module doc for the full migration
 //! note.
 
-use exact_arith::{ Money, Quantity };
+use exact_kind::{ Money, Quantity };
 use exchange_fill::{ EventKind, RejectReason, Trade };
 use exchange_id::{ AccountId, OrderId };
 use exchange_side::Side;

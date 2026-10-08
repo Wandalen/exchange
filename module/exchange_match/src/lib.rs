@@ -98,7 +98,7 @@
 //! `exchange_core`'s job, same as every other outcome this crate reports
 //! rather than judges.
 
-use exact_arith::{ KindError, Quantity };
+use exact_kind::{ KindError, Quantity };
 use exchange_book::Book;
 use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;

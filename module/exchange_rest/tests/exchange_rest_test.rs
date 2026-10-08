@@ -8,7 +8,7 @@
 //! genuinely new operation and gets the deeper coverage, including the
 //! rollback path a plain cancel-then-insert can't offer atomically.
 
-use exact_arith::{ Money, Quantity };
+use exact_kind::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;

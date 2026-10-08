@@ -44,7 +44,7 @@
 //! extracts `exchange_escrow` as-is, and collapsing the redundancy would be
 //! an API change to a crate that stage explicitly does not touch.
 
-use exact_arith::{ Price, Quantity };
+use exact_kind::{ Price, Quantity };
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::Obligation;
 use exchange_seq::Sequence;

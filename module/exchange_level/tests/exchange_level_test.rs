@@ -1,6 +1,6 @@
 //! `Level`'s whole contract: one price, FIFO arrival order, nothing else.
 
-use exact_arith::{ Money, Quantity };
+use exact_kind::{ Money, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_level::
 {

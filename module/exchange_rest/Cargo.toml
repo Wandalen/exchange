@@ -15,7 +15,7 @@ exchange_id = { path = "../exchange_id" }
 # `Order` it wraps — nothing in this crate's own src/ reads these directly.
 # `exchange_id` is a real dependency now (see [dependencies]) since
 # `rest_cancel`/`rest_replace` take an `InstrumentId`/`OrderId` directly.
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_kind = { path = "../../../exact/module/exact_kind" }
 exchange_order = { path = "../exchange_order" }
 exchange_seq = { path = "../exchange_seq" }
 exchange_side = { path = "../exchange_side" }

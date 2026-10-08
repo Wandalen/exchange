@@ -1,7 +1,7 @@
 //! Test Matrix T01 — depth aggregation: per-level summing, top-N truncation,
 //! the `BadN` guard, and independence from book mutation after the read.
 
-use exact_arith::{ Money, Quantity };
+use exact_kind::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_depth::{ Depth, DepthError, LevelView, depth_top };
 use exchange_id::{ AccountId, InstrumentId, OrderId };

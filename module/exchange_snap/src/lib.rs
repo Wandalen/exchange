@@ -32,7 +32,7 @@
 //! `exchange_order` as a dependency and `SnapError { Full }` as part of the
 //! exposed surface, and this crate takes neither.
 
-use exact_arith::{ Money, Quantity };
+use exact_kind::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
 use exchange_side::Side;

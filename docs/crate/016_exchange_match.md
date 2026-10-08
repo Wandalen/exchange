@@ -7,7 +7,7 @@
 - **In Scope**: Crossing. No wallet credit, no `ring_*` import.
 - **Out of Scope**: Crediting a wallet.
 
-**Design status**: Built as the real `exchange_match` crate — `Crossing`, `cross()` (`module/exchange_match/src/lib.rs`).
+**Design status**: Built as the real `exchange_match` crate — `Crossing`, `cross()` (`module/exchange_match/src/lib.rs`). Also depends directly on `exact_arith` (`[dependencies]`, not `[dev-dependencies]`) — `src/lib.rs:101` reads `use exact_arith::{ KindError, Quantity };`, both re-exported from `exact_kind` beneath the facade. This corrects a 2026-10-07 user-supplied specification's claim that `exchange_match` has "none directly" among 006's crates — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s per-crate table for the full reconciliation.
 
 ### Statement
 

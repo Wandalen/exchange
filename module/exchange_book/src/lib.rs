@@ -74,7 +74,7 @@
 //! `Resting { order, remaining, arrival }` literal and field access is
 //! unaffected by either that change or the instrument-keying one above it.
 
-use exact_arith::{ Price, Quantity };
+use exact_kind::{ Price, Quantity };
 use exchange_id::{ InstrumentId, OrderId };
 use exchange_level::{ Level, level_empty_is, level_len, level_new, level_pop_front, level_push, level_remove };
 use exchange_side::Side;
@@ -118,7 +118,7 @@ impl Book
   /// The single expression of the price half of the priority rule; the
   /// arrival half is [`exchange_level`]'s own, inside one level. Every other
   /// function here defers to this rather than restating it.
-  fn level_ranks_ahead( side : Side, existing : exact_arith::Price, candidate : exact_arith::Price ) -> bool
+  fn level_ranks_ahead( side : Side, existing : exact_kind::Price, candidate : exact_kind::Price ) -> bool
   {
     match side
     {

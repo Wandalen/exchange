@@ -6,7 +6,7 @@
 //! exactly one place. FOK is the real behavioural branch: book-untouched on
 //! a partial, replayed-for-real on a full fill.
 
-use exact_arith::{ Money, Quantity };
+use exact_kind::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::{ Crossing, MatchError, SelfMatchPolicy, cross as cross_with_policy };

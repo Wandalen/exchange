@@ -6,7 +6,7 @@
 //! wrong sequence is a book that fills the wrong people, and nothing
 //! downstream can notice.
 
-use exact_arith::{ Money, Quantity };
+use exact_kind::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;

@@ -3,7 +3,7 @@
 //!
 //! A single-tier dependent: `exchange_id` for `InstrumentId`/`OrderId`/
 //! `AccountId`, `exchange_side` for `Side`, `exchange_tif` for `Tif`,
-//! `exact_arith` for the decimal grid. This crate has no concept of a price
+//! `exact_kind` for the decimal grid. This crate has no concept of a price
 //! level or a book — that is `exchange_level`'s and `exchange_book`'s concern,
 //! not this one's.
 //!
@@ -35,7 +35,7 @@
 //! `Order`/`Obligation` rather than the reverse, which is the shape every
 //! crate `exchange_types` sheds types to ends up in.
 
-use exact_arith::{ Price, Quantity };
+use exact_kind::{ Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_side::Side;
 use exchange_tif::Tif;
