@@ -58,9 +58,11 @@ everything else. Its own logic is the sequencing:
 4. **settle** — each trade, in order, releasing price improvement to the buyer;
 5. **dispose** — the remainder rests; every step emits its event.
 
-Every escrow move goes through the `EscrowPort` trait — `reserve`, `settle`,
-`release` — with `exchange_escrow::Escrow` as the default implementation
-(`Exchange::new()`); `Exchange::with_escrow` accepts any other.
+Every escrow move on the matching path goes through the `EscrowPort` trait —
+`reserve`, `settle`, `release` — with `exchange_escrow::Escrow` as the default
+implementation (`Exchange::new()`); `Exchange::with_escrow` accepts any other.
+Funding an account (`open_account`) is not on that path and exists only for
+`Escrow`.
 [`tests/escrow_port_test.rs`](tests/escrow_port_test.rs) uses it to grade the
 five steps against a scripted escrow. See
 [ADR-002](docs/decisions/002_escrow_reached_through_escrow_port.md).

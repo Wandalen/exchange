@@ -118,9 +118,11 @@ pub use exchange_tif::Tif;
 use exchange_tif::tif_rests;
 pub use exchange_types::{ Price, TypeError, notional, obligation };
 
-/// The three escrow moves [`Exchange`] makes, and the only way it reaches
-/// escrow at all — [`Escrow`] is the default implementation, not a dependency
-/// of the sequencing.
+/// The three escrow moves [`Exchange`] makes on the matching path, and the
+/// only way that path reaches escrow — [`Escrow`] is the default
+/// implementation, not a dependency of the sequencing. Funding an account is
+/// not one of them: [`Exchange::open_account`] exists on `Exchange< Escrow >`
+/// only.
 ///
 /// Each method keeps [`Escrow`]'s own name and meaning: [`Self::reserve`]
 /// before an order is visible to matching, [`Self::settle`] once per trade,
