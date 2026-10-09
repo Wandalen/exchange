@@ -1,17 +1,9 @@
 //! Tick, lot, the asset pair, and the halt flag on one instrument.
 //!
-//! A single-tier dependent: `exchange_id` for `InstrumentId`, `exact_arith`
-//! for the decimal grid itself. This crate does not implement snapping —
-//! [`price_snap`]/[`qty_snap`] are thin wrappers over `exact_arith`'s own
-//! `price_snap_tick`/`qty_snap_lot`, which already refuse a zero-sized grid
-//! and already pick the rounding. Reimplementing either here would be a
-//! second source of truth for one piece of arithmetic, which is exactly what
-//! this family's own module documentation warns against for `Trade`/`Fill`.
-//!
-//! Before this crate, an illegal price could enter the book with no grid to
-//! reject it against, and nothing distinguished one instrument from another —
-//! closes hard problems 1 (one book per instrument), 8 (tick and lot), 18
-//! (halt), and 19 (more than one asset).
+//! Snapping is not implemented here: [`price_snap`]/[`qty_snap`] wrap
+//! `exact_arith`'s `price_snap_tick`/`qty_snap_lot`, which already refuse a
+//! zero grid and pick the rounding — one source of truth for the arithmetic.
+//! Closes hard problems 1, 8, 18 and 19, and features 4 and 5.
 
 use exact_arith::{ Lot, Price, Quantity, SnapError, Tick, price_snap_tick, qty_snap_lot, rounding_default };
 use exchange_id::InstrumentId;

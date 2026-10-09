@@ -9,7 +9,7 @@ transposing them in the struct literal still type-checks.
 ## M1 — the `base`/`quote` argument order is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_spec/src/lib.rs, in spec_new,
+# In module/exchange_spec/src/lib.rs, in spec_new,
 # replace  InstrumentSpec { id, base, quote, tick, lot, halted : false }
 # with     InstrumentSpec { id, base : quote, quote : base, tick, lot, halted : false }
 cargo test -p exchange_spec --all-features 2>&1 | grep -E 'FAILED|test result'
