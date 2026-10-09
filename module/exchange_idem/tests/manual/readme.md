@@ -1,6 +1,6 @@
 # exchange_idem — manual testing plan
 
-`idem_insert`'s correctness rests entirely on reading `BTreeSet::insert`'s
+`idem_insert`'s correctness rests entirely on reading `HashSet::insert`'s
 return value the right way round (`true` means newly inserted, `false` means
 already present) — a convention different collection APIs disagree on, and the
 one place a reviewer's intuition could silently flip without the compiler
@@ -9,7 +9,7 @@ noticing.
 ## M1 — the insert-success branch is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_idem/src/lib.rs, in idem_insert,
+# In module/exchange_idem/src/lib.rs, in idem_insert,
 # replace  if set.seen.insert( id )
 # with     if !set.seen.insert( id )
 cargo test -p exchange_idem --all-features 2>&1 | grep -E 'FAILED|test result'

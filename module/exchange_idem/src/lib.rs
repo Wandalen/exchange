@@ -1,35 +1,21 @@
 //! An `OrderId` seen once per book.
 //!
-//! A root of the dependency tree: its only dependency is `exchange_id`, and
-//! it knows nothing about a book, a price, or a side — it answers exactly
-//! one question, "has this id already been seen," and nothing else.
-//!
-//! # Genuinely new
-//!
-//! Before this crate, idempotency was a side effect rather than a decision:
-//! `exchange_book::Book::insert` (`module/exchange_book/src/lib.rs`) already
-//! refuses a second resting order sharing an `OrderId`, but silently, by
-//! returning `false` for the same reason it refuses a zero-remaining insert —
-//! a caller cannot tell "this id already rests" from "this quantity was
-//! already zero" without a dedicated reason code. This crate closes hard
-//! problem 15 (idempotent order ids) and feature 19 (unique `OrderId` per
-//! book) by giving that one case its own name, [`IdemError::Duplicate`],
-//! checkable *before* an id ever reaches `Book::insert` at all.
+//! Depends on `exchange_id` alone and knows nothing about a book, a price, or
+//! a side. A repeat gets its own refusal, [`IdemError::Duplicate`], checkable
+//! before the id reaches `exchange_book::Book::insert` — which refuses a
+//! duplicate too, but with the same `false` it returns for a zero remainder.
+//! Closes hard problem 15 and feature 19.
 //!
 //! # Any key, `OrderId` by default
 //!
-//! [`IdSet`] is generic over its key, defaulting to [`OrderId`]. Where the
-//! exchange assigns `OrderId` itself, a repeat can only be recognised by the
-//! submitter's own id — key the set by `( AccountId, ClientOrderId )` there.
+//! Where the exchange assigns `OrderId` itself, only the submitter's own id
+//! marks a retry — key the set by `( AccountId, ClientOrderId )` there.
 //!
 //! # Membership, not priority
 //!
-//! [`IdSet`] stores its seen ids in a [`std::collections::HashSet`]. This
-//! does not conflict with the family's own "no hash iteration anywhere" rule
-//! (see `exchange_book`'s module doc) — that rule guards against hash
-//! *iteration order* leaking into a priority decision. `IdSet` is never
-//! iterated; every operation here is a single-key membership test or
-//! mutation, for which a hash set's own order is simply never observed.
+//! Backed by a [`std::collections::HashSet`]. The family's "no hash iteration"
+//! rule (see `exchange_book`) keeps hash order out of priority decisions;
+//! `IdSet` is never iterated, so its order is never observed.
 
 use core::hash::Hash;
 use std::collections::HashSet;
