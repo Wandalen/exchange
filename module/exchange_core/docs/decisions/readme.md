@@ -25,7 +25,7 @@ open question, not this crate's.
 ### Regenerate
 
 ```sh
-cd "$(git rev-parse --show-toplevel)"/substrate/exchange/module/exchange_core/docs/decisions
+cd "$(git rev-parse --show-toplevel)"/module/exchange_core/docs/decisions
 printf 'ADR instances:            '; ls [0-9][0-9][0-9]_*.md 2>/dev/null | wc -l
 # ADR instances:            2
 ```
