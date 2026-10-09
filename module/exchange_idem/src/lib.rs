@@ -63,7 +63,7 @@ impl core::fmt::Display for IdemError
   {
     match self
     {
-      Self::Duplicate => write!( f, "this order id was already seen" ),
+      Self::Duplicate => write!( f, "this key was already seen" ),
     }
   }
 }
