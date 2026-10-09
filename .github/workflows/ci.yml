@@ -1,6 +1,6 @@
 # Fast verification — master pushes and PRs.
 #
-# Mirrors `substrate/exact`'s own CI structure (itself mirroring `substrate/ring`)
+# Mirrors `Wandalen/exact`'s own CI structure (itself mirroring `Wandalen/ring`)
 # and this project's CLAUDE.md Level 1-3 verification commands (nextest, doctests,
 # clippy). Deliberately has no fmt job: CLAUDE.md forbids `cargo fmt` for this
 # project's custom codestyle.
@@ -31,10 +31,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: exact and ring next to the checkout
-        run: |
-          git clone -q https://github.com/Wandalen/exact ../exact && git -C ../exact checkout -q "$EXACT_REV"
-          git clone -q https://github.com/Wandalen/ring ../ring && git -C ../ring checkout -q "$RING_REV"
+      - uses: ./.github/actions/checkout-siblings
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
@@ -49,10 +46,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: exact and ring next to the checkout
-        run: |
-          git clone -q https://github.com/Wandalen/exact ../exact && git -C ../exact checkout -q "$EXACT_REV"
-          git clone -q https://github.com/Wandalen/ring ../ring && git -C ../ring checkout -q "$RING_REV"
+      - uses: ./.github/actions/checkout-siblings
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: clippy
@@ -66,10 +60,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: exact and ring next to the checkout
-        run: |
-          git clone -q https://github.com/Wandalen/exact ../exact && git -C ../exact checkout -q "$EXACT_REV"
-          git clone -q https://github.com/Wandalen/ring ../ring && git -C ../ring checkout -q "$RING_REV"
+      - uses: ./.github/actions/checkout-siblings
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
       - name: rustdoc, warnings denied
