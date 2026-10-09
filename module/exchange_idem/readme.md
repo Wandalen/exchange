@@ -26,7 +26,8 @@ crate gives that one case its own checkable, named error, pre-emptively.
 
 - `exchange_inbound::inbound_apply` keys by `OrderId`: it is `pub`, bypasses
   `exchange_core`, and lets its caller pick ids, so a repeated `OrderId` is a
-  real retry there.
+  real retry there. It keys a second set by `( AccountId, ClientOrderId )`,
+  as `exchange_core` does.
 - `exchange_core` keys by `( AccountId, ClientOrderId )`: it assigns
   `OrderId` itself, so only the submitter's own id can mark a retry.
 
@@ -55,6 +56,6 @@ indistinguishable from the retry this crate exists to refuse.
 ## Related
 
 - [`exchange_id/`](../exchange_id/readme.md) — supplies `OrderId`, `AccountId`, `ClientOrderId`
-- [`exchange_inbound/`](../exchange_inbound/readme.md) — caller keyed by `OrderId`, via `inbound_apply`'s `seen : &mut IdSet`
+- [`exchange_inbound/`](../exchange_inbound/readme.md) — caller keyed by `OrderId` and by `( AccountId, ClientOrderId )`, via `inbound_apply`'s `Claims`
 - [`exchange_core/`](../exchange_core/readme.md) — caller keyed by `( AccountId, ClientOrderId )`
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p13_idem`

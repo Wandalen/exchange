@@ -251,7 +251,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   ```rust
   use exchange_book::Book;
   use exchange_id::{ InstrumentId, OrderId };
-  use exchange_inbound::{ InboundCmd, inbound_apply, inbound_drain, inbound_ring };
+  use exchange_inbound::{ Claims, InboundCmd, inbound_apply, inbound_drain, inbound_ring };
   use exchange_stp::SelfMatchPolicy;
 
   let mut split = inbound_ring( 8 ).unwrap();
@@ -260,9 +260,10 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   producer.try_push( InboundCmd::Cancel { instrument : InstrumentId( 1 ), id : OrderId( 1 ) } ).unwrap();
 
   let mut book = Book::new();
+  let mut claims = Claims::new();
   for cmd in inbound_drain( &mut consumer )
   {
-    inbound_apply( &mut book, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+    inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
   }
   ```
   `inbound_apply` (called directly here, against a bare `Book`) and `Exchange::exchange_step` (Tier 6) are two different consumers of the same ring contract — the facade does not call `inbound_apply` itself, it re-implements per-command dispatch as its own `step_one` so a drained `Place` runs the full validate-reserve-match-settle pipeline rather than a bare book insert. `ring_handle::Producer` can't be cloned, so "two producers" is built as two independent rings combined in a fixed lane order on drain, not one shared ring — a deliberate divergence from the proposal's single-ring assumption, not a limitation worked around silently. Genuinely moves data across a real ring, in its own OS threads, with its own two-producer and overflow phase-smokes (P28, P29).

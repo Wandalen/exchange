@@ -3,9 +3,9 @@
 
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
-use exchange_id::{ AccountId, InstrumentId, OrderId };
-use exchange_idem::{ IdemError, IdSet };
-use exchange_inbound::{ inbound_apply, inbound_drain, inbound_flush, inbound_overflow_reject, inbound_ring, InboundApplyError, InboundCmd, InboundOutcome };
+use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
+use exchange_idem::IdemError;
+use exchange_inbound::{ inbound_apply, inbound_drain, inbound_flush, inbound_overflow_reject, inbound_ring, Claims, InboundApplyError, InboundCmd, InboundOutcome };
 use exchange_match::MatchError;
 use exchange_order::Order;
 use exchange_rest::RestReplaceError;
@@ -132,10 +132,10 @@ fn drain_is_empty_on_a_fresh_ring()
 fn a_place_with_nothing_to_cross_rests_on_the_book()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   let cmd = InboundCmd::Place( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) );
 
-  let outcome = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 
   let InboundOutcome::Crossed( crossing ) = outcome else { panic!( "Place must produce Crossed" ) };
   assert!( crossing.trades.is_empty(), "nothing on the book to cross against" );
@@ -146,11 +146,11 @@ fn a_place_with_nothing_to_cross_rests_on_the_book()
 fn a_place_that_fully_crosses_leaves_nothing_resting()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   assert!( book.insert( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ), "fresh id, must succeed" );
 
   let cmd = InboundCmd::Place( resting( 2, Side::Buy, "1.00", 5, Tif::Gtc ) );
-  let outcome = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 
   let InboundOutcome::Crossed( crossing ) = outcome else { panic!( "Place must produce Crossed" ) };
   assert!( crossing.is_complete() );
@@ -162,10 +162,10 @@ fn a_place_that_fully_crosses_leaves_nothing_resting()
 fn an_ioc_place_never_rests_its_remainder()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   let cmd = InboundCmd::Place( resting( 1, Side::Buy, "1.00", 5, Tif::Ioc ) );
 
-  let outcome = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 
   let InboundOutcome::Crossed( crossing ) = outcome else { panic!( "Place must produce Crossed" ) };
   assert_eq!( crossing.trades.len(), 0 );
@@ -177,11 +177,11 @@ fn an_ioc_place_never_rests_its_remainder()
 fn a_post_only_place_that_would_take_is_refused_and_never_rests()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
-  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ) ).unwrap();
+  let mut claims = Claims::new();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ) ).unwrap();
 
   let cmd = InboundCmd::Place( resting( 2, Side::Buy, "1.00", 5, Tif::PostOnly ) );
-  let error = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap_err();
+  let error = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap_err();
 
   assert_eq!( error, InboundApplyError::Match( MatchError::PostOnlyWouldTake ) );
   assert_eq!( book.len(), 1, "only the original ask rests" );
@@ -191,13 +191,13 @@ fn a_post_only_place_that_would_take_is_refused_and_never_rests()
 fn cancel_withdraws_a_resting_order_and_reports_none_when_absent()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   assert!( book.insert( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) ), "fresh id, must succeed" );
 
-  let found = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
+  let found = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
   assert!( matches!( found, InboundOutcome::Cancelled( Some( _ ) ) ) );
 
-  let missing = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
+  let missing = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
   assert!( matches!( missing, InboundOutcome::Cancelled( None ) ), "already withdrawn — a race result, not an error" );
 }
 
@@ -205,11 +205,11 @@ fn cancel_withdraws_a_resting_order_and_reports_none_when_absent()
 fn replace_swaps_the_resting_order_atomically()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   assert!( book.insert( resting( 1, Side::Sell, "2.00", 4, Tif::Gtc ) ), "fresh id, must succeed" );
 
   let cmd = InboundCmd::Replace { instrument : INSTRUMENT, old_id : OrderId( 1 ), new_resting : resting( 1, Side::Sell, "2.10", 6, Tif::Gtc ) };
-  let outcome = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 
   let InboundOutcome::Replaced( Ok( old ) ) = outcome else { panic!( "Replace must succeed here" ) };
   assert_eq!( old.order.price, Price::parse( "2.00" ).unwrap() );
@@ -220,10 +220,10 @@ fn replace_swaps_the_resting_order_atomically()
 fn replace_of_a_missing_order_reports_missing()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   let cmd = InboundCmd::Replace { instrument : INSTRUMENT, old_id : OrderId( 99 ), new_resting : resting( 99, Side::Sell, "2.10", 6, Tif::Gtc ) };
 
-  let outcome = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
   assert!( matches!( outcome, InboundOutcome::Replaced( Err( RestReplaceError::Missing ) ) ) );
 }
 
@@ -236,14 +236,14 @@ fn replace_of_a_missing_order_reports_missing()
 fn replace_refuses_a_new_resting_for_a_different_instrument()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   assert!( book.insert( resting( 1, Side::Sell, "2.00", 4, Tif::Gtc ) ) );
 
   let mismatched = resting( 1, Side::Sell, "2.10", 6, Tif::Gtc );
   let mismatched = Resting { order : Order { instrument : InstrumentId( 2 ), ..mismatched.order }, ..mismatched };
   let cmd = InboundCmd::Replace { instrument : INSTRUMENT, old_id : OrderId( 1 ), new_resting : mismatched };
 
-  let outcome = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 
   assert!( matches!( outcome, InboundOutcome::Replaced( Err( RestReplaceError::InstrumentMismatch ) ) ) );
   assert_eq!( book.best( InstrumentId( 2 ), Side::Sell ), None, "the mismatched replacement must not land on instrument 2" );
@@ -295,7 +295,7 @@ fn replace_refuses_a_new_resting_for_a_different_instrument()
 fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
   let shared_account = AccountId( 7 );
 
   let resting_sell = Resting { order : Order { account : shared_account, ..resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ).order }, ..resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) };
@@ -304,7 +304,7 @@ fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
   let incoming_buy = Resting { order : Order { account : shared_account, ..resting( 2, Side::Buy, "1.00", 5, Tif::Gtc ).order }, ..resting( 2, Side::Buy, "1.00", 5, Tif::Gtc ) };
   let cmd = InboundCmd::Place( incoming_buy );
 
-  let outcome = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelIncoming, cmd ).unwrap();
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelIncoming, cmd ).unwrap();
 
   let InboundOutcome::Crossed( crossing ) = outcome else { panic!( "Place must produce Crossed" ) };
   assert_eq!( crossing.cancelled.len(), 1, "the incoming order was self-match-cancelled, not filled" );
@@ -353,16 +353,16 @@ fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
 fn duplicate_place_id_is_refused_not_silently_dropped()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
 
   let first = InboundCmd::Place( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) );
-  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, first ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, first ).unwrap();
   assert!( book.best( INSTRUMENT, Side::Buy ).is_some(), "the first order rests" );
 
   // Same id, different account/price/quantity — a retried or malicious
   // resubmission, not a legitimate second order.
   let repeat = InboundCmd::Place( resting( 1, Side::Buy, "0.90", 3, Tif::Gtc ) );
-  let error = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, repeat ).unwrap_err();
+  let error = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ).unwrap_err();
 
   assert_eq!( error, InboundApplyError::Idem( IdemError::Duplicate ) );
   assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Price::parse( "1.00" ).unwrap(), "the duplicate must not have touched the book at all" );
@@ -373,19 +373,101 @@ fn duplicate_place_id_is_refused_not_silently_dropped()
 fn cancel_then_resubmit_under_the_same_id_is_accepted()
 {
   let mut book = Book::new();
-  let mut seen = IdSet::new();
+  let mut claims = Claims::new();
 
   let place = InboundCmd::Place( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) );
-  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, place ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, place ).unwrap();
 
   let cancel = InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) };
-  let cancelled = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cancel ).unwrap();
+  let cancelled = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cancel ).unwrap();
   assert!( matches!( cancelled, InboundOutcome::Cancelled( Some( _ ) ) ) );
 
   // A legitimate resubmission under the same, now-cancelled id must be
   // accepted again — the whole reason `idem_remove` exists.
   let resubmit = InboundCmd::Place( resting( 1, Side::Buy, "1.05", 4, Tif::Gtc ) );
-  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, resubmit ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, resubmit ).unwrap();
 
   assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Price::parse( "1.05" ).unwrap() );
+}
+
+/// A repeated id is refused before it crosses. Checked only where the
+/// remainder would rest, it traded against the book first — the resting bid
+/// below was consumed — and the caller got `Err` without those trades.
+#[ test ]
+fn a_duplicate_place_id_is_refused_before_it_trades()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ) ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 2, Side::Buy, "0.90", 5, Tif::Gtc ) ) ).unwrap();
+
+  let repeat = InboundCmd::Place( resting( 1, Side::Sell, "0.90", 8, Tif::Gtc ) );
+  let error = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ).unwrap_err();
+
+  assert_eq!( error, InboundApplyError::Idem( IdemError::Duplicate ) );
+  let bid = book.best( INSTRUMENT, Side::Buy ).expect( "the refused repeat must not have traded the bid away" );
+  assert_eq!( ( bid.order.id, bid.remaining ), ( OrderId( 2 ), Quantity::from_int( 5 ).unwrap() ) );
+}
+
+/// `resting( .. )` under client id `client`.
+fn tagged( id : u64, account : u64, side : Side, price : &str, quantity : i64, tif : Tif, client : u64 ) -> Resting
+{
+  let base = resting( id, side, price, quantity, tif );
+  Resting { order : Order { account : AccountId( account ), client : Some( ClientOrderId( client ) ), ..base.order }, ..base }
+}
+
+/// A retry under the same `( AccountId, ClientOrderId )` with a fresh order
+/// id is refused before it crosses, as `exchange_core` refuses one. Another
+/// account may use the same value.
+#[ test ]
+fn a_retry_under_the_same_client_id_is_refused()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( tagged( 1, 1, Side::Sell, "1.00", 5, Tif::Gtc, 7 ) ) ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 2, Side::Buy, "0.90", 5, Tif::Gtc ) ) ).unwrap();
+
+  let retry = InboundCmd::Place( tagged( 3, 1, Side::Sell, "0.90", 5, Tif::Gtc, 7 ) );
+  let error = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, retry ).unwrap_err();
+  assert_eq!( error, InboundApplyError::DuplicateClientId );
+  assert_eq!( book.len(), 2, "the retry neither rested nor traded" );
+
+  let other_account = InboundCmd::Place( tagged( 4, 4, Side::Sell, "1.10", 5, Tif::Gtc, 7 ) );
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, other_account ).unwrap();
+  assert_eq!( book.len(), 3 );
+}
+
+/// A client id stays claimed after its order is cancelled — a retry of a
+/// cancelled order is still a retry.
+#[ test ]
+fn a_client_id_stays_claimed_after_cancel()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( tagged( 1, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) ) ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
+
+  let retry = InboundCmd::Place( tagged( 2, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) );
+  assert_eq!( inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, retry ), Err( InboundApplyError::DuplicateClientId ) );
+}
+
+/// A refused place claims nothing: a post-only that would take may be
+/// resubmitted under the same client id.
+#[ test ]
+fn a_refused_place_does_not_claim_its_client_id()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ) ).unwrap();
+
+  let taking = InboundCmd::Place( tagged( 2, 2, Side::Buy, "1.00", 5, Tif::PostOnly, 7 ) );
+  assert_eq!
+  (
+    inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, taking ),
+    Err( InboundApplyError::Match( MatchError::PostOnlyWouldTake ) ),
+  );
+
+  let passive = InboundCmd::Place( tagged( 3, 2, Side::Buy, "0.95", 5, Tif::PostOnly, 7 ) );
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, passive ).unwrap();
+  assert_eq!( book.len(), 2 );
 }

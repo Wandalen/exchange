@@ -67,12 +67,18 @@
 //!
 //! # Idempotency
 //!
-//! [`inbound_apply`] takes a `seen : &mut IdSet` and checks/claims the
-//! incoming id with `exchange_idem::idem_insert` before ever resting a
-//! [`InboundCmd::Place`]'s remainder — and un-claims it with
+//! [`inbound_apply`] takes the caller's [`Claims`], refuses a
+//! [`InboundCmd::Place`] whose id it already claims before crossing, and
+//! claims the id with `exchange_idem::idem_insert` once the remainder rests —
+//! and un-claims it with
 //! `exchange_idem::idem_remove` once a [`InboundCmd::Cancel`]/
 //! [`InboundCmd::Replace`] actually withdraws it, so a legitimate
 //! cancel-then-resubmit is accepted again rather than permanently refused.
+//!
+//! A `Place` carrying a `ClientOrderId` is refused too if its account already
+//! placed an order under it — the rule `exchange_core` applies, claim never
+//! released included, so a caller bypassing the facade keeps the retry
+//! guarantee. `Replace` neither checks nor claims a client id.
 //!
 //! This is *not* the same orchestration-stays-in-the-facade story the
 //! paragraph above tells for cap/escrow. Unlike those two, idempotency has a
@@ -92,13 +98,9 @@
 //! can branch on separately from "this quantity was already zero" — this
 //! crate's `idem_insert` call is what gives it one, named and returned to
 //! the caller rather than silently discarded the way a bare `rest_place`
-//! bool was before `Fix(exchange_inbound/BUG-003)`. It is checked only at
-//! the point a remainder would actually rest — not any earlier, against the
-//! incoming order as a whole — because that is the one place a repeat id
-//! can do the harm `exchange_idem` exists to name: doubling what rests. A
-//! repeat that happens to fully fill the second time around touches the
-//! book not at all, so there is nothing there for a duplicate check to
-//! protect.
+//! bool was before `Fix(exchange_inbound/BUG-003)`. An id is claimed only
+//! while its order rests, but checked before crossing: a repeat that crossed
+//! first would trade against the book and then be refused.
 //!
 //! # What this crate does not do
 //!
@@ -109,8 +111,8 @@
 //! decision; this crate only carries and applies what it is given.
 
 use exchange_book::{ Book, Resting };
-use exchange_id::{ InstrumentId, OrderId };
-use exchange_idem::{ idem_insert, idem_remove };
+use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
+use exchange_idem::{ idem_insert, idem_remove, idem_seen };
 use exchange_match::{ cross, Crossing, MatchError, SelfMatchPolicy };
 use exchange_rest::{ rest_cancel, rest_place, rest_replace, RestReplaceError };
 use exchange_tif::tif_rests;
@@ -178,6 +180,9 @@ pub enum InboundApplyError
   /// not-yet-cancelled `Place` — a retried submission, not a new order. See
   /// the module doc's "Idempotency" section.
   Idem( IdemError ),
+  /// [`InboundCmd::Place`] carried a `ClientOrderId` its account already
+  /// placed an order under — a retry, not a new order.
+  DuplicateClientId,
 }
 
 impl core::fmt::Display for InboundApplyError
@@ -188,6 +193,7 @@ impl core::fmt::Display for InboundApplyError
     {
       Self::Match( error ) => write!( f, "matching failed: {error}" ),
       Self::Idem( error ) => write!( f, "place refused: {error}" ),
+      Self::DuplicateClientId => write!( f, "place refused: this account already placed an order under this client id" ),
     }
   }
 }
@@ -200,6 +206,7 @@ impl core::error::Error for InboundApplyError
     {
       Self::Match( error ) => Some( error ),
       Self::Idem( error ) => Some( error ),
+      Self::DuplicateClientId => None,
     }
   }
 }
@@ -217,6 +224,25 @@ impl From< IdemError > for InboundApplyError
   fn from( error : IdemError ) -> Self
   {
     Self::Idem( error )
+  }
+}
+
+/// What [`inbound_apply`] has claimed: an order id while its order rests, and
+/// every `( AccountId, ClientOrderId )` it accepted, for good.
+#[ derive( Debug, Clone, Default ) ]
+pub struct Claims
+{
+  orders : IdSet,
+  clients : IdSet< ( AccountId, ClientOrderId ) >,
+}
+
+impl Claims
+{
+  /// Nothing claimed yet.
+  #[ must_use ]
+  pub fn new() -> Self
+  {
+    Self::default()
   }
 }
 
@@ -286,30 +312,52 @@ pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< Inbou
   consumer.drain().collect()
 }
 
-/// Apply one drained [`InboundCmd`] to `book`, tracking claimed ids in `seen`.
+/// Apply one drained [`InboundCmd`] to `book`, tracking claimed ids in `claims`.
 ///
 /// `policy` is supplied by the caller on every call, same as
 /// `exchange_match::cross` itself — this crate holds no state of its own
-/// between calls either; `seen` is the caller's, threaded through exactly
+/// between calls either; `claims` is the caller's, threaded through exactly
 /// like `book`. See the module doc's "`inbound_apply`'s `Place`" section for
 /// why [`InboundCmd::Place`] reaches `exchange_match` rather than
 /// `exchange_rest::rest_place` directly, and its "Idempotency" section for
-/// why `seen` exists at all.
+/// why `claims` exists at all.
 ///
 /// # Errors
 ///
 /// [`InboundApplyError::Match`] exactly when `exchange_match::cross` itself
 /// returns one — in practice a post-only order that would take, with `book`
 /// untouched.
-/// [`InboundApplyError::Idem`] if [`InboundCmd::Place`] names an id `seen`
-/// already claims.
-pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
+/// [`InboundApplyError::Idem`] if [`InboundCmd::Place`] names an id `claims`
+/// already holds, [`InboundApplyError::DuplicateClientId`] if it carries a
+/// client id its account already used — both with `book` untouched.
+pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
 {
   match cmd
   {
     InboundCmd::Place( resting ) =>
     {
-      let crossing = cross( book, &resting.order, policy )?;
+      // Fix(inbound_apply_duplicate_traded_before_refusal): a repeated id was
+      // checked only where its remainder would rest — after `cross` had
+      // already traded it against the book — so the caller got `Err` and
+      // lost trades that had happened.
+      // Root cause: the check sat where the harm was assumed to be (a second
+      // rest), not where the book is first touched.
+      // Pitfall: refuse before the first mutation, not before the last one.
+      let order = resting.order;
+      if idem_seen( &claims.orders, order.id )
+      {
+        return Err( InboundApplyError::Idem( IdemError::Duplicate ) );
+      }
+      let client = order.client.map( | client | ( order.account, client ) );
+      if client.is_some_and( | key | idem_seen( &claims.clients, key ) )
+      {
+        return Err( InboundApplyError::DuplicateClientId );
+      }
+      let crossing = cross( book, &order, policy )?;
+      if let Some( key ) = client
+      {
+        idem_insert( &mut claims.clients, key ).expect( "checked unseen before crossing" );
+      }
 
       // Fix(exchange_inbound/BUG-002): a self-match-cancelled incoming order was
       // rested anyway, because `!crossing.is_complete()` is true whenever
@@ -346,7 +394,7 @@ pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPol
         // comment attached. An invariant a *public* function depends on must be
         // enforced for every caller, not assumed from the one caller that
         // currently happens to satisfy it.
-        idem_insert( seen, resting.order.id )?;
+        idem_insert( &mut claims.orders, order.id ).expect( "checked unseen before crossing" );
         let remainder = Resting { remaining : crossing.remaining, ..resting };
         let placed = rest_place( book, remainder );
         debug_assert!( placed, "idem_insert above already refused a repeat; a freshly-claimed id cannot also collide in Book::insert" );
@@ -359,7 +407,7 @@ pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPol
       let cancelled = rest_cancel( book, instrument, id );
       if cancelled.is_some()
       {
-        idem_remove( seen, id );
+        idem_remove( &mut claims.orders, id );
       }
       Ok( InboundOutcome::Cancelled( cancelled ) )
     },
@@ -369,8 +417,8 @@ pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPol
       let result = rest_replace( book, instrument, old_id, new_resting );
       if result.is_ok()
       {
-        idem_remove( seen, old_id );
-        idem_insert( seen, new_id )
+        idem_remove( &mut claims.orders, old_id );
+        idem_insert( &mut claims.orders, new_id )
           .expect( "rest_replace's own underlying Book::insert already proved this id free" );
       }
       Ok( InboundOutcome::Replaced( result ) )
