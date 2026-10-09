@@ -1,7 +1,7 @@
 //! Test Matrix T01 — `Order`'s own fields, independent of `obligation()`'s
 //! classification logic, which stays tested in `exchange_types`.
 //!
-//! No same-typed field pair exists on `Order` — every one of its seven fields
+//! No same-typed field pair exists on `Order` — every one of its eight fields
 //! has a distinct type, so a struct-literal transposition is a compile error,
 //! not a silent bug the way `exchange_spec`'s `base`/`quote` swap was. Nothing
 //! here needs a mutation test the way that one did; see `tests/manual/readme.md`.

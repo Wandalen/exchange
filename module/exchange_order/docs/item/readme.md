@@ -5,7 +5,7 @@
 - **Purpose**: The full exposed surface this crate declares, as built vs. as the source proposal specified it.
 - **Responsibility**: One consolidated table plus a verified comparison against `core_exchange.txt`.
 - **In Scope**: `Amount`, `Order`, `Obligation`.
-- **Out of Scope**: Build status prose for the whole crate (→ [`../../readme.md`](../../readme.md)); the superseded central summary (→ [`../../../../docs/crate/006_exchange_order.md`](../../../../docs/crate/006_exchange_order.md), [`../../../../docs/exposed_item/006_exchange_order_items.md`](../../../../docs/exposed_item/006_exchange_order_items.md)).
+- **Out of Scope**: Build status prose for the whole crate (→ [`../../readme.md`](../../readme.md)); the central summary (→ [`../../../../docs/crate/006_exchange_order.md`](../../../../docs/crate/006_exchange_order.md)).
 
 ### Overview Table
 
@@ -17,40 +17,20 @@
 
 ### Differs from the proposal
 
-Verified directly against `core_exchange.txt:386-391` (crate 6, Prompt 2) and
-`core_exchange.txt:561-566` (exposed-item list, Prompt 3) — not against the
-central `docs/crate/006_exchange_order.md`/`docs/exposed_item/006_exchange_order_items.md`
-summaries, which describe a now-superseded state (`Order` folded into
-`exchange_types`, missing `instrument`/`tif`) and are thinned to point here.
+The source design (`core_exchange.txt:386-391` and `:561-566`, catalogued at
+[`../../../../docs/exposed_item/006_exchange_order_items.md`](../../../../docs/exposed_item/006_exchange_order_items.md))
+specifies `Order { id, instrument, account, side, price, qty, tif, seq }` with
+`order_new`, `order_qty_set`, `order_qty_left`, `order_is_empty`, and
+`OrderError { ZeroQty, BadId }`. The real build:
 
-The proposal specifies `Order { id, instrument, account, side, price, qty, tif, seq }`
-with `order_new`, `order_qty_set`, `order_qty_left`, `order_is_empty`, and a
-dedicated `OrderError { ZeroQty, BadId }`. The real build:
-
-- Has every field the proposal names on `Order` **except** `seq` — `Sequence`
-  is attached to `Event`, not to `Order` (see `exchange_seq`'s own readme).
-  `instrument` and `tif` — the two fields missing when this crate was still
-  folded into `exchange_types` — are both present now that `Order` has its
-  own crate.
-- Adds `client : Option< ClientOrderId >` — not in the proposal; the
-  submitter's own id, which `exchange_core` refuses to see twice from one
-  account.
-- Builds no `order_new` — every field stays `pub`, so a plain struct literal
-  is the only construction path, with no second fallible path to keep in
-  sync with it.
-- Builds no `order_qty_set`/`order_qty_left`/`order_is_empty` — `Order.quantity`
-  is immutable for the order's lifetime; the shrinking remainder lives on
-  `exchange_book::Resting`/`exchange_level::LevelNode` once the order rests,
-  since only a resting order has a remainder to track.
-- Builds no `OrderError` — a zero-quantity order is refused at
-  `exchange_core`'s submission boundary via `RejectReason::ZeroQuantity`,
-  not at construction time.
-- Adds `Obligation` (and its `Amount` alias) — not named in crate 6's own
-  exposed-item list, but assigned here because the family's dependency tree
-  never gave `Obligation` a crate of its own and what an order commits is
-  order-shaped.
-
-Full reasoning for each omission: [`../decisions/readme.md`](../decisions/readme.md).
+- Has every proposed field except `seq` — `Sequence` is stamped on `Event`
+  and on a resting order's `arrival`.
+- Adds `client : Option< ClientOrderId >`, the submitter's own id, which
+  `exchange_core` refuses to see twice from one account.
+- Builds none of the five functions and types — see
+  [`../decisions/001_no_order_mutation_or_error.md`](../decisions/001_no_order_mutation_or_error.md).
+- Adds `Obligation` and its `Amount` alias — never assigned a crate by the
+  proposal, and order-shaped.
 
 ### Sources
 
