@@ -1,13 +1,13 @@
 //! Test Matrix T01 — `Order`'s own fields, independent of `obligation()`'s
 //! classification logic, which stays tested in `exchange_types`.
 //!
-//! No same-typed field pair exists on `Order` — every one of its seven fields
+//! No same-typed field pair exists on `Order` — every one of its eight fields
 //! has a distinct type, so a struct-literal transposition is a compile error,
 //! not a silent bug the way `exchange_spec`'s `base`/`quote` swap was. Nothing
 //! here needs a mutation test the way that one did; see `tests/manual/readme.md`.
 
 use exact_arith::{ Price, Quantity };
-use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_side::Side;
 use exchange_tif::Tif;
@@ -23,13 +23,12 @@ fn order() -> Order
     price : Price::parse( "1.25" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
     tif : Tif::Ioc,
-    client : None,
+    client : Some( ClientOrderId( 5 ) ),
   }
 }
 
 /// Every field reads back exactly what was written — no default, no
-/// cross-field bleed, and in particular the two fields the source design
-/// added over the real struct (`instrument`, `tif`) land correctly.
+/// cross-field bleed, `client` included.
 #[ test ]
 fn an_order_holds_every_field_distinctly()
 {
@@ -42,6 +41,7 @@ fn an_order_holds_every_field_distinctly()
   assert_eq!( submitted.price, Price::parse( "1.25" ).unwrap() );
   assert_eq!( submitted.quantity, Quantity::from_int( 4 ).unwrap() );
   assert_eq!( submitted.tif, Tif::Ioc );
+  assert_eq!( submitted.client, Some( ClientOrderId( 5 ) ) );
 }
 
 /// T01 — an order carries exact values, not primitives.

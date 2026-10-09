@@ -5,7 +5,7 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_order`.
 - **Responsibility**: One order record, rest or taker, with its quantity-management helpers.
 
-**Design status**: Built, in its own `exchange_order` crate — this summary predates that extraction and understates the real shape (`instrument`/`tif` are both now present). Verified built-vs-proposed comparison, checked directly against the primary source rather than this summary: [`../../module/exchange_order/docs/item/readme.md`](../../module/exchange_order/docs/item/readme.md).
+**Design status**: Built, without the helpers or `OrderError`, with `client` added. Built-vs-proposed comparison: [`../../module/exchange_order/docs/item/readme.md`](../../module/exchange_order/docs/item/readme.md).
 
 ### Statement
 

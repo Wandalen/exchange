@@ -1,8 +1,8 @@
 # exchange_order — manual testing plan
 
 No manual mutation check is needed here, for a reason worth recording rather
-than leaving silent: every one of `Order`'s seven fields (`id`, `instrument`,
-`account`, `side`, `price`, `quantity`, `tif`) has a distinct type. A Rust
+than leaving silent: every one of `Order`'s eight fields (`id`, `instrument`,
+`account`, `side`, `price`, `quantity`, `tif`, `client`) has a distinct type. A Rust
 struct literal is matched by field name, not position, so there is no
 transposition the compiler would accept and a test would need to catch —
 unlike `exchange_spec`'s `base`/`quote`, which are both `AssetId` and so share

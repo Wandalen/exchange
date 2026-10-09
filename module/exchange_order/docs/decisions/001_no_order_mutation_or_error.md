@@ -41,9 +41,9 @@ is the right home, not this crate.
 
 ### Option 3: Build `OrderError { ZeroQty, BadId }` for construction-time validation
 
-Rejected: a zero-quantity order is already refused one layer up, at
-`exchange_core::Exchange::submit`'s boundary, via the existing
-`RejectReason::ZeroQuantity` (`module/exchange_core/src/lib.rs:235-238`) —
+Rejected: a zero-quantity order is already refused one layer up, in
+`exchange_core`'s `step_place` (behind `Exchange::exchange_step`), via the
+existing `RejectReason::ZeroQuantity` —
 the same reject-reason vocabulary every other submission failure already
 uses. A second, construction-time error type would duplicate that check
 under a different name rather than add a new one; `BadId` has no real
@@ -60,7 +60,7 @@ after).
 
 **Negative:** nothing at the type level stops a caller from constructing an
 `Order` with a zero `quantity` directly — the check only fires once that
-order reaches `exchange_core::Exchange::submit`, not at the point of
+order reaches `exchange_core::Exchange::exchange_step`, not at the point of
 construction. Accepted: no code path builds an `Order` without intending to
 submit it.
 

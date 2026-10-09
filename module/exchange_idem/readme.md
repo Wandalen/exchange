@@ -1,7 +1,8 @@
 # exchange_idem
 
 `OrderId` seen once per book — a retry that resubmits the same id is rejected
-rather than doubling the rest. Depends on `exchange_id` only.
+rather than doubling the rest. Depends on `exchange_id` only. Closes hard
+problem 15 and feature 19.
 
 ```rust
 use exchange_id::OrderId;
@@ -13,32 +14,24 @@ assert!( idem_seen( &seen, OrderId( 1 ) ) );
 assert!( idem_insert( &mut seen, OrderId( 1 ) ).is_err(), "a repeat is refused" );
 ```
 
-## Net new
-
-No real crate carried idempotency before this one — nothing tracked which
-`OrderId`s had already been accepted, so a caller that retried a submission
-after a dropped acknowledgement could double-rest the same order. Closes hard
-problem 15 (idempotent order ids) and feature 19 (unique `OrderId` per book)
-— `exchange_book::Book::insert` already refused a repeat silently; this
-crate gives that one case its own checkable, named error, pre-emptively.
-
 ## Two callers, two keys
+
+`IdSet< K = OrderId >` takes any hashable key.
 
 - `exchange_inbound::inbound_apply` keys by `OrderId`: it is `pub`, bypasses
   `exchange_core`, and lets its caller pick ids, so a repeated `OrderId` is a
-  real retry there. It keys a second set by `( AccountId, ClientOrderId )`,
-  as `exchange_core` does.
+  real retry there. It calls `idem_remove` on cancel, so a cancelled id can be
+  resubmitted. It keys a second set by `( AccountId, ClientOrderId )`, as
+  `exchange_core` does, and never removes from it.
 - `exchange_core` keys by `( AccountId, ClientOrderId )`: it assigns
-  `OrderId` itself, so only the submitter's own id can mark a retry.
+  `OrderId` itself, so only the submitter's own id can mark a retry. It never
+  removes one — the set grows with every client-tagged order.
 
-## Generic over the key
+## Not built: forgetting old client ids
 
-`IdSet< K = OrderId >`: any hashable key works, `OrderId` by default.
-
-## `idem_remove` exists so a cancelled id can be resubmitted
-
-Without it, a legitimate cancel-then-resubmit under the same id would be
-indistinguishable from the retry this crate exists to refuse.
+Releasing a client id when its order fills or cancels would let a late retry
+of that order through as a new one. Bounding the set by age needs a clock or a
+retention policy, and the family reads no clock.
 
 ## Responsibility Table
 
@@ -47,9 +40,9 @@ indistinguishable from the retry this crate exists to refuse.
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_id` only |
 | [`src/lib.rs`](src/lib.rs) | `IdSet`, `idem_seen`, `idem_insert`, `idem_remove`, `IdemError` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
-| `docs/pitfall/` | The 1 "Identity and cap" pitfall this crate's refusal behavior avoids |
+| `docs/pitfall/` | A retry resting a second order |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
-| `docs/item/` | Consolidated exposed-surface listing — matches the proposal exactly |
+| `docs/item/` | Exposed surface, as built vs. proposed |
 | [`tests/exchange_idem_test.rs`](tests/exchange_idem_test.rs) | Test Matrix T13, plus Phase P13's smoke assertion |
 | [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan |
 
@@ -58,4 +51,4 @@ indistinguishable from the retry this crate exists to refuse.
 - [`exchange_id/`](../exchange_id/readme.md) — supplies `OrderId`, `AccountId`, `ClientOrderId`
 - [`exchange_inbound/`](../exchange_inbound/readme.md) — caller keyed by `OrderId` and by `( AccountId, ClientOrderId )`, via `inbound_apply`'s `Claims`
 - [`exchange_core/`](../exchange_core/readme.md) — caller keyed by `( AccountId, ClientOrderId )`
-- [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p13_idem`
+- [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p13_dup`

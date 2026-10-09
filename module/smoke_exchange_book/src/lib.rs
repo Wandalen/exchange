@@ -347,6 +347,8 @@ pub fn self_trade_fill_count() -> usize
   let mut exchange = Exchange::new();
   let trader = AccountId( 1 );
   exchange.open_account( trader, money( "1000000" ), units( 100_000 ) ).expect( "fresh account, first deposit cannot overflow" );
+  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), price( "0.05" ), units( 1 ) )
+  .expect( "a fresh instrument with a nonzero tick and lot registers" );
   let mut ring = inbound_ring( 8 ).expect( "a small power-of-two capacity is always valid" );
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();

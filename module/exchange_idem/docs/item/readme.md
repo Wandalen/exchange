@@ -5,7 +5,7 @@
 - **Purpose**: The full exposed surface this crate declares, as built vs. as the source proposal specified it.
 - **Responsibility**: One consolidated table plus a verified comparison against `core_exchange.txt`.
 - **In Scope**: `IdSet`, `IdemError`, `idem_seen`, `idem_insert`, `idem_remove`.
-- **Out of Scope**: Build status prose for the whole crate (→ [`../../readme.md`](../../readme.md)); the superseded central summary (→ [`../../../../docs/crate/011_exchange_idem.md`](../../../../docs/crate/011_exchange_idem.md), [`../../../../docs/exposed_item/011_exchange_idem_items.md`](../../../../docs/exposed_item/011_exchange_idem_items.md)).
+- **Out of Scope**: Build status prose for the whole crate (→ [`../../readme.md`](../../readme.md)); the central summary (→ [`../../../../docs/crate/011_exchange_idem.md`](../../../../docs/crate/011_exchange_idem.md)).
 
 ### Overview Table
 
@@ -19,30 +19,14 @@
 
 ### Matches the proposal, plus a generic key
 
-Verified directly against `core_exchange.txt:416-421` (crate 11, Prompt 2)
-and `core_exchange.txt:592-595` (exposed-item list, Prompt 3) — not against
-the central `docs/crate/011_exchange_idem.md`/`docs/exposed_item/011_exchange_idem_items.md`
-summaries, which describe a now-superseded state ("not built as its own
-crate") and are thinned to point here.
-
-The proposal specifies `IdSet`, `idem_seen`/`idem_insert`/`idem_remove`, and
-`IdemError { Duplicate }`. The real build has every one of them, under the
-same names, with no omissions:
-
-- `IdSet` is opaque (its `HashSet< K >` field is private, built via
-  `IdSet::new()`) rather than the proposal's unspecified representation —
-  not a divergence, since the proposal names no fields for `IdSet` to match
-  or differ from.
-- `IdSet` is generic over its key, defaulting to `OrderId` — an addition, so
-  a caller that assigns `OrderId` itself can key one by
-  `( AccountId, ClientOrderId )` instead.
-- `idem_remove` exists so a legitimate cancel-then-resubmit under the same
-  id is not indistinguishable from the retry this crate exists to refuse —
-  named in the proposal's own exposed-item list, not an addition beyond it.
-
-No `docs/decisions/` exists for this crate: there is no rejected
-alternative to record when the built surface already matches what was
-asked for.
+The source design's exposed-item list
+(`core_exchange.txt:416-421` and `:592-595`, catalogued at
+[`../../../../docs/exposed_item/011_exchange_idem_items.md`](../../../../docs/exposed_item/011_exchange_idem_items.md))
+names `IdSet`, `idem_seen`/`idem_insert`/`idem_remove`, and
+`IdemError { Duplicate }` — all built as named. `IdSet` is opaque (a private
+`HashSet< K >`, built via `IdSet::new()`); the proposal names no fields for it.
+The one addition is the generic key, defaulting to `OrderId`, so a caller that
+assigns `OrderId` itself can key by `( AccountId, ClientOrderId )`.
 
 ### Sources
 

@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use exchange_core::
 {
-  AccountId, Consumer, EscrowError, EscrowPort, EventKind, Exchange, ExchangeError, InboundCmd, InstrumentId,
+  AccountId, AssetId, Consumer, EscrowError, EscrowPort, EventKind, Exchange, ExchangeError, InboundCmd, InstrumentId,
   Obligation, Order, OrderId, Price, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy,
   Sequence, Side, StepOutcome, Tif, Trade, inbound_flush, inbound_ring, obligation,
 };
@@ -103,6 +103,18 @@ impl EscrowPort for ScriptedEscrow
   }
 }
 
+/// An exchange over `escrow` with [`INSTRUMENT`] registered on the finest
+/// grid `exact_arith` represents, so every price and quantity fits — the grid
+/// is not what these tests probe.
+fn market( escrow : ScriptedEscrow ) -> Exchange< ScriptedEscrow >
+{
+  let mut exchange = Exchange::with_escrow( escrow );
+  let tick = Price::from_minor( 1 ).unwrap();
+  let lot = Quantity::from_minor( 1 ).unwrap();
+  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), tick, lot ).unwrap();
+  exchange
+}
+
 fn order( account : AccountId, side : Side, price : &str, quantity : i64, tif : Tif ) -> Order
 {
   Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price : Price::parse( price ).unwrap(), quantity : qty( quantity ), tif, client : None }
@@ -150,7 +162,7 @@ fn every_reserve_failure_maps_to_its_reject_reason()
   for ( error, reason ) in table
   {
     let escrow = ScriptedEscrow { reserve_fails : BTreeMap::from( [ ( OrderId( 0 ), error ) ] ), ..ScriptedEscrow::default() };
-    let mut exchange = Exchange::with_escrow( escrow );
+    let mut exchange = market( escrow );
     let mut ring = inbound_ring( 8 ).unwrap();
     let mut ends = ring.ends();
     let ( mut producer, mut consumer ) = ends.split();
@@ -172,7 +184,7 @@ fn every_reserve_failure_maps_to_its_reject_reason()
 fn a_settle_failure_mid_crossing_commits_nothing()
 {
   let escrow = ScriptedEscrow { settle_fails_for_maker : BTreeMap::from( [ ( OrderId( 1 ), EscrowError::Arithmetic ) ] ), ..ScriptedEscrow::default() };
-  let mut exchange = Exchange::with_escrow( escrow );
+  let mut exchange = market( escrow );
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
@@ -198,7 +210,7 @@ fn a_settle_failure_mid_crossing_commits_nothing()
 fn a_release_failure_on_self_match_commits_nothing()
 {
   let escrow = ScriptedEscrow { release_fails : BTreeMap::from( [ ( OrderId( 0 ), EscrowError::Arithmetic ) ] ), ..ScriptedEscrow::default() };
-  let mut exchange = Exchange::with_escrow( escrow );
+  let mut exchange = market( escrow );
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
@@ -223,7 +235,7 @@ fn a_release_failure_on_self_match_commits_nothing()
 #[ test ]
 fn an_ioc_remainder_releases_after_its_settles()
 {
-  let mut exchange = Exchange::with_escrow( ScriptedEscrow::default() );
+  let mut exchange = market( ScriptedEscrow::default() );
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
@@ -248,7 +260,7 @@ fn an_ioc_remainder_releases_after_its_settles()
 #[ test ]
 fn every_applied_escrow_call_has_its_event()
 {
-  let mut exchange = Exchange::with_escrow( ScriptedEscrow::default() );
+  let mut exchange = market( ScriptedEscrow::default() );
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
@@ -282,7 +294,7 @@ fn every_applied_escrow_call_has_its_event()
 fn a_cancel_whose_release_fails_leaves_the_order_resting()
 {
   let escrow = ScriptedEscrow { release_fails : BTreeMap::from( [ ( OrderId( 0 ), EscrowError::Arithmetic ) ] ), ..ScriptedEscrow::default() };
-  let mut exchange = Exchange::with_escrow( escrow );
+  let mut exchange = market( escrow );
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();

@@ -7,7 +7,7 @@
 - **In Scope**: The seen-id set itself.
 - **Out of Scope**: The ladder — this crate is not it.
 
-**Design status**: Built, in its own `exchange_idem` crate — matches the proposal exactly. Verified built-vs-proposed comparison: [`../../module/exchange_idem/docs/item/readme.md`](../../module/exchange_idem/docs/item/readme.md).
+**Design status**: Built as proposed, plus a generic key. Built-vs-proposed comparison: [`../../module/exchange_idem/docs/item/readme.md`](../../module/exchange_idem/docs/item/readme.md).
 
 ### Statement
 

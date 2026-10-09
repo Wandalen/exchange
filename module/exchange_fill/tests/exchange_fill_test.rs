@@ -96,6 +96,9 @@ fn reject_reason_is_still_exhaustively_matchable()
     RejectReason::PostOnlyWouldTake => "post_only_would_take",
     RejectReason::DuplicateClientId => "duplicate_client_id",
     RejectReason::AccountFull => "account_full",
+    RejectReason::PriceOffTick => "price_off_tick",
+    RejectReason::QuantityOffLot => "quantity_off_lot",
+    RejectReason::UnknownInstrument => "unknown_instrument",
   };
   assert_eq!( name, "zero_quantity" );
 }

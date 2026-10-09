@@ -163,6 +163,14 @@ pub enum RejectReason
   /// `max_account_rests`. Only reachable for an instrument with caps
   /// registered — see `exchange_cap`.
   AccountFull,
+  /// The order's price is not a multiple of its instrument's tick — see
+  /// `exchange_spec::price_fits`.
+  PriceOffTick,
+  /// The order's quantity is not a multiple of its instrument's lot — see
+  /// `exchange_spec::qty_fits`.
+  QuantityOffLot,
+  /// The order's instrument has no registered spec.
+  UnknownInstrument,
 }
 
 /// Why a remainder was withdrawn.

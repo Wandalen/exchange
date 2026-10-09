@@ -5,14 +5,14 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_spec`.
 - **Responsibility**: Instrument identity, tick/lot/halt metadata, and price/quantity snapping.
 
-**Design status**: Built, matching this list exactly except `SpecError`'s
-third variant (`Overflow`, not `Snap` — inherited from `exact_arith::SnapError`,
-which it's a type alias for). Full writeup moved to
+**Design status**: Built as listed, except `SpecError`'s third variant
+(`Overflow`, not `Snap` — it aliases `exact_arith::SnapError`), plus
+`price_fits`/`qty_fits`. Full writeup moved to
 [`../../module/exchange_spec/docs/item/readme.md`](../../module/exchange_spec/docs/item/readme.md).
 
 ### Statement
 
-Prompt 3 specifies `AssetId(u32)`, `InstrumentSpec { id, base, quote, tick, lot, halted }`, construction/halt-query functions, `price_snap`/`qty_snap`, and a `SpecError`. None of this exists in the real build — the real crates have no tick/lot grid and no instrument concept at all.
+Prompt 3 specifies `AssetId(u32)`, `InstrumentSpec { id, base, quote, tick, lot, halted }`, construction/halt-query functions, `price_snap`/`qty_snap`, and a `SpecError`.
 
 ### Sources
 

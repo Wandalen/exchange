@@ -18,3 +18,5 @@
 | `spec_halted_is` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `price_snap` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `qty_snap` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `price_fits` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `qty_fits` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
