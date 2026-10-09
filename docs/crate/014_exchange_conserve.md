@@ -12,6 +12,9 @@ match the proposal's own function names (its `ConserveError` has 3 variants
 rather than the proposed 2; see the crate's own item doc). Full writeup
 moved to [`../../module/exchange_conserve/readme.md`](../../module/exchange_conserve/readme.md),
 [`../../module/exchange_conserve/docs/item/readme.md`](../../module/exchange_conserve/docs/item/readme.md).
+"Workstream 006's types" above resolves to `exact_arith` directly (006's
+facade; proposed leaves were `exact_conserve`, `exact_kind`) — see
+`../neighbor_contract/001_006_supplies_money_qty_price.md`'s per-crate table.
 
 ### Statement
 

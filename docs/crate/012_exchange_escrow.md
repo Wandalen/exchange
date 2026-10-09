@@ -8,6 +8,9 @@
 - **Out of Scope**: Balances.
 
 **Design status**: Built as the real `exchange_escrow` crate, but scope-expanded: it holds real `Account` balances (`open()`, `total_cash()`, `total_asset()`) rather than being a thin port workstream 010 implements, and its methods are named `reserve()`/`release()`/`settle()` rather than the proposed `hold_try`/`hold_release`/`hold_commit`.
+Also depends directly on `exact_arith` (006's facade; proposed leaf was
+`exact_kind`) — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s
+per-crate table.
 
 ### Statement
 

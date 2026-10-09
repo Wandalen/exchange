@@ -14,6 +14,10 @@ cancel-then-reinsert-with-rollback the one genuinely new operation
 wired into `exchange_core`'s own `Exchange::cancel`, but `exchange_inbound`'s
 `inbound_apply` already calls through to all three functions — see
 [`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md).
+Carries no `exact_*` edge in `[dependencies]` either — `exact_arith` appears
+only as a `[dev-dependencies]` entry (test fixtures) — confirming a
+2026-10-07 user-supplied specification's claim that this crate has no direct
+006 dependency; see `../neighbor_contract/001_006_supplies_money_qty_price.md`.
 
 ### Statement
 

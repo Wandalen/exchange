@@ -8,6 +8,9 @@
 - **Out of Scope**: Any particular save-file format.
 
 **Design status**: Built, in its own `exchange_snap` crate — `RestRow`/`BookSnap` match the proposal's fields exactly; the two real divergences are a dropped `exchange_order` dependency and no `SnapError`. Verified built-vs-proposed comparison: [`../../module/exchange_snap/docs/item/readme.md`](../../module/exchange_snap/docs/item/readme.md).
+Also depends directly on `exact_arith` (006's facade; proposed leaf was
+`exact_kind`) — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s
+per-crate table.
 
 ### Statement
 

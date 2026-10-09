@@ -18,7 +18,7 @@
 ### Regenerate
 
 ```sh
-cd "$(git rev-parse --show-toplevel)"/substrate/exchange/exchange_core/docs/invariant
+cd "$(git rev-parse --show-toplevel)"/module/exchange_core/docs/invariant
 printf 'instances:              '; ls [0-9][0-9][0-9]_*.md | wc -l
 printf 'rows in Overview Table: '; grep -E '^\| [0-9]{3} \|' readme.md | wc -l
 # instances:              3

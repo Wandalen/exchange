@@ -8,6 +8,9 @@
 - **Out of Scope**: Any other price — that is the book's concern.
 
 **Design status**: Built, in its own `exchange_level` crate — that summary predated this crate's extraction. Verified built-vs-proposed comparison: [`../../module/exchange_level/docs/item/readme.md`](../../module/exchange_level/docs/item/readme.md).
+Also depends directly on `exact_arith` (006's facade; proposed leaves were
+`exact_kind`, `exact_cmp`) — see
+`../neighbor_contract/001_006_supplies_money_qty_price.md`'s per-crate table.
 
 ### Statement
 
