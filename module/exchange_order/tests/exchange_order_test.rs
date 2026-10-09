@@ -6,7 +6,7 @@
 //! not a silent bug the way `exchange_spec`'s `base`/`quote` swap was. Nothing
 //! here needs a mutation test the way that one did; see `tests/manual/readme.md`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_side::Side;
@@ -20,7 +20,7 @@ fn order() -> Order
     instrument : InstrumentId( 2 ),
     account : AccountId( 3 ),
     side : Side::Buy,
-    price : Money::parse( "1.25" ).unwrap(),
+    price : Price::parse( "1.25" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
     tif : Tif::Ioc,
     client : None,
@@ -39,7 +39,7 @@ fn an_order_holds_every_field_distinctly()
   assert_eq!( submitted.instrument, InstrumentId( 2 ) );
   assert_eq!( submitted.account, AccountId( 3 ) );
   assert_eq!( submitted.side, Side::Buy );
-  assert_eq!( submitted.price, Money::parse( "1.25" ).unwrap() );
+  assert_eq!( submitted.price, Price::parse( "1.25" ).unwrap() );
   assert_eq!( submitted.quantity, Quantity::from_int( 4 ).unwrap() );
   assert_eq!( submitted.tif, Tif::Ioc );
 }
@@ -47,7 +47,7 @@ fn an_order_holds_every_field_distinctly()
 /// T01 — an order carries exact values, not primitives.
 ///
 /// Asserted through arithmetic rather than through the type name: the point is
-/// not that the field is called `Money`, it is that adding to it goes through
+/// not that the field is called `Price`, it is that adding to it goes through
 /// a checked operation that can refuse. A `f64` field would satisfy any
 /// name-based check and fail this one.
 #[ test ]
@@ -56,5 +56,5 @@ fn t01_an_order_holds_exact_values()
   let submitted = order();
 
   let doubled = submitted.price.checked_add( submitted.price );
-  assert_eq!( doubled.unwrap(), Money::parse( "2.50" ).unwrap() );
+  assert_eq!( doubled.unwrap(), Price::parse( "2.50" ).unwrap() );
 }

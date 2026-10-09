@@ -37,15 +37,14 @@
 //! `Order`/`Obligation` rather than the reverse, which is the shape every
 //! crate `exchange_types` sheds types to ends up in.
 
-use exact_arith::{ Price, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_side::Side;
 use exchange_tif::Tif;
 
-/// An amount of currency — a notional, a reservation, a balance. Distinct
-/// from [`Price`] only in reading: the type is identical, but `Obligation::Cash`
-/// holds a total, not a per-unit price.
-pub type Amount = Price;
+/// An amount of currency — a notional, a reservation, a balance. A total,
+/// not a per-unit [`Price`].
+pub type Amount = Money;
 
 /// A submitted limit order.
 ///

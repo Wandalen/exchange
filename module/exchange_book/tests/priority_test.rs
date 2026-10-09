@@ -6,7 +6,7 @@
 //! wrong sequence is a book that fills the wrong people, and nothing
 //! downstream can notice.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -35,7 +35,7 @@ fn rest_on( instrument : InstrumentId, id : u64, side : Side, price : &str, quan
       instrument,
       account : AccountId( id ),
       side,
-      price : Money::parse( price ).unwrap(),
+      price : Price::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
       client : None,

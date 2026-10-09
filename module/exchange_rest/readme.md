@@ -4,7 +4,7 @@ The three non-matching ways an order moves on the book: rest, cancel,
 replace.
 
 ```rust
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -16,7 +16,7 @@ use exchange_tif::Tif;
 let order = | id, price : &str, quantity | Order
 {
   id : OrderId( id ), instrument : InstrumentId( 1 ), account : AccountId( id ),
-  side : Side::Sell, price : Money::parse( price ).unwrap(),
+  side : Side::Sell, price : Price::parse( price ).unwrap(),
   quantity : Quantity::from_int( quantity ).unwrap(), tif : Tif::Gtc, client : None,
 };
 

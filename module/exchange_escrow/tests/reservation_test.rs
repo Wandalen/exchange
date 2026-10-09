@@ -5,7 +5,7 @@
 //! are right, and a customer's currency is locked away forever. Testing the
 //! cancel path is the only thing that sees it.
 
-use exact_arith::{ CEILING_WHOLE_UNITS, Money, Quantity };
+use exact_arith::{ CEILING_WHOLE_UNITS, Money, Price, Quantity };
 use exchange_escrow::{ Escrow, EscrowError };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -16,6 +16,11 @@ use exchange_tif::Tif;
 fn money( text : &str ) -> Money
 {
   Money::parse( text ).unwrap()
+}
+
+fn price( text : &str ) -> Price
+{
+  Price::parse( text ).unwrap()
 }
 
 fn qty( whole : i64 ) -> Quantity
@@ -31,7 +36,7 @@ fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -
     instrument : InstrumentId( 1 ),
     account : AccountId( account ),
     side,
-    price : money( price ),
+    price : Price::parse( price ).unwrap(),
     quantity : qty( quantity ),
     tif : Tif::Gtc,
     client : None,
@@ -208,7 +213,7 @@ fn t09_a_fill_settles_and_leaves_nothing_reserved()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
   escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
@@ -249,7 +254,7 @@ fn a_price_improvement_returns_the_unused_reservation()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
   escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
@@ -280,7 +285,7 @@ fn a_partial_fill_leaves_the_remainder_covered()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
   escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
@@ -321,7 +326,7 @@ fn the_totals_are_unchanged_by_the_whole_matching_path()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
   escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
@@ -552,13 +557,13 @@ fn a_settlement_naming_more_than_the_orders_own_reservation_is_refused()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
 
   assert_eq!
   (
-    escrow.settle( &trade, Side::Buy, money( "30.00" ) ),
+    escrow.settle( &trade, Side::Buy, price( "30.00" ) ),
     Err( EscrowError::NotReserved ),
     "order 2's own reservation cannot cover this, regardless of the account total",
   );
@@ -618,13 +623,13 @@ fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
   let buyer = Order
   {
     id : OrderId( 10 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ), side : Side::Buy,
-    price : money( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
+    price : price( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
     client : None,
   };
   let seller = Order
   {
     id : OrderId( 11 ), instrument : InstrumentId( 1 ), account : AccountId( 2 ), side : Side::Sell,
-    price : money( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
+    price : price( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
     client : None,
   };
   escrow.reserve( &buyer ).unwrap();
@@ -639,7 +644,7 @@ fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "1" ),
+    price : price( "1" ),
     quantity : Quantity::from_minor( 1 ).unwrap(),
   };
 

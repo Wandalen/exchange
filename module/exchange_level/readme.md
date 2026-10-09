@@ -3,7 +3,7 @@
 One price, FIFO rest — the queue a book keeps at a single price point.
 
 ```rust
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_level::{ level_new, level_push, level_pop_front, LevelNode };
 use exchange_order::Order;
@@ -11,11 +11,11 @@ use exchange_seq::Sequence;
 use exchange_side::Side;
 use exchange_tif::Tif;
 
-let mut level = level_new( Money::parse( "2.50" ).unwrap() );
+let mut level = level_new( Price::parse( "2.50" ).unwrap() );
 let order = Order
 {
   id : OrderId( 1 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ),
-  side : Side::Buy, price : Money::parse( "2.50" ).unwrap(),
+  side : Side::Buy, price : Price::parse( "2.50" ).unwrap(),
   quantity : Quantity::from_int( 4 ).unwrap(), tif : Tif::Gtc, client : None,
 };
 level_push( &mut level, LevelNode { order, remaining : order.quantity, arrival : Sequence( 1 ) } );

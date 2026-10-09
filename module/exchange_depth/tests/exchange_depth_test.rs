@@ -1,7 +1,7 @@
 //! Test Matrix T01 — depth aggregation: per-level summing, top-N truncation,
 //! the `BadN` guard, and independence from book mutation after the read.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_depth::{ Depth, DepthError, LevelView, depth_top };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -23,7 +23,7 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
       instrument : InstrumentId( 1 ),
       account : AccountId( id ),
       side,
-      price : Money::parse( price ).unwrap(),
+      price : Price::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
       client : None,
@@ -35,7 +35,7 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
 
 fn level( price : &str, qty : i64 ) -> LevelView
 {
-  LevelView { price : Money::parse( price ).unwrap(), qty : Quantity::from_int( qty ).unwrap() }
+  LevelView { price : Price::parse( price ).unwrap(), qty : Quantity::from_int( qty ).unwrap() }
 }
 
 /// T01 — an empty book has no depth on either side, whatever `n` is asked for.

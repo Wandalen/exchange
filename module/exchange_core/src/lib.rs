@@ -88,7 +88,7 @@ use std::collections::BTreeMap;
 
 pub use exact_arith::
 {
-  Backing, ConservationError, Entry, KindError, MONEY_SCALE, Money, Quantity, Report, verify,
+  Backing, ConservationError, Entry, KindError, MONEY_SCALE, Money, Price, Quantity, Report, verify,
 };
 pub use exchange_book::{ Book, Resting };
 pub use exchange_cap::BookCaps;
@@ -117,7 +117,7 @@ pub use exchange_stats::BookStats;
 use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add, stats_snapshot, stats_zero };
 pub use exchange_tif::Tif;
 use exchange_tif::{ tif_rests, tif_takes };
-pub use exchange_types::{ Price, TypeError, notional, obligation };
+pub use exchange_types::{ TypeError, notional, obligation };
 
 /// The three escrow moves [`Exchange`] makes on the matching path, and the
 /// only way that path reaches escrow — [`Escrow`] is the default
@@ -688,7 +688,7 @@ impl< E : EscrowPort > Exchange< E >
     {
       return Err( self.reject_counted( &order, RejectReason::ZeroQuantity ) );
     }
-    if order.price < Money::ZERO
+    if order.price < Price::ZERO
     {
       return Err( self.reject_counted( &order, RejectReason::NegativePrice ) );
     }

@@ -21,7 +21,7 @@
 //! orders resting at the same price contribute one row with their summed
 //! quantity, matching how a market-depth display is actually read.
 
-use exact_arith::{ Money, Quantity, qty_saturating_add };
+use exact_arith::{ Price, Quantity, qty_saturating_add };
 use exchange_book::{ Book, Resting };
 use exchange_id::InstrumentId;
 use exchange_side::Side;
@@ -31,7 +31,7 @@ use exchange_side::Side;
 pub struct LevelView
 {
   /// The price every order aggregated into this level rests at.
-  pub price : Money,
+  pub price : Price,
   /// Total resting quantity across every order at `price`.
   pub qty : Quantity,
 }

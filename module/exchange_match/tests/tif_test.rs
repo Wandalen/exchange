@@ -6,7 +6,7 @@
 //! exactly one place. FOK is the real behavioural branch: book-untouched on
 //! a partial, replayed-for-real on a full fill.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::{ Crossing, MatchError, SelfMatchPolicy, cross as cross_with_policy, would_take };
@@ -28,7 +28,7 @@ fn order( id : u64, side : Side, price : &str, quantity : i64, tif : Tif ) -> Or
     instrument : InstrumentId( 1 ),
     account : AccountId( id ),
     side,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif,
     client : None,

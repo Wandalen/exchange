@@ -1,7 +1,7 @@
 //! Test Matrix T01 — ring round-trip (flush/drain/overflow) and T02 —
 //! `inbound_apply`'s dispatch to `exchange_match`/`exchange_rest`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_idem::IdemError;
@@ -24,7 +24,7 @@ fn resting( id : u64, side : Side, price : &str, quantity : i64, tif : Tif ) -> 
     order : Order
     {
       id : OrderId( id ), instrument : INSTRUMENT, account : AccountId( id ),
-      side, price : Money::parse( price ).unwrap(), quantity, tif,
+      side, price : Price::parse( price ).unwrap(), quantity, tif,
       client : None,
     },
     remaining : quantity,
@@ -212,8 +212,8 @@ fn replace_swaps_the_resting_order_atomically()
   let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 
   let InboundOutcome::Replaced( Ok( old ) ) = outcome else { panic!( "Replace must succeed here" ) };
-  assert_eq!( old.order.price, Money::parse( "2.00" ).unwrap() );
-  assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.price, Money::parse( "2.10" ).unwrap() );
+  assert_eq!( old.order.price, Price::parse( "2.00" ).unwrap() );
+  assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.price, Price::parse( "2.10" ).unwrap() );
 }
 
 #[ test ]
@@ -365,7 +365,7 @@ fn duplicate_place_id_is_refused_not_silently_dropped()
   let error = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ).unwrap_err();
 
   assert_eq!( error, InboundApplyError::Idem( IdemError::Duplicate ) );
-  assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Money::parse( "1.00" ).unwrap(), "the duplicate must not have touched the book at all" );
+  assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Price::parse( "1.00" ).unwrap(), "the duplicate must not have touched the book at all" );
   assert_eq!( book.len(), 1, "exactly the first order rests — the repeat neither joined nor replaced it" );
 }
 
@@ -387,7 +387,7 @@ fn cancel_then_resubmit_under_the_same_id_is_accepted()
   let resubmit = InboundCmd::Place( resting( 1, Side::Buy, "1.05", 4, Tif::Gtc ) );
   inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, resubmit ).unwrap();
 
-  assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Money::parse( "1.05" ).unwrap() );
+  assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Price::parse( "1.05" ).unwrap() );
 }
 
 /// A repeated id is refused before it crosses. Checked only where the

@@ -8,12 +8,11 @@
 //! never fail to offset each other. See `exchange_conserve/src/lib.rs`'s
 //! "Revision" section.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_conserve::conserve_assert;
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_side::Side;
-use exchange_types::Price;
 
 fn trade( taker_side : Side, price : &str ) -> Trade
 {
@@ -41,7 +40,7 @@ fn main()
     taker_side : Side::Buy,
     maker : OrderId( 2 ),
     maker_account : AccountId( 2 ),
-    price : Money::EPSILON,
+    price : Price::from_minor( 1 ).unwrap(),
     quantity : Quantity::EPSILON,
   };
   let nz = conserve_assert( &[ inexact ] ).is_err();

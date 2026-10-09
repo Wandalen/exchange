@@ -1,7 +1,7 @@
 //! Phase P14 — a hold moves through its full lifecycle: release on cancel,
 //! commit on fill. Golden: `rel=1 com=1` then `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_escrow::Escrow;
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -17,7 +17,7 @@ fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -
     instrument : InstrumentId( 1 ),
     account : AccountId( account ),
     side,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
     client : None,

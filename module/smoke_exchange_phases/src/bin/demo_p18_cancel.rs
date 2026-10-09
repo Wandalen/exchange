@@ -1,7 +1,7 @@
 //! Phase P18 — cancel actually removes the resting order, not merely makes
 //! it unreachable by id. Golden: `n=0` then `ok`.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -18,7 +18,7 @@ fn main()
     instrument : InstrumentId( 1 ),
     account : AccountId( 1 ),
     side : Side::Buy,
-    price : Money::parse( "1.00" ).unwrap(),
+    price : Price::parse( "1.00" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
     tif : Tif::Gtc,
     client : None,

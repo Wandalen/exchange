@@ -104,7 +104,7 @@
 //! not the reporting path — `exchange_core` checks [`would_take`] itself first
 //! so the refusal reaches the event stream as a rejection.
 
-use exact_arith::{ KindError, Quantity };
+use exact_arith::{ KindError, Price, Quantity };
 use exchange_book::Book;
 use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;
@@ -112,7 +112,7 @@ use exchange_id::{ AccountId, OrderId };
 use exchange_order::Order;
 use exchange_side::{ Side, side_accepts };
 use exchange_tif::{ tif_requires_full, tif_takes };
-use exchange_types::{ Price, notional };
+use exchange_types::notional;
 
 pub use exchange_stp::SelfMatchPolicy;
 

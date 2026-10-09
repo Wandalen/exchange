@@ -11,13 +11,13 @@ contract in isolation as it lands.
 ```rust
 use exchange_core::
 {
-  AccountId, Exchange, InboundCmd, InstrumentId, Money, Order, OrderId, Quantity, Resting, SelfMatchPolicy,
-  Sequence, Side, Tif, inbound_flush, inbound_ring, verify,
+  AccountId, Exchange, InboundCmd, InstrumentId, Money, Order, OrderId, Price, Quantity, Resting,
+  SelfMatchPolicy, Sequence, Side, Tif, inbound_flush, inbound_ring, verify,
 };
 
 let instrument = InstrumentId( 1 );
 let ( seller, buyer ) = ( AccountId( 1 ), AccountId( 2 ) );
-let price = Money::parse( "2.50" ).unwrap();
+let price = Price::parse( "2.50" ).unwrap();
 let four = Quantity::from_int( 4 ).unwrap();
 
 let mut exchange = Exchange::new();

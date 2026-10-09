@@ -3,7 +3,7 @@
 The resting order book — two sides, each in published order, best at the front.
 
 ```rust
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -24,7 +24,7 @@ fn bid( id : u64, arrival : u64 ) -> Resting
       instrument : INSTRUMENT,
       account : AccountId( id ),
       side : Side::Buy,
-      price : Money::parse( "2.50" ).unwrap(),
+      price : Price::parse( "2.50" ).unwrap(),
       quantity,
       tif : Tif::Gtc,
       client : None,

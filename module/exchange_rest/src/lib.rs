@@ -110,7 +110,7 @@ impl core::error::Error for RestReplaceError {}
 /// [`Book::insert`] — the original stays exactly as it was.
 ///
 /// ```rust
-/// use exact_arith::{ Money, Quantity };
+/// use exact_arith::{ Price, Quantity };
 /// use exchange_book::{ Book, Resting };
 /// use exchange_id::{ AccountId, InstrumentId, OrderId };
 /// use exchange_order::Order;
@@ -122,7 +122,7 @@ impl core::error::Error for RestReplaceError {}
 /// let order = | id, price : &str, quantity | Order
 /// {
 ///   id : OrderId( id ), instrument : InstrumentId( 1 ), account : AccountId( id ),
-///   side : Side::Sell, price : Money::parse( price ).unwrap(),
+///   side : Side::Sell, price : Price::parse( price ).unwrap(),
 ///   quantity : Quantity::from_int( quantity ).unwrap(), tif : Tif::Gtc, client : None,
 /// };
 ///
@@ -134,8 +134,8 @@ impl core::error::Error for RestReplaceError {}
 /// let resting = Resting { order : replacement, remaining : replacement.quantity, arrival : Sequence( 2 ) };
 /// let old = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting ).unwrap();
 ///
-/// assert_eq!( old.order.price, Money::parse( "2.50" ).unwrap() );
-/// assert_eq!( book.best( InstrumentId( 1 ), Side::Sell ).unwrap().order.price, Money::parse( "2.60" ).unwrap() );
+/// assert_eq!( old.order.price, Price::parse( "2.50" ).unwrap() );
+/// assert_eq!( book.best( InstrumentId( 1 ), Side::Sell ).unwrap().order.price, Price::parse( "2.60" ).unwrap() );
 /// ```
 pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : OrderId, new_resting : Resting ) -> Result< Resting, RestReplaceError >
 {

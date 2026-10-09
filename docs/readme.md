@@ -97,7 +97,7 @@ full granularity has been built — all 23 proposed crates are now real, alongsi
 original `exchange_types` and `exchange_core`. `exchange_types` carried the other 23's
 types as a re-export aggregator for a time; as of 2026-10-05 that aggregator role has
 itself been retired — every former consumer now imports each type from its real owning
-crate directly, and `exchange_types` keeps only the `Price`/`TypeError`/`notional`/
+crate directly, and `exchange_types` keeps only the `TypeError`/`notional`/
 `obligation` logic it always declared itself. See [`../module/readme.md`](../module/readme.md) for the authoritative,
 current crate list. This corpus continues to document the 23-crate proposal as the
 record of what was proposed, the same way the sibling workstream 006 corpus documents
@@ -112,7 +112,7 @@ for the types that moved out of it (`AccountId`/`OrderId` → `exchange_id`, `Si
 `exchange_side`, `Sequence` → `exchange_seq`, and others — see each crate's own
 "Extracted from `exchange_types`" note). As of 2026-10-05, that aggregator role is
 retired: every consumer of those types now imports each one from its real owning crate
-directly, and `exchange_types` is narrowed to the `Price`/`TypeError`/`notional`/
+directly, and `exchange_types` is narrowed to the `TypeError`/`notional`/
 `obligation` logic it declared itself from the start. Two enum-level naming corrections surfaced
 while building this corpus and remain accurate, recorded in their own files rather than
 here: real `Side` is `Buy`/`Sell` not `Bid`/`Ask`

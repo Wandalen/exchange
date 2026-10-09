@@ -4,10 +4,10 @@ The trade record and the event stream — the Contract's two outputs.
 
 ```rust
 use exchange_fill::Trade;
-use exact_arith::Money;
+use exact_arith::Price;
 
-let maker = Money::parse( "2.50" ).unwrap();
-let generous_taker = Money::parse( "3.00" ).unwrap();
+let maker = Price::parse( "2.50" ).unwrap();
+let generous_taker = Price::parse( "3.00" ).unwrap();
 assert_eq!( Trade::executed_price( maker, generous_taker ), maker );
 ```
 

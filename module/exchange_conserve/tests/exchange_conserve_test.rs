@@ -5,7 +5,7 @@
 //! "Revision" section for why a magnitude mismatch is no longer constructible
 //! through `Trade` data at all once both of a trade's legs go in together.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_conserve::{ ConserveError, conserve_assert, fill_legs_sum };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
@@ -21,7 +21,7 @@ fn trade( taker_side : Side, price : &str, quantity : i64 ) -> Trade
     taker_side,
     maker : OrderId( 2 ),
     maker_account : AccountId( 2 ),
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
   }
 }
@@ -40,7 +40,7 @@ fn dust_trade( taker_side : Side ) -> Trade
     taker_side,
     maker : OrderId( 2 ),
     maker_account : AccountId( 2 ),
-    price : Money::EPSILON,
+    price : Price::from_minor( 1 ).unwrap(),
     quantity : Quantity::EPSILON,
   }
 }

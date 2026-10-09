@@ -11,7 +11,6 @@
 
 | Item | Kind | Declared | Documented in |
 |------|------|----------|----------------|
-| `Price` | type alias | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Amount` | type alias | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `TypeError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `notional` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |

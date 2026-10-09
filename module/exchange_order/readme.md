@@ -5,7 +5,7 @@ time-in-force, and the submitter's own id. Depends on `exchange_id`, `exchange_s
 `exact_arith` — nothing else.
 
 ```rust
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_side::Side;
@@ -17,7 +17,7 @@ let order = Order
   instrument : InstrumentId( 1 ),
   account : AccountId( 1 ),
   side : Side::Buy,
-  price : Money::parse( "1.25" ).unwrap(),
+  price : Price::parse( "1.25" ).unwrap(),
   quantity : Quantity::from_int( 4 ).unwrap(),
   tif : Tif::Gtc,
   client : None,

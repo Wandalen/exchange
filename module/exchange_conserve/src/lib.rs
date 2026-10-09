@@ -141,7 +141,7 @@ pub fn fill_legs_sum( legs : &[ Money ] ) -> Result< Money, ConserveError >
 /// anything but zero.
 ///
 /// ```rust
-/// use exact_arith::{ Money, Quantity };
+/// use exact_arith::{ Price, Quantity };
 /// use exchange_conserve::conserve_assert;
 /// use exchange_fill::Trade;
 /// use exchange_id::{ AccountId, OrderId };
@@ -151,7 +151,7 @@ pub fn fill_legs_sum( legs : &[ Money ] ) -> Result< Money, ConserveError >
 /// {
 ///   taker : OrderId( 1 ), taker_account : AccountId( 1 ), taker_side : Side::Buy,
 ///   maker : OrderId( 2 ), maker_account : AccountId( 2 ),
-///   price : Money::parse( "2.50" ).unwrap(), quantity : Quantity::from_int( 4 ).unwrap(),
+///   price : Price::parse( "2.50" ).unwrap(), quantity : Quantity::from_int( 4 ).unwrap(),
 /// };
 /// assert!( conserve_assert( &[ trade ] ).is_ok() );
 /// ```

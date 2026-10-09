@@ -12,16 +12,11 @@ use std::collections::BTreeMap;
 use exchange_core::
 {
   AccountId, Consumer, EscrowError, EscrowPort, EventKind, Exchange, ExchangeError, InboundCmd, InstrumentId,
-  Money, Obligation, Order, OrderId, Price, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy,
+  Obligation, Order, OrderId, Price, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy,
   Sequence, Side, StepOutcome, Tif, Trade, inbound_flush, inbound_ring, obligation,
 };
 
 const INSTRUMENT : InstrumentId = InstrumentId( 1 );
-
-fn money( text : &str ) -> Money
-{
-  Money::parse( text ).unwrap()
-}
 
 fn qty( whole : i64 ) -> Quantity
 {
@@ -110,7 +105,7 @@ impl EscrowPort for ScriptedEscrow
 
 fn order( account : AccountId, side : Side, price : &str, quantity : i64, tif : Tif ) -> Order
 {
-  Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price : money( price ), quantity : qty( quantity ), tif, client : None }
+  Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price : Price::parse( price ).unwrap(), quantity : qty( quantity ), tif, client : None }
 }
 
 /// Push one `Place` through the ring and apply it. `order.id` is a

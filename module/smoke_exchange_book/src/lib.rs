@@ -76,9 +76,7 @@ use std::thread;
 /// `submission_test.rs`.
 const INSTRUMENT : InstrumentId = InstrumentId( 1 );
 
-/// A [`Price`]/[`Money`] from one of this lane's own literals — the two are
-/// the same type (`exchange_types::Price` is `Money`), so one helper covers
-/// both roles.
+/// A [`Money`] from one of this lane's own literals.
 ///
 /// # Panics
 ///
@@ -88,6 +86,17 @@ const INSTRUMENT : InstrumentId = InstrumentId( 1 );
 pub fn money( text : &str ) -> Money
 {
   Money::parse( text ).expect( "the lane's own literals are well-formed" )
+}
+
+/// A [`Price`] from one of this lane's own literals.
+///
+/// # Panics
+///
+/// As [`money`].
+#[ must_use ]
+pub fn price( text : &str ) -> Price
+{
+  Price::parse( text ).expect( "the lane's own literals are well-formed" )
 }
 
 /// A [`Quantity`] of whole units.
@@ -105,7 +114,7 @@ pub fn units( whole : i64 ) -> Quantity
 /// Build an [`Order`] against [`INSTRUMENT`] with a placeholder id — every
 /// real submission reassigns it via `Exchange::claim_order`, so the literal
 /// value here is never observed.
-fn order( account : AccountId, side : Side, price : Money, quantity : Quantity, tif : Tif ) -> Order
+fn order( account : AccountId, side : Side, price : Price, quantity : Quantity, tif : Tif ) -> Order
 {
   Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif, client : None }
 }
@@ -237,7 +246,7 @@ pub fn scene() -> SceneReport
   let mut exchange = Exchange::new();
   exchange.open_account( maker, money( "1000000" ), units( 100_000 ) ).expect( "fresh account, first deposit cannot overflow" );
   exchange.open_account( taker, money( "1000000" ), units( 100_000 ) ).expect( "fresh account, first deposit cannot overflow" );
-  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), money( "0.05" ), units( 1 ) )
+  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), price( "0.05" ), units( 1 ) )
   .expect( "a fresh instrument with a nonzero tick and lot registers" );
 
   let mut ring = inbound_ring( 8 ).expect( "a small power-of-two capacity is always valid" );
@@ -245,15 +254,15 @@ pub fn scene() -> SceneReport
   let ( mut producer, mut consumer ) = ends.split();
 
   // Three resting bids: 10@1.00, 5@1.00, 4@0.95.
-  submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Buy, money( "1.00" ), units( 10 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
+  submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Buy, price( "1.00" ), units( 10 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
   .expect( "a funded bid rests" );
-  submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Buy, money( "1.00" ), units( 5 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
+  submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Buy, price( "1.00" ), units( 5 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
   .expect( "a funded bid rests" );
-  submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Buy, money( "0.95" ), units( 4 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
+  submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Buy, price( "0.95" ), units( 4 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
   .expect( "a funded bid rests" );
 
   // GTC taker: ask 12@1.00 — fills 10 then 2, leaving 3@1.00 and 4@0.95 untouched.
-  let gtc_taking = submit( &mut exchange, &mut producer, &mut consumer, order( taker, Side::Sell, money( "1.00" ), units( 12 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
+  let gtc_taking = submit( &mut exchange, &mut producer, &mut consumer, order( taker, Side::Sell, price( "1.00" ), units( 12 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
   .expect( "a funded ask at the bid crosses" );
   assert_eq!( gtc_taking.trades.len(), 2, "12 against 10-then-5 should take two maker levels at the same price" );
   assert_eq!( gtc_taking.trades[ 0 ].quantity, units( 10 ), "the first fill should exhaust the earlier 10@1.00 bid first" );
@@ -262,13 +271,13 @@ pub fn scene() -> SceneReport
 
   let depth = exchange.depth_get( INSTRUMENT, 2 ).expect( "two levels are on the book" );
   assert_eq!( depth.bids.len(), 2, "both the 1.00 remainder and the untouched 0.95 bid should show" );
-  assert_eq!( depth.bids[ 0 ].price, money( "1.00" ), "the best bid is still 1.00" );
+  assert_eq!( depth.bids[ 0 ].price, price( "1.00" ), "the best bid is still 1.00" );
   assert_eq!( depth.bids[ 0 ].qty, units( 3 ), "5 - 2 = 3 should remain of the second bid" );
-  assert_eq!( depth.bids[ 1 ].price, money( "0.95" ), "the second level is the untouched 0.95 bid" );
+  assert_eq!( depth.bids[ 1 ].price, price( "0.95" ), "the second level is the untouched 0.95 bid" );
   assert_eq!( depth.bids[ 1 ].qty, units( 4 ), "the 0.95 bid was never touched" );
 
   // IOC taker: ask 100@0.90 — sweeps the rest (3@1.00, 4@0.95), drops the other 93.
-  let ioc_taking = submit( &mut exchange, &mut producer, &mut consumer, order( taker, Side::Sell, money( "0.90" ), units( 100 ), Tif::Ioc ), SelfMatchPolicy::CancelIncoming )
+  let ioc_taking = submit( &mut exchange, &mut producer, &mut consumer, order( taker, Side::Sell, price( "0.90" ), units( 100 ), Tif::Ioc ), SelfMatchPolicy::CancelIncoming )
   .expect( "a funded IOC ask sweeps what it can" );
   assert_eq!( ioc_taking.trades.len(), 2, "the IOC should sweep both remaining levels" );
   assert_eq!( ioc_taking.trades[ 0 ].quantity, units( 3 ), "the 1.00 remainder goes first, best price first" );
@@ -278,7 +287,7 @@ pub fn scene() -> SceneReport
   assert_eq!( exchange.book().len(), 0, "both bids are now gone and nothing new rested" );
 
   // FOK taker: ask 1000@1.00 against a now-empty book — rejected whole, book unchanged.
-  let fok_taking = submit( &mut exchange, &mut producer, &mut consumer, order( taker, Side::Sell, money( "1.00" ), units( 1000 ), Tif::Fok ), SelfMatchPolicy::CancelIncoming )
+  let fok_taking = submit( &mut exchange, &mut producer, &mut consumer, order( taker, Side::Sell, price( "1.00" ), units( 1000 ), Tif::Fok ), SelfMatchPolicy::CancelIncoming )
   .expect( "a FOK that cannot fill in full is reported, not refused outright" );
   assert!( fok_taking.trades.is_empty(), "a FOK against an empty book must trade nothing" );
   assert_eq!( fok_taking.resting, Quantity::ZERO, "a FOK must never rest a partial attempt" );
@@ -287,10 +296,10 @@ pub fn scene() -> SceneReport
 
   // Halt round trip: a new sell is refused while halted, then accepted once resumed.
   exchange.halt_set( INSTRUMENT ).expect( "a freshly registered instrument is not already halted" );
-  let blocked = submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Sell, money( "1.00" ), units( 1 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming );
+  let blocked = submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Sell, price( "1.00" ), units( 1 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming );
   assert_eq!( blocked, Err( ExchangeError::Rejected( RejectReason::Halted ) ), "a halted instrument must refuse a new placement" );
   exchange.halt_clear( INSTRUMENT ).expect( "a halted instrument can be resumed" );
-  let resumed = submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Sell, money( "1.00" ), units( 1 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
+  let resumed = submit( &mut exchange, &mut producer, &mut consumer, order( maker, Side::Sell, price( "1.00" ), units( 1 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
   .expect( "the same placement must succeed once resumed" );
   assert_eq!( resumed.resting, units( 1 ), "nothing crosses it, so it rests in full" );
 
@@ -342,9 +351,9 @@ pub fn self_trade_fill_count() -> usize
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, order( trader, Side::Sell, money( "2.00" ), units( 2 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
+  submit( &mut exchange, &mut producer, &mut consumer, order( trader, Side::Sell, price( "2.00" ), units( 2 ), Tif::Gtc ), SelfMatchPolicy::CancelIncoming )
   .expect( "a funded sell rests" );
-  let crossing = submit( &mut exchange, &mut producer, &mut consumer, order( trader, Side::Buy, money( "2.00" ), units( 2 ), Tif::Gtc ), SelfMatchPolicy::CancelResting )
+  let crossing = submit( &mut exchange, &mut producer, &mut consumer, order( trader, Side::Buy, price( "2.00" ), units( 2 ), Tif::Gtc ), SelfMatchPolicy::CancelResting )
   .expect( "self-match prevention reports an outcome, not a refusal" );
 
   assert_eq!( crossing.resting, units( 2 ), "with the resting leg withdrawn and nothing else behind it, the incoming buy should rest in full" );

@@ -14,7 +14,7 @@
 //! `a_trade_executes_at_the_makers_price` moved to `exchange_fill/tests/`
 //! alongside `Trade` itself in Stage 5.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::{ Obligation, Order };
 use exchange_side::Side;
@@ -29,7 +29,7 @@ fn order( side : Side, price : &str, quantity : i64 ) -> Order
     instrument : InstrumentId( 1 ),
     account : AccountId( 1 ),
     side,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
     client : None,
@@ -91,7 +91,7 @@ fn a_notional_needing_rounding_is_refused()
 {
   // One minor unit of quantity — 0.000001 — at a price of 0.000001 is
   // 0.000000000001, twelve places, and the currency has six.
-  let dust_price = Money::EPSILON;
+  let dust_price = Price::from_minor( 1 ).unwrap();
   let dust_quantity = Quantity::EPSILON;
 
   assert_eq!( notional( dust_price, dust_quantity ), Err( TypeError::NotionalInexact ) );
@@ -101,7 +101,7 @@ fn a_notional_needing_rounding_is_refused()
 #[ test ]
 fn a_notional_over_the_ceiling_is_refused_by_name()
 {
-  let huge = Money::from_int( 1_000_000_000 ).unwrap();
+  let huge = Price::parse( "1000000000" ).unwrap();
   let many = Quantity::from_int( 1_000_000 ).unwrap();
 
   assert_eq!( notional( huge, many ), Err( TypeError::NotionalOutOfRange ) );
@@ -124,7 +124,7 @@ fn a_notional_over_the_currencys_ceiling_but_within_backing_width_is_refused()
   // 1_000_000_000 whole units of price (minor 10^15) times 10 whole units of
   // quantity (minor 10^7) lands the quotient at 10^16: past the 9×10^15
   // currency ceiling, but nowhere near `Backing`'s (`i64`) own ~9.2×10^18 limit.
-  let price = Money::from_int( 1_000_000_000 ).unwrap();
+  let price = Price::parse( "1000000000" ).unwrap();
   let quantity = Quantity::from_int( 10 ).unwrap();
 
   assert_eq!( notional( price, quantity ), Err( TypeError::NotionalOutOfRange ) );
@@ -144,7 +144,7 @@ fn an_exact_notional_survives_the_round_trip()
 
   for ( price, quantity, expected ) in cases
   {
-    let got = notional( Money::parse( price ).unwrap(), Quantity::from_int( quantity ).unwrap() ).unwrap();
+    let got = notional( Price::parse( price ).unwrap(), Quantity::from_int( quantity ).unwrap() ).unwrap();
     assert_eq!( got, Money::parse( expected ).unwrap(), "{price} x {quantity}" );
   }
 }

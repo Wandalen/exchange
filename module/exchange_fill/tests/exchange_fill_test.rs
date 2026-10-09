@@ -4,7 +4,7 @@
 //! `Trade` itself — see that file's own module doc for the full migration
 //! note.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_fill::{ EventKind, RejectReason, Trade };
 use exchange_id::{ AccountId, OrderId };
 use exchange_side::Side;
@@ -18,8 +18,8 @@ use exchange_side::Side;
 #[ test ]
 fn a_trade_executes_at_the_makers_price()
 {
-  let maker = Money::parse( "2.50" ).unwrap();
-  let generous_taker = Money::parse( "3.00" ).unwrap();
+  let maker = Price::parse( "2.50" ).unwrap();
+  let generous_taker = Price::parse( "3.00" ).unwrap();
 
   assert_eq!( Trade::executed_price( maker, generous_taker ), maker );
   assert_ne!( Trade::executed_price( maker, generous_taker ), generous_taker );
@@ -37,7 +37,7 @@ fn a_trade_holds_every_field_distinctly()
     taker_side : Side::Buy,
     maker : OrderId( 2 ),
     maker_account : AccountId( 2 ),
-    price : Money::parse( "2.50" ).unwrap(),
+    price : Price::parse( "2.50" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
   };
 
@@ -46,7 +46,7 @@ fn a_trade_holds_every_field_distinctly()
   assert_eq!( trade.taker_side, Side::Buy );
   assert_eq!( trade.maker, OrderId( 2 ) );
   assert_eq!( trade.maker_account, AccountId( 2 ) );
-  assert_eq!( trade.price, Money::parse( "2.50" ).unwrap() );
+  assert_eq!( trade.price, Price::parse( "2.50" ).unwrap() );
   assert_eq!( trade.quantity, Quantity::from_int( 4 ).unwrap() );
 }
 
@@ -62,7 +62,7 @@ fn p16_fill_names_maker_and_taker()
     taker_side : Side::Buy,
     maker : OrderId( 2 ),
     maker_account : AccountId( 2 ),
-    price : Money::parse( "2.50" ).unwrap(),
+    price : Price::parse( "2.50" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
   };
   let event = EventKind::Trade( trade );
