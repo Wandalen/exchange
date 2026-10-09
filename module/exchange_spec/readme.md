@@ -20,19 +20,21 @@ assert_eq!( price_snap( &spec, Price::parse( "1.26" ).unwrap() ).unwrap(), Price
 `price_snap`/`qty_snap` call `exact_arith::price_snap_tick`/`qty_snap_lot`
 with the instrument's own `Tick`/`Lot` and `exact_arith::rounding_default()`
 (ties-to-even) — there is no side here to pick a direction from.
+`price_fits`/`qty_fits` ask the snap whether a value stays put.
 
-## Not checked on placement
+## Checked on placement
 
-`Exchange::spec_register` stores a spec, and `step_place` reads its halt flag,
-but nothing checks an order's price or quantity against the grid, and an
-order for an unregistered instrument is accepted.
+`price_fits`/`qty_fits` say whether a value is on the grid. `exchange_core`
+refuses an order off it — `RejectReason::PriceOffTick`/`QuantityOffLot` —
+rather than snapping it to a price or size the submitter never asked for. An
+order for an unregistered instrument is still accepted unchecked.
 
 ## Responsibility Table
 
 | File | Responsibility |
 |------|----------------|
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_id` + `exact_arith` |
-| [`src/lib.rs`](src/lib.rs) | `AssetId`, `InstrumentSpec`, `spec_new`, `spec_halted_is`, `price_snap`, `qty_snap` |
+| [`src/lib.rs`](src/lib.rs) | `AssetId`, `InstrumentSpec`, `spec_new`, `spec_halted_is`, `price_snap`, `qty_snap`, `price_fits`, `qty_fits` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Exposed surface, as built vs. proposed |

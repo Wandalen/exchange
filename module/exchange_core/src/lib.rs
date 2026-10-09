@@ -105,6 +105,7 @@ use exchange_seq::seq_next;
 pub use exchange_side::Side;
 pub use exchange_snap::{ BookSnap, RestRow };
 pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
+use exchange_spec::{ price_fits, qty_fits };
 pub use exchange_stats::BookStats;
 use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add, stats_snapshot, stats_zero };
 pub use exchange_tif::Tif;
@@ -603,6 +604,19 @@ impl Exchange
     if self.specs.get( &order.instrument ).is_some_and( exchange_halt::halt_is )
     {
       return Err( self.reject_counted( &order, RejectReason::Halted ) );
+    }
+    // Off the instrument's grid. Refused rather than snapped: snapping would
+    // trade at a price or size the submitter never asked for.
+    if let Some( spec ) = self.specs.get( &order.instrument ).copied()
+    {
+      if !price_fits( &spec, order.price )
+      {
+        return Err( self.reject_counted( &order, RejectReason::PriceOffTick ) );
+      }
+      if !qty_fits( &spec, order.quantity )
+      {
+        return Err( self.reject_counted( &order, RejectReason::QuantityOffLot ) );
+      }
     }
     // `cross` refuses a taking post-only order too, but without an event —
     // checked here so the refusal is on record.

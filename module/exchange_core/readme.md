@@ -54,7 +54,8 @@ Implemented 2026-08-30 and graded from outside by
 This crate owns `Exchange` — the five-step submission path — and re-exports
 everything else. Its own logic is the sequencing:
 
-1. **validate** — a zero quantity is `Rejected`, an unknown account is `Rejected`;
+1. **validate** — a zero quantity, a negative price, a halted instrument, or a
+   price or quantity off the instrument's tick/lot grid is `Rejected`;
 2. **reserve** — whole or not at all, *before* the book sees the order;
 3. **match** — the crossing loop, taking from the front of the book;
 4. **settle** — each trade, in order, releasing price improvement to the buyer;

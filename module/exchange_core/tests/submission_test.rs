@@ -1296,3 +1296,30 @@ fn a_halted_instrument_refuses_placement_and_resuming_allows_it_again()
   let resumed = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), qty( 4 ) ).unwrap();
   assert_eq!( resumed.resting, qty( 4 ), "the identical order must now be accepted and rest" );
 }
+
+/// An order off its instrument's tick or lot grid is rejected on record and
+/// reserves nothing; the same order on the grid rests.
+#[ test ]
+fn an_order_off_the_grid_is_rejected()
+{
+  let mut exchange = market();
+  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), price( "0.05" ), qty( 2 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let off_tick = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.03" ), qty( 4 ) );
+  assert_eq!( off_tick, Err( ExchangeError::Rejected( RejectReason::PriceOffTick ) ) );
+  assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::PriceOffTick } ) );
+
+  let off_lot = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.05" ), qty( 3 ) );
+  assert_eq!( off_lot, Err( ExchangeError::Rejected( RejectReason::QuantityOffLot ) ) );
+  assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::QuantityOffLot } ) );
+
+  assert_eq!( exchange.escrow().reservation_count(), 0, "a refused order reserves nothing" );
+  assert_eq!( exchange.book().len(), 0 );
+  assert_eq!( exchange.stats_get().rejects, 2 );
+
+  let on_grid = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.05" ), qty( 4 ) ).unwrap();
+  assert_eq!( on_grid.resting, qty( 4 ) );
+}

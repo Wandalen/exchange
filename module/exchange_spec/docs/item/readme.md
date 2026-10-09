@@ -23,6 +23,8 @@ per-declaration split is deferred).
 | `spec_halted_is` | fn | `(&InstrumentSpec) -> bool` |
 | `price_snap` | fn | `(&InstrumentSpec, Price) -> Result<Price, SpecError>` |
 | `qty_snap` | fn | `(&InstrumentSpec, Quantity) -> Result<Quantity, SpecError>` |
+| `price_fits` | fn | `(&InstrumentSpec, Price) -> bool` |
+| `qty_fits` | fn | `(&InstrumentSpec, Quantity) -> bool` |
 
 ### Differs from the proposal
 
@@ -33,4 +35,5 @@ names `AssetId(u32)`, `InstrumentSpec{id,base,quote,tick,lot,halted}`,
 `spec_new`/`spec_halted_is`, `price_snap`/`qty_snap`, and
 `SpecError{ZeroTick,ZeroLot,Snap}` — all built as named. `SpecError` is an
 alias of `exact_arith::SnapError` rather than its own enum, so its third
-variant is `Overflow`, not `Snap`.
+variant is `Overflow`, not `Snap`. `price_fits`/`qty_fits` are additions:
+the grid check `exchange_core` runs before accepting an order.

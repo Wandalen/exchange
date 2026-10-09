@@ -114,3 +114,32 @@ pub fn qty_snap( spec : &InstrumentSpec, qty : Quantity ) -> Result< Quantity, S
   qty_snap_lot( qty, spec.lot, rounding_default() )
 }
 
+
+/// Whether `price` lies on `spec`'s tick grid — what `exchange_core` checks
+/// before accepting an order.
+///
+/// A point on the grid snaps to itself under any rounding, so this asks
+/// [`price_snap`] rather than redoing the arithmetic. A snap that overflows is
+/// off the grid.
+///
+/// ```rust
+/// use exact_arith::{ Price, Quantity };
+/// use exchange_id::InstrumentId;
+/// use exchange_spec::{ AssetId, price_fits, spec_new };
+///
+/// let spec = spec_new( InstrumentId( 1 ), AssetId( 1 ), AssetId( 2 ), Price::parse( "0.05" ).unwrap(), Quantity::from_int( 1 ).unwrap() ).unwrap();
+/// assert!( price_fits( &spec, Price::parse( "1.25" ).unwrap() ) );
+/// assert!( !price_fits( &spec, Price::parse( "1.26" ).unwrap() ) );
+/// ```
+#[ must_use ]
+pub fn price_fits( spec : &InstrumentSpec, price : Price ) -> bool
+{
+  price_snap( spec, price ) == Ok( price )
+}
+
+/// Whether `qty` lies on `spec`'s lot grid. See [`price_fits`].
+#[ must_use ]
+pub fn qty_fits( spec : &InstrumentSpec, qty : Quantity ) -> bool
+{
+  qty_snap( spec, qty ) == Ok( qty )
+}
