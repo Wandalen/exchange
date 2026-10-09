@@ -30,6 +30,15 @@ rather than snapping it to a price or size the submitter never asked for, and
 refuses an order for an instrument with no spec at all —
 `RejectReason::UnknownInstrument`.
 
+## Not built: price bands, size limits, re-gridding
+
+A price band (refuse a price too far from the market) needs a reference price
+— last trade or mark — and nothing in the family tracks one. A maximum order
+size is a risk limit with no owner yet; the lot already sets the minimum.
+Changing a live instrument's tick or lot would strand orders resting off the
+new grid, which is why `Exchange::spec_register` refuses a second
+registration.
+
 ## Responsibility Table
 
 | File | Responsibility |

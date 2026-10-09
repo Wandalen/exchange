@@ -39,6 +39,14 @@ retry after a lost acknowledgement cannot rest twice. The source design's
 wrapper, and validation happens at the submission boundary — see
 [`docs/decisions/001_no_order_mutation_or_error.md`](docs/decisions/001_no_order_mutation_or_error.md).
 
+## Not built: market, stop, iceberg
+
+A market order has no limit, so both the crossing predicate and the
+reservation — which reserves at the limit price — change with it. A stop needs
+something watching trade prices to trigger it. An iceberg hides part of its
+quantity, which `exchange_depth` and `exchange_snap` would have to honour, and
+re-queues on each refresh.
+
 ## Responsibility Table
 
 | File | Responsibility |

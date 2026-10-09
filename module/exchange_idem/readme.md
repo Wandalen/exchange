@@ -26,6 +26,12 @@ assert!( idem_insert( &mut seen, OrderId( 1 ) ).is_err(), "a repeat is refused" 
   `OrderId` itself, so only the submitter's own id can mark a retry. It never
   removes one — the set grows with every client-tagged order.
 
+## Not built: forgetting old client ids
+
+Releasing a client id when its order fills or cancels would let a late retry
+of that order through as a new one. Bounding the set by age needs a clock or a
+retention policy, and the family reads no clock.
+
 ## Responsibility Table
 
 | File | Responsibility |
