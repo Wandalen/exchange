@@ -389,3 +389,22 @@ fn cancel_then_resubmit_under_the_same_id_is_accepted()
 
   assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Money::parse( "1.05" ).unwrap() );
 }
+
+/// A repeated id is refused before it crosses. Checked only where the
+/// remainder would rest, it traded against the book first — the resting bid
+/// below was consumed — and the caller got `Err` without those trades.
+#[ test ]
+fn a_duplicate_place_id_is_refused_before_it_trades()
+{
+  let mut book = Book::new();
+  let mut seen = IdSet::new();
+  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ) ).unwrap();
+  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, InboundCmd::Place( resting( 2, Side::Buy, "0.90", 5, Tif::Gtc ) ) ).unwrap();
+
+  let repeat = InboundCmd::Place( resting( 1, Side::Sell, "0.90", 8, Tif::Gtc ) );
+  let error = inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, repeat ).unwrap_err();
+
+  assert_eq!( error, InboundApplyError::Idem( IdemError::Duplicate ) );
+  let bid = book.best( INSTRUMENT, Side::Buy ).expect( "the refused repeat must not have traded the bid away" );
+  assert_eq!( ( bid.order.id, bid.remaining ), ( OrderId( 2 ), Quantity::from_int( 5 ).unwrap() ) );
+}

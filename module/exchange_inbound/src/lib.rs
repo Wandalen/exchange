@@ -67,9 +67,10 @@
 //!
 //! # Idempotency
 //!
-//! [`inbound_apply`] takes a `seen : &mut IdSet` and checks/claims the
-//! incoming id with `exchange_idem::idem_insert` before ever resting a
-//! [`InboundCmd::Place`]'s remainder — and un-claims it with
+//! [`inbound_apply`] takes a `seen : &mut IdSet`, refuses a
+//! [`InboundCmd::Place`] whose id it already claims before crossing, and
+//! claims the id with `exchange_idem::idem_insert` once the remainder rests —
+//! and un-claims it with
 //! `exchange_idem::idem_remove` once a [`InboundCmd::Cancel`]/
 //! [`InboundCmd::Replace`] actually withdraws it, so a legitimate
 //! cancel-then-resubmit is accepted again rather than permanently refused.
@@ -92,13 +93,9 @@
 //! can branch on separately from "this quantity was already zero" — this
 //! crate's `idem_insert` call is what gives it one, named and returned to
 //! the caller rather than silently discarded the way a bare `rest_place`
-//! bool was before `Fix(exchange_inbound/BUG-003)`. It is checked only at
-//! the point a remainder would actually rest — not any earlier, against the
-//! incoming order as a whole — because that is the one place a repeat id
-//! can do the harm `exchange_idem` exists to name: doubling what rests. A
-//! repeat that happens to fully fill the second time around touches the
-//! book not at all, so there is nothing there for a duplicate check to
-//! protect.
+//! bool was before `Fix(exchange_inbound/BUG-003)`. An id is claimed only
+//! while its order rests, but checked before crossing: a repeat that crossed
+//! first would trade against the book and then be refused.
 //!
 //! # What this crate does not do
 //!
@@ -110,7 +107,7 @@
 
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
-use exchange_idem::{ idem_insert, idem_remove };
+use exchange_idem::{ idem_insert, idem_remove, idem_seen };
 use exchange_match::{ cross, Crossing, MatchError, SelfMatchPolicy };
 use exchange_rest::{ rest_cancel, rest_place, rest_replace, RestReplaceError };
 use exchange_tif::tif_rests;
@@ -302,13 +299,24 @@ pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< Inbou
 /// returns one — in practice a post-only order that would take, with `book`
 /// untouched.
 /// [`InboundApplyError::Idem`] if [`InboundCmd::Place`] names an id `seen`
-/// already claims.
+/// already claims, with `book` untouched.
 pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
 {
   match cmd
   {
     InboundCmd::Place( resting ) =>
     {
+      // Fix(inbound_apply_duplicate_traded_before_refusal): a repeated id was
+      // checked only where its remainder would rest — after `cross` had
+      // already traded it against the book — so the caller got `Err` and
+      // lost trades that had happened.
+      // Root cause: the check sat where the harm was assumed to be (a second
+      // rest), not where the book is first touched.
+      // Pitfall: refuse before the first mutation, not before the last one.
+      if idem_seen( seen, resting.order.id )
+      {
+        return Err( InboundApplyError::Idem( IdemError::Duplicate ) );
+      }
       let crossing = cross( book, &resting.order, policy )?;
 
       // Fix(exchange_inbound/BUG-002): a self-match-cancelled incoming order was
@@ -346,7 +354,7 @@ pub fn inbound_apply( book : &mut Book, seen : &mut IdSet, policy : SelfMatchPol
         // comment attached. An invariant a *public* function depends on must be
         // enforced for every caller, not assumed from the one caller that
         // currently happens to satisfy it.
-        idem_insert( seen, resting.order.id )?;
+        idem_insert( seen, resting.order.id ).expect( "checked unseen before crossing" );
         let remainder = Resting { remaining : crossing.remaining, ..resting };
         let placed = rest_place( book, remainder );
         debug_assert!( placed, "idem_insert above already refused a repeat; a freshly-claimed id cannot also collide in Book::insert" );
