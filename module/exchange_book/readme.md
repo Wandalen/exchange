@@ -27,6 +27,7 @@ fn bid( id : u64, arrival : u64 ) -> Resting
       price : Money::parse( "2.50" ).unwrap(),
       quantity,
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),

@@ -25,6 +25,7 @@ fn node( id : u64, quantity : i64, arrival : u64 ) -> LevelNode
       price : Money::parse( "2.50" ).unwrap(),
       quantity : Quantity::from_int( quantity ).unwrap(),
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : Quantity::from_int( quantity ).unwrap(),
     arrival : Sequence( arrival ),

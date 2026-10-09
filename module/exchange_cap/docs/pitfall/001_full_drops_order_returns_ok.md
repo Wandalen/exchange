@@ -16,9 +16,8 @@ the ring-overflow pitfall but at the book's own limit instead of the ring's.
 
 ### How this crate avoids it
 
-Both check functions return `Result< (), CapError >`, and the refusal
-variants (`CapError::RestsFull`/`CapError::LevelsFull`) are exercised by a
-real test — never left to a theoretical "should return Err" claim.
+Both check functions return `Result< (), CapError >`, and `exchange_core`
+carries a refusal through as `RejectReason::RestsFull`/`LevelsFull`.
 Test-verifiable:
 
 ```bash

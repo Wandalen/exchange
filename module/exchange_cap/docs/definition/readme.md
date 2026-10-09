@@ -15,6 +15,7 @@
 | `CapError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `cap_check_rest` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `cap_check_level` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `cap_check_account` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
-No decisions collection — this crate matches the proposal exactly, see
+No decisions collection — the proposal plus one per-account cap, see
 [`../item/readme.md`](../item/readme.md).

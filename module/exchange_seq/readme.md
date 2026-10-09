@@ -1,7 +1,9 @@
 # exchange_seq
 
 A monotonic sequence for time priority, without a wall clock — a root of the
-dependency tree, and not workstream 004's clock.
+dependency tree, and not workstream 004's clock. Closes feature 28, which hard
+problem 6's determinism depends on: a clock reading differs across replays and
+nodes.
 
 ```rust
 use exchange_seq::{ Sequence, seq_next };
@@ -11,27 +13,11 @@ let second = seq_next( first );
 assert!( second > first );
 ```
 
-## Extracted from `exchange_types`
+## Not built: `seq_cmp`, `SeqError::Exhausted`
 
-`Sequence` lived in `exchange_types` until this crate split out;
-`exchange_types` depended on this crate and re-exported it for a time, so
-`use exchange_types::Sequence` kept resolving — that re-export is retired
-now (2026-10-05). [`seq_next`] is new:
-it gives the increment a name and a home, replacing the raw `u64` counter
-`exchange_core` previously incremented by hand — `Exchange::emit`
-(`module/exchange_core/src/lib.rs`) now calls it instead.
-
-## Closes feature 28
-
-Stamping resting orders with a monotonic `Sequence` instead of a wall clock
-is feature 28 (sequence, no wall clock) — a prerequisite for hard problem 6's
-determinism, since a clock reading differs across replays and nodes.
-
-## Not built: `SeqError::Exhausted`, `seq_cmp`
-
-Both are named in the source design; neither is built here. See
-[`docs/decisions/001_no_seq_cmp_or_seq_error.md`](docs/decisions/001_no_seq_cmp_or_seq_error.md)
-for why.
+`Sequence` already derives `Ord`, and a `u64` bumped once per event does not
+run out in any real run — see
+[`docs/decisions/001_no_seq_cmp_or_seq_error.md`](docs/decisions/001_no_seq_cmp_or_seq_error.md).
 
 ## Responsibility Table
 
@@ -42,12 +28,12 @@ for why.
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/decisions/` | Why `seq_cmp` and `SeqError` are not part of this build |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
-| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
+| `docs/item/` | Exposed surface, as built vs. proposed |
 | [`tests/exchange_seq_test.rs`](tests/exchange_seq_test.rs) | Test Matrix T01 — monotonicity, plus Phase P08's smoke assertion |
 | [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan |
 
 ## Related
 
-- [`exchange_types/`](../exchange_types/readme.md) — re-exported `Sequence` until retiring that re-export in 2026-10-05
 - [`exchange_core/`](../exchange_core/readme.md) — calls `seq_next` once per emitted event
+- [`exchange_book/`](../exchange_book/readme.md) — breaks a same-price tie by arrival `Sequence`
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p08_seq`, this crate's phase smoke

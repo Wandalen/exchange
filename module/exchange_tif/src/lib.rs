@@ -1,45 +1,55 @@
 //! Time-in-force as an explicit value on the order.
 //!
-//! A root of the dependency tree: no dependency on any other `exchange_*`
-//! crate, and this crate does not itself match — [`tif_rests`] and
-//! [`tif_requires_full`] are queries the matching loop consults, not
-//! behaviour this crate performs. Without this crate every order can only
-//! ever rest forever; there has been no way to say IOC or FOK.
+//! A root of the dependency tree. This crate does not match; it answers three
+//! questions for the code that does. `exchange_match::cross` gates FOK on
+//! [`tif_requires_full`] and refuses a post-only order that fails
+//! [`tif_takes`]; `exchange_core` and `exchange_inbound` drop an unfilled
+//! remainder that fails [`tif_rests`].
 //!
-//! `exchange_types`'s own module documentation named this gap directly: "Time-in-Force
-//! disposition ... is not implemented." This crate is what closes it —
-//! hard problem 20, feature 16.
+//! [`Tif::PostOnly`] is not in the source design — see
+//! `docs/decisions/001_post_only_is_a_tif.md`.
 
-/// How long a resting order's remainder may live once a match pass is done.
+/// What happens to an order's unfilled remainder once a match pass is done.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, Hash ) ]
 pub enum Tif
 {
-  /// Good-'til-cancelled. A remainder rests until it fills or is cancelled.
+  /// Good-'til-cancelled. The remainder rests until it fills or is cancelled.
   Gtc,
-  /// Immediate-or-cancel. Whatever does not fill immediately is withdrawn;
-  /// nothing from this order ever rests.
+  /// Immediate-or-cancel. Whatever does not fill immediately is withdrawn.
   Ioc,
-  /// Fill-or-kill. The order must fill completely or not at all — a partial
-  /// outcome is rejected as if nothing had matched.
+  /// Fill-or-kill. Fills completely, or is rejected with the book unchanged.
   Fok,
+  /// Post-only. Rests like [`Tif::Gtc`], but is refused whole if it would
+  /// take liquidity on arrival — it only ever trades as the maker.
+  PostOnly,
 }
 
-/// Whether an unfilled remainder of `tif` is allowed to rest on the book.
+/// Whether an unfilled remainder under `tif` may rest on the book.
 ///
-/// Only [`Tif::Gtc`] does — [`Tif::Ioc`] withdraws its remainder immediately,
-/// and [`Tif::Fok`] never has a partial remainder to rest in the first place.
+/// [`Tif::Gtc`] and [`Tif::PostOnly`]: [`Tif::Ioc`] withdraws its remainder,
+/// and [`Tif::Fok`] never leaves one.
 #[ must_use ]
 pub const fn tif_rests( tif : Tif ) -> bool
 {
-  matches!( tif, Tif::Gtc )
+  matches!( tif, Tif::Gtc | Tif::PostOnly )
 }
 
-/// Whether `tif` accepts only a complete fill, rejecting any partial outcome.
+/// Whether `tif` refuses a partial fill.
 ///
-/// Only [`Tif::Fok`] does. [`Tif::Gtc`] and [`Tif::Ioc`] both accept a
-/// partial fill — they differ only in what happens to what's left.
+/// Only [`Tif::Fok`]. The others accept one and differ only in what happens
+/// to the remainder.
 #[ must_use ]
 pub const fn tif_requires_full( tif : Tif ) -> bool
 {
   matches!( tif, Tif::Fok )
+}
+
+/// Whether an order under `tif` may take liquidity — trade against an order
+/// already resting.
+///
+/// Every value but [`Tif::PostOnly`].
+#[ must_use ]
+pub const fn tif_takes( tif : Tif ) -> bool
+{
+  !matches!( tif, Tif::PostOnly )
 }

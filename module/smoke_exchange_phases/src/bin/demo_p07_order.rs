@@ -17,6 +17,7 @@ fn main()
     id : OrderId( 1 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ),
     side : Side::Buy, price : Money::parse( "1" ).unwrap(), quantity : Quantity::from_int( 1 ).unwrap(),
     tif : Tif::Gtc,
+    client : None,
   };
   let arrival = seq_next( Sequence::ZERO );
 

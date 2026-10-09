@@ -16,6 +16,12 @@
 //! book) by giving that one case its own name, [`IdemError::Duplicate`],
 //! checkable *before* an id ever reaches `Book::insert` at all.
 //!
+//! # Any key, `OrderId` by default
+//!
+//! [`IdSet`] is generic over its key, defaulting to [`OrderId`]. Where the
+//! exchange assigns `OrderId` itself, a repeat can only be recognised by the
+//! submitter's own id — key the set by `( AccountId, ClientOrderId )` there.
+//!
 //! # Membership, not priority
 //!
 //! [`IdSet`] stores its seen ids in a [`std::collections::HashSet`]. This
@@ -25,16 +31,29 @@
 //! iterated; every operation here is a single-key membership test or
 //! mutation, for which a hash set's own order is simply never observed.
 
+use core::hash::Hash;
+use std::collections::HashSet;
+
 use exchange_id::OrderId;
 
-/// The set of `OrderId`s already seen by one book.
-#[ derive( Debug, Clone, Default ) ]
-pub struct IdSet
+/// The set of keys already seen — by default, the `OrderId`s seen by one book.
+#[ derive( Debug, Clone ) ]
+pub struct IdSet< K = OrderId >
 {
-  seen : std::collections::HashSet< OrderId >,
+  seen : HashSet< K >,
 }
 
-impl IdSet
+// Not derived: a derived `Default` would demand `K : Default`, which no id
+// type needs.
+impl< K > Default for IdSet< K >
+{
+  fn default() -> Self
+  {
+    Self { seen : HashSet::new() }
+  }
+}
+
+impl< K > IdSet< K >
 {
   /// An empty set — nothing seen yet.
   #[ must_use ]
@@ -48,7 +67,7 @@ impl IdSet
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum IdemError
 {
-  /// This `OrderId` was already seen by this set.
+  /// This key was already seen by this set.
   Duplicate,
 }
 
@@ -71,7 +90,7 @@ impl core::error::Error for IdemError {}
 /// `set`, so a caller can test before committing to anything else a failed
 /// insert would need to unwind.
 #[ must_use ]
-pub fn idem_seen( set : &IdSet, id : OrderId ) -> bool
+pub fn idem_seen< K : Hash + Eq >( set : &IdSet< K >, id : K ) -> bool
 {
   set.seen.contains( &id )
 }
@@ -82,7 +101,7 @@ pub fn idem_seen( set : &IdSet, id : OrderId ) -> bool
 ///
 /// [`IdemError::Duplicate`] if `id` was already in `set` — `set` is left
 /// unchanged by a refused insert.
-pub fn idem_insert( set : &mut IdSet, id : OrderId ) -> Result< (), IdemError >
+pub fn idem_insert< K : Hash + Eq >( set : &mut IdSet< K >, id : K ) -> Result< (), IdemError >
 {
   if set.seen.insert( id )
   {
@@ -99,7 +118,7 @@ pub fn idem_insert( set : &mut IdSet, id : OrderId ) -> Result< (), IdemError >
 /// Returns whether `id` was present to forget — a caller that expected it to
 /// be there (releasing a cancelled order's id, say) can tell a genuine
 /// "already gone" apart from its own bookkeeping error.
-pub fn idem_remove( set : &mut IdSet, id : OrderId ) -> bool
+pub fn idem_remove< K : Hash + Eq >( set : &mut IdSet< K >, id : K ) -> bool
 {
   set.seen.remove( &id )
 }

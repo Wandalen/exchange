@@ -8,12 +8,11 @@
 
 The source design's crate list names `exchange_id` as `exchange_stats`'s one
 dependency (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:476-481`).
-`BookStats`'s three fields (`rests`, `fills`, `rejects`) are plain running
-totals, not keyed by `OrderId`/`AccountId`/`InstrumentId` or any other type
-`exchange_id` declares, and none of the four exposed functions
-(`stats_zero`/`stats_fill_add`/`stats_reject_add`/`stats_snapshot`) take an id
-parameter either, per the source's own exposed-item list
-(`core_exchange.txt:647-650`).
+`BookStats`'s four fields (`rests`, `fills`, `rejects`, `cancels`) are plain
+running totals, not keyed by `OrderId`/`AccountId`/`InstrumentId` or any
+other type `exchange_id` declares, and none of the source's four functions
+(`stats_zero`/`stats_fill_add`/`stats_reject_add`/`stats_snapshot`,
+`core_exchange.txt:647-650`) takes an id parameter either.
 
 ## Decision
 
@@ -32,7 +31,7 @@ even be added without inventing a use for it.
 
 ## Consequences
 
-**Positive:** `exchange_stats` stays trivially auditable — one struct, four
+**Positive:** `exchange_stats` stays trivially auditable — one struct, six
 pure functions, nothing to trust beyond arithmetic on `u64`.
 
 **Negative:** none identified — no caller today needs a per-id breakdown of

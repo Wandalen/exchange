@@ -6,7 +6,7 @@ plan checks whether that pin is load-bearing rather than redundant.
 ## M1 — the distinct-naming guard is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_stp/src/lib.rs, in stp_name,
+# In module/exchange_stp/src/lib.rs, in stp_name,
 # replace the CancelResting arm's "cancel_resting" with "cancel_incoming"
 cargo test -p exchange_stp --all-features 2>&1 | grep -E 'FAILED|test result'
 ```

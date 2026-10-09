@@ -17,6 +17,7 @@ fn node( id : u64, arrival : u64 ) -> LevelNode
     {
       id : OrderId( id ), instrument : InstrumentId( 1 ), account : AccountId( id ),
       side : Side::Buy, price : Money::parse( "1" ).unwrap(), quantity, tif : Tif::Gtc,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),

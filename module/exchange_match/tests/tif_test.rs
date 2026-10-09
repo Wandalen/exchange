@@ -9,7 +9,7 @@
 use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
-use exchange_match::{ Crossing, MatchError, SelfMatchPolicy, cross as cross_with_policy };
+use exchange_match::{ Crossing, MatchError, SelfMatchPolicy, cross as cross_with_policy, would_take };
 use exchange_order::Order;
 use exchange_seq::Sequence;
 use exchange_side::Side;
@@ -31,6 +31,7 @@ fn order( id : u64, side : Side, price : &str, quantity : i64, tif : Tif ) -> Or
     price : Money::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif,
+    client : None,
   }
 }
 
@@ -154,4 +155,34 @@ fn fok_that_exactly_exhausts_two_levels_fills_both()
   assert_eq!( crossing.trades.len(), 2 );
   assert!( crossing.is_complete() );
   assert!( book.is_empty() );
+}
+
+/// A post-only order that would take is refused, and the book is untouched.
+#[ test ]
+fn post_only_that_would_take_is_refused_without_touching_the_book()
+{
+  let mut book = Book::new();
+  rest( &mut book, 1, Side::Sell, "2.50", 4, 10 );
+  let before = book.clone();
+
+  let incoming = order( 2, Side::Buy, "2.50", 4, Tif::PostOnly );
+  assert!( would_take( &book, &incoming ) );
+  assert_eq!( cross( &mut book, &incoming ), Err( MatchError::PostOnlyWouldTake ) );
+  assert_eq!( book, before );
+}
+
+/// A post-only order below the best ask crosses nothing and is left to rest.
+#[ test ]
+fn post_only_that_would_not_take_crosses_nothing()
+{
+  let mut book = Book::new();
+  rest( &mut book, 1, Side::Sell, "2.50", 4, 10 );
+
+  let incoming = order( 2, Side::Buy, "2.45", 4, Tif::PostOnly );
+  assert!( !would_take( &book, &incoming ) );
+
+  let crossing = cross( &mut book, &incoming ).unwrap();
+  assert!( crossing.trades.is_empty() );
+  assert_eq!( crossing.remaining, qty( 4 ) );
+  assert_eq!( book.len(), 1 );
 }

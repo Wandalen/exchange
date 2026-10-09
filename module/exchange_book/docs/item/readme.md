@@ -29,6 +29,7 @@ per-declaration split is deferred).
 | `Book::iter` | fn | `(&self) -> impl Iterator<Item = &Resting>` |
 | `Book::rests_at` | fn | `(&self, instrument: InstrumentId, side: Side, price: Price) -> usize` — added for `exchange_cap`'s wiring into `exchange_core` |
 | `Book::level_count` | fn | `(&self, instrument: InstrumentId, side: Side) -> usize` — added for `exchange_cap`'s wiring into `exchange_core` |
+| `Book::account_rests` | fn | `(&self, instrument: InstrumentId, account: AccountId) -> usize` — added for `exchange_cap`'s per-account cap |
 
 ### Differs from the proposal
 

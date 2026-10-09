@@ -21,19 +21,12 @@ per-declaration split is deferred).
 
 ### Diverges from the proposal
 
-The source design's own exposed-item list
+The source design's exposed-item list
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:550-552`,
-also catalogued centrally at
+catalogued at
 [`../../../../docs/exposed_item/004_exchange_stp_items.md`](../../../../docs/exposed_item/004_exchange_stp_items.md))
 names `Stp { Allow, CancelOldest, CancelNewest }` plus `stp_name`. `stp_name`
-is built exactly as named. The enum differs: no `Allow`, the other two
-renamed by role (`CancelResting`/`CancelIncoming` instead of
-`CancelOldest`/`CancelNewest`), plus a third real variant (`CancelBoth`) the
+is built as named. The enum differs: no `Allow`, the other two renamed by
+role (`CancelResting`/`CancelIncoming`), plus `CancelBoth`, which the
 proposal never named — see
-[`../decisions/001_no_allow_resting_incoming_naming.md`](../decisions/001_no_allow_resting_incoming_naming.md)
-for the full reasoning.
-
-One caller-side gap, not a divergence in this crate's own surface:
-`exchange_core` currently hardcodes `SelfMatchPolicy::CancelIncoming`
-(`module/exchange_core/src/lib.rs:62,316,338`) rather than letting a caller
-choose among the three per book.
+[`../decisions/001_no_allow_resting_incoming_naming.md`](../decisions/001_no_allow_resting_incoming_naming.md).

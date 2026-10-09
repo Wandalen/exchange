@@ -29,7 +29,7 @@ let mut ends = ring.ends();
 let ( mut producer, mut consumer ) = ends.split();
 
 let place = | account, side, price, quantity | InboundCmd::Place
-( Resting { order : Order { id : OrderId( 0 ), instrument, account, side, price, quantity, tif : Tif::Gtc }, remaining : quantity, arrival : Sequence::ZERO } );
+( Resting { order : Order { id : OrderId( 0 ), instrument, account, side, price, quantity, tif : Tif::Gtc, client : None }, remaining : quantity, arrival : Sequence::ZERO } );
 
 inbound_flush( &mut producer, [ place( seller, Side::Sell, price, four ) ] );
 exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming );
@@ -51,10 +51,10 @@ block, then exits `ok`.
 ## Status
 
 Limit orders under price-time priority are implemented, tested, and graded by
-the smoke lane above. Time-in-force (`GTC`/`IOC`/`FOK`) is implemented in
-`exchange_match::cross` — see that crate's own module doc for the FOK
-probe-then-commit rule. Three things are deliberately not here yet, named
-rather than left to be discovered as gaps:
+the smoke lane above. Time-in-force (`GTC`/`IOC`/`FOK`/post-only) is
+implemented in `exchange_match::cross` — see that crate's own module doc for
+the FOK probe-then-commit rule and the post-only refusal. Three things are
+deliberately not here yet, named rather than left to be discovered as gaps:
 
 | Not yet built | Current behavior |
 |----------------|-------------------|
@@ -83,7 +83,7 @@ Full comparison against `matchcore`, `orderbook-rs`, and `limitbook`:
 |-----------|----------------|
 | [`exchange_id/`](module/exchange_id/readme.md) | Plain id newtypes — `InstrumentId`, `OrderId`, `AccountId` |
 | [`exchange_side/`](module/exchange_side/readme.md) | Bid and ask as one closed type |
-| [`exchange_tif/`](module/exchange_tif/readme.md) | Time-in-force as an explicit value — GTC, IOC, FOK |
+| [`exchange_tif/`](module/exchange_tif/readme.md) | Time-in-force as an explicit value — GTC, IOC, FOK, post-only |
 | [`exchange_stp/`](module/exchange_stp/readme.md) | The self-trade policy, as a closed set |
 | [`exchange_seq/`](module/exchange_seq/readme.md) | The monotonic sequence for time priority |
 | [`exchange_cap/`](module/exchange_cap/readme.md) | The limit on rests and levels per book |

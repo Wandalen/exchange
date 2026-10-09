@@ -6,7 +6,7 @@ whether that pin is load-bearing rather than redundant.
 ## M1 — the increment is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_seq/src/lib.rs, in seq_next,
+# In module/exchange_seq/src/lib.rs, in seq_next,
 # replace  Sequence( current.0 + 1 )  with  current
 cargo test -p exchange_seq --all-features 2>&1 | grep -E 'FAILED|test result'
 ```

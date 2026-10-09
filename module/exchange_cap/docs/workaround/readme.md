@@ -12,7 +12,7 @@ External constraints `exchange_cap` absorbs.
 ### Overview
 
 **None.** `exchange_cap` is a dependency-free root of the family's tree — one
-struct, one error enum, two pure checks. Verify with:
+struct, one error enum, three pure checks. Verify with:
 
 ```bash
 cd module/exchange_cap && cargo tree --depth 1

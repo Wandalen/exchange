@@ -12,7 +12,7 @@
 | Item | Signature | Purpose |
 |------|-----------|---------|
 | `Amount` | `pub type Amount = Price` | Currency amount — same type as `Price`, read as a total rather than a per-unit rate |
-| `Order` | `pub struct Order { id: OrderId, instrument: InstrumentId, account: AccountId, side: Side, price: Price, quantity: Quantity, tif: Tif }` | One submitted limit order, every field `pub` |
+| `Order` | `pub struct Order { id: OrderId, instrument: InstrumentId, account: AccountId, side: Side, price: Price, quantity: Quantity, tif: Tif, client: Option<ClientOrderId> }` | One submitted limit order, every field `pub` |
 | `Obligation` | `pub enum Obligation { Cash(Amount), Asset(Quantity) }` | What an order commits until it fills or cancels |
 
 ### Differs from the proposal
@@ -32,6 +32,9 @@ dedicated `OrderError { ZeroQty, BadId }`. The real build:
   `instrument` and `tif` — the two fields missing when this crate was still
   folded into `exchange_types` — are both present now that `Order` has its
   own crate.
+- Adds `client : Option< ClientOrderId >` — not in the proposal; the
+  submitter's own id, which `exchange_core` refuses to see twice from one
+  account.
 - Builds no `order_new` — every field stays `pub`, so a plain struct literal
   is the only construction path, with no second fallible path to keep in
   sync with it.
@@ -40,7 +43,7 @@ dedicated `OrderError { ZeroQty, BadId }`. The real build:
   `exchange_book::Resting`/`exchange_level::LevelNode` once the order rests,
   since only a resting order has a remainder to track.
 - Builds no `OrderError` — a zero-quantity order is refused at
-  `exchange_core::Exchange::submit`'s boundary via `RejectReason::ZeroQuantity`,
+  `exchange_core`'s submission boundary via `RejectReason::ZeroQuantity`,
   not at construction time.
 - Adds `Obligation` (and its `Amount` alias) — not named in crate 6's own
   exposed-item list, but assigned here because the family's dependency tree

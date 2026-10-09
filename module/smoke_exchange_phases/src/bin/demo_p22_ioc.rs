@@ -25,6 +25,7 @@ fn order( id : u64, side : Side, quantity : i64, tif : Tif ) -> Order
     price : Money::parse( "1.00" ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif,
+    client : None,
   }
 }
 
