@@ -8,6 +8,9 @@
 - **Out of Scope**: Price levels — this crate has no concept of one.
 
 **Design status**: Built. Built-vs-proposed comparison: [`../../module/exchange_order/docs/item/readme.md`](../../module/exchange_order/docs/item/readme.md).
+Also depends directly on `exact_arith` (006's facade; proposed leaf was
+`exact_kind`) — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s
+per-crate table.
 
 ### Statement
 

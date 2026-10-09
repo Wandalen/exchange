@@ -10,6 +10,9 @@
 **Design status**: Built, and checked on every placement. Full writeup moved
 to the crate's own docs: [`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md),
 [`../../module/exchange_spec/docs/item/readme.md`](../../module/exchange_spec/docs/item/readme.md).
+Also depends directly on `exact_arith` (006's facade; proposed leaves were
+`exact_kind`, `exact_snap`) — see
+`../neighbor_contract/001_006_supplies_money_qty_price.md`'s per-crate table.
 
 ### Statement
 

@@ -31,6 +31,14 @@
 //! output and the audit record both, so a mutation with no event is a fact the
 //! record cannot reproduce.
 //!
+//! # Escrow is a port
+//!
+//! Steps 2, 4 and every release reach escrow only through [`EscrowPort`] —
+//! `reserve`, `settle`, `release` — with [`Escrow`] as the default
+//! implementation. That is what lets `tests/escrow_port_test.rs` drive the
+//! five steps against a scripted escrow instead of engineering real balance
+//! edge cases. The port's own doc names the three rules the dry run relies on.
+//!
 //! # `exchange_step` replaces `submit`
 //!
 //! The old `Exchange::submit( account, side, price, quantity )` is gone.
@@ -111,6 +119,79 @@ use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_re
 pub use exchange_tif::Tif;
 use exchange_tif::{ tif_rests, tif_takes };
 pub use exchange_types::{ TypeError, notional, obligation };
+
+/// The three escrow moves [`Exchange`] makes on the matching path, and the
+/// only way that path reaches escrow — [`Escrow`] is the default
+/// implementation, not a dependency of the sequencing. Funding an account is
+/// not one of them: [`Exchange::open_account`] exists on `Exchange< Escrow >`
+/// only.
+///
+/// Each method keeps [`Escrow`]'s own name and meaning: [`Self::reserve`]
+/// before an order is visible to matching, [`Self::settle`] once per trade,
+/// [`Self::release`] on every exit that does not rest. Three rules the facade
+/// relies on and cannot check:
+///
+/// - **Deterministic, clones included.** [`Exchange::exchange_step`] runs every
+///   call against a clone first, then replays the same calls for real,
+///   `expect`ing each to succeed. An implementation that answers the replay
+///   differently from the dry run panics the facade.
+/// - **A refused call changes nothing.** [`Exchange::cancel`] calls
+///   [`Self::release`] on the real escrow and leaves the order resting when it
+///   refuses.
+/// - **`Clone` is a full, independent copy.** A dry run that writes through
+///   to shared state is not a dry run.
+///
+/// The error is [`EscrowError`] itself rather than an associated type, so the
+/// facade's translation into a [`RejectReason`] stays one exhaustive match.
+pub trait EscrowPort : Clone
+{
+  /// Reserve `order`'s whole obligation, or refuse it whole — see
+  /// [`Escrow::reserve`].
+  ///
+  /// # Errors
+  ///
+  /// [`EscrowError`] if the obligation cannot be reserved in full.
+  fn reserve( &mut self, order : &Order ) -> Result< Obligation, EscrowError >;
+
+  /// Return everything still reserved for `order` to `owner` — see
+  /// [`Escrow::release`].
+  ///
+  /// # Errors
+  ///
+  /// [`EscrowError`] if nothing is reserved for `order`, or it cannot be
+  /// returned.
+  fn release( &mut self, owner : AccountId, order : OrderId ) -> Result< Obligation, EscrowError >;
+
+  /// Move `trade`'s units between its two parties, out of their reservations
+  /// — see [`Escrow::settle`].
+  ///
+  /// # Errors
+  ///
+  /// [`EscrowError`] if either side cannot be settled, in which case nothing
+  /// moves.
+  fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >;
+}
+
+/// Forwards to [`Escrow`]'s inherent methods — `Escrow::reserve( self, .. )`
+/// resolves to the inherent one, which path resolution prefers over the trait
+/// method of the same name.
+impl EscrowPort for Escrow
+{
+  fn reserve( &mut self, order : &Order ) -> Result< Obligation, EscrowError >
+  {
+    Escrow::reserve( self, order )
+  }
+
+  fn release( &mut self, owner : AccountId, order : OrderId ) -> Result< Obligation, EscrowError >
+  {
+    Escrow::release( self, owner, order )
+  }
+
+  fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >
+  {
+    Escrow::settle( self, trade, taker_side, taker_limit )
+  }
+}
 
 /// What came of a submission.
 #[ derive( Debug, Clone, PartialEq, Eq ) ]
@@ -308,11 +389,14 @@ pub enum StepOutcome
 /// One market: a book, the balances behind it, the record of everything that
 /// happened, every instrument's own grid, and the running counters
 /// [`Exchange::exchange_step`] keeps.
+///
+/// `E` is the escrow behind it — [`Escrow`] unless a caller supplies another
+/// [`EscrowPort`] through [`Exchange::with_escrow`].
 #[ derive( Debug, Clone, Default ) ]
-pub struct Exchange
+pub struct Exchange< E = Escrow >
 {
   book : Book,
-  escrow : Escrow,
+  escrow : E,
   next_order : u64,
   next_sequence : Sequence,
   events : Vec< Event >,
@@ -323,9 +407,14 @@ pub struct Exchange
   clients : IdSet< ( AccountId, ClientOrderId ) >,
 }
 
-impl Exchange
+impl Exchange< Escrow >
 {
   /// A market with no participants and an empty book.
+  ///
+  /// Only for the real [`Escrow`]: a default type parameter does not drive
+  /// inference, so a generic `new` would leave every bare `Exchange::new()`
+  /// failing with "type annotations needed". [`Exchange::with_escrow`] is
+  /// the generic constructor.
   #[ must_use ]
   pub fn new() -> Self
   {
@@ -343,6 +432,28 @@ impl Exchange
   {
     self.escrow.open( id, cash, asset )?;
     Ok( () )
+  }
+}
+
+impl< E : EscrowPort > Exchange< E >
+{
+  /// A market with no participants and an empty book, over `escrow`.
+  #[ must_use ]
+  pub fn with_escrow( escrow : E ) -> Self
+  {
+    Self
+    {
+      book : Book::default(),
+      escrow,
+      next_order : 0,
+      next_sequence : Sequence::default(),
+      events : Vec::new(),
+      specs : BTreeMap::new(),
+      caps : BTreeMap::new(),
+      stats : BookStats::default(),
+      instrument_stats : BTreeMap::new(),
+      clients : IdSet::default(),
+    }
   }
 
   /// Register `id`'s grid and asset pair.
@@ -910,7 +1021,7 @@ impl Exchange
 
   /// The balances behind it.
   #[ must_use ]
-  pub fn escrow( &self ) -> &Escrow
+  pub fn escrow( &self ) -> &E
   {
     &self.escrow
   }
