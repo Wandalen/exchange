@@ -34,12 +34,22 @@ fn qty( whole : i64 ) -> Quantity
   Quantity::from_int( whole ).unwrap()
 }
 
-/// An exchange with two funded participants.
+/// Registers [`INSTRUMENT`] on the finest grid `exact_arith` represents, so
+/// every price and quantity fits — the grid is not what these tests probe.
+fn instrument_register( exchange : &mut Exchange )
+{
+  let tick = Price::from_minor( 1 ).unwrap();
+  let lot = Quantity::from_minor( 1 ).unwrap();
+  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), tick, lot ).unwrap();
+}
+
+/// An exchange with two funded participants and [`INSTRUMENT`] registered.
 fn market() -> Exchange
 {
   let mut exchange = Exchange::new();
   exchange.open_account( AccountId( 1 ), money( "1000" ), qty( 100 ) ).unwrap();
   exchange.open_account( AccountId( 2 ), money( "1000" ), qty( 100 ) ).unwrap();
+  instrument_register( &mut exchange );
   exchange
 }
 
@@ -648,6 +658,7 @@ fn a_negative_price_is_refused_before_it_can_rest()
 fn a_reservation_ceiling_breach_is_distinguished_from_a_funds_shortfall()
 {
   let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
   // Account 1 opens holding the whole-unit ceiling in cash outright, plus
   // enough asset to sell later.
   exchange.open_account( AccountId( 1 ), money( "9000000000" ), qty( 600 ) ).unwrap();
@@ -794,6 +805,7 @@ fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
 fn a_cancel_that_fails_to_release_leaves_the_order_resting()
 {
   let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
   // Account 1 starts three cash units short of the whole-unit ceiling, plus
   // enough asset to sell later.
   exchange.open_account( AccountId( 1 ), money( "8999999997" ), qty( 10 ) ).unwrap();
@@ -912,6 +924,7 @@ fn a_cancel_that_fails_to_release_leaves_the_order_resting()
 fn a_crossing_whose_second_trade_cannot_settle_commits_nothing()
 {
   let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
   // Account 1 starts one cash unit short of the whole-unit ceiling, plus
   // enough asset to sell into two separate trades.
   exchange.open_account( AccountId( 1 ), money( "8999999999" ), qty( 10 ) ).unwrap();
@@ -1073,6 +1086,7 @@ fn stats_are_kept_per_instrument_and_in_total()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
   let other = InstrumentId( 2 );
+  exchange.spec_register( other, AssetId( 1 ), AssetId( 3 ), price( "0.01" ), qty( 1 ) ).unwrap();
 
   let on = | instrument, account, side, quantity | Order
   {
@@ -1282,7 +1296,6 @@ fn a_fok_taker_rejects_whole_against_a_thin_book_through_the_facade()
 fn a_halted_instrument_refuses_placement_and_resuming_allows_it_again()
 {
   let mut exchange = market();
-  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), price( "0.05" ), qty( 1 ) ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
@@ -1303,16 +1316,23 @@ fn a_halted_instrument_refuses_placement_and_resuming_allows_it_again()
 fn an_order_off_the_grid_is_rejected()
 {
   let mut exchange = market();
-  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), price( "0.05" ), qty( 2 ) ).unwrap();
+  let coarse = InstrumentId( 2 );
+  exchange.spec_register( coarse, AssetId( 1 ), AssetId( 3 ), price( "0.05" ), qty( 2 ) ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let off_tick = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.03" ), qty( 4 ) );
+  let sell = | price : &str, quantity | Order
+  {
+    id : OrderId( 0 ), instrument : coarse, account : AccountId( 1 ), side : Side::Sell, price : Price::parse( price ).unwrap(),
+    quantity : qty( quantity ), tif : Tif::Gtc, client : None,
+  };
+
+  let off_tick = submit_tif( &mut exchange, &mut producer, &mut consumer, sell( "1.03", 4 ) );
   assert_eq!( off_tick, Err( ExchangeError::Rejected( RejectReason::PriceOffTick ) ) );
   assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::PriceOffTick } ) );
 
-  let off_lot = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.05" ), qty( 3 ) );
+  let off_lot = submit_tif( &mut exchange, &mut producer, &mut consumer, sell( "1.05", 3 ) );
   assert_eq!( off_lot, Err( ExchangeError::Rejected( RejectReason::QuantityOffLot ) ) );
   assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::QuantityOffLot } ) );
 
@@ -1320,6 +1340,28 @@ fn an_order_off_the_grid_is_rejected()
   assert_eq!( exchange.book().len(), 0 );
   assert_eq!( exchange.stats_get().rejects, 2 );
 
-  let on_grid = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.05" ), qty( 4 ) ).unwrap();
+  let on_grid = submit_tif( &mut exchange, &mut producer, &mut consumer, sell( "1.05", 4 ) ).unwrap();
   assert_eq!( on_grid.resting, qty( 4 ) );
+}
+
+/// An order for an instrument with no registered spec is rejected on record
+/// and reserves nothing — there is no grid or halt flag to check it against.
+#[ test ]
+fn an_order_for_an_unregistered_instrument_is_rejected()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let order = Order
+  {
+    id : OrderId( 0 ), instrument : InstrumentId( 9 ), account : AccountId( 1 ), side : Side::Sell, price : price( "1.00" ),
+    quantity : qty( 4 ), tif : Tif::Gtc, client : None,
+  };
+  let refused = submit_tif( &mut exchange, &mut producer, &mut consumer, order );
+  assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::UnknownInstrument ) ) );
+  assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::UnknownInstrument } ) );
+  assert_eq!( exchange.escrow().reservation_count(), 0, "a refused order reserves nothing" );
+  assert_eq!( exchange.book().len(), 0 );
 }

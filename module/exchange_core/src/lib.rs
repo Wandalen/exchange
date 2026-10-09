@@ -373,9 +373,7 @@ impl Exchange
   }
 
   /// Register (or replace) `instrument`'s resting-order caps. No registered
-  /// caps means no cap enforcement for that instrument — the same
-  /// absence-means-unenforced convention [`Self::halt_set`]'s own doc
-  /// describes for halts.
+  /// caps means no cap enforcement for that instrument.
   ///
   /// Unlike [`Self::spec_register`], a cap is not a term any already-resting
   /// order was placed against — raising or lowering it only changes how much
@@ -582,12 +580,15 @@ impl Exchange
     {
       return Err( self.reject_counted( &order, RejectReason::NegativePrice ) );
     }
+    // No spec, no instrument: nothing to check the order's grid or halt
+    // flag against.
+    let Some( spec ) = self.specs.get( &order.instrument ).copied() else
+    {
+      return Err( self.reject_counted( &order, RejectReason::UnknownInstrument ) );
+    };
     // A halted instrument refuses every new placement outright — resting
     // orders are untouched (see `Self::halt_set`'s own doc), only new
-    // arrivals are refused. No registered spec means no halt tracking
-    // exists for this instrument, so an order against an unregistered
-    // instrument validates exactly as it already did before `exchange_halt`
-    // existed.
+    // arrivals are refused.
     //
     // Fix(halt_set_never_actually_blocked_a_placement):
     // Root cause: `Self::halt_set`/`halt_clear`/`halt_is` toggle
@@ -601,22 +602,19 @@ impl Exchange
     // Pitfall: a facade exposing a control (`halt_set`) is not the same
     // claim as the facade's own hot path consulting it — a crate whose own
     // tests all pass can still be wired to nothing.
-    if self.specs.get( &order.instrument ).is_some_and( exchange_halt::halt_is )
+    if exchange_halt::halt_is( &spec )
     {
       return Err( self.reject_counted( &order, RejectReason::Halted ) );
     }
     // Off the instrument's grid. Refused rather than snapped: snapping would
     // trade at a price or size the submitter never asked for.
-    if let Some( spec ) = self.specs.get( &order.instrument ).copied()
+    if !price_fits( &spec, order.price )
     {
-      if !price_fits( &spec, order.price )
-      {
-        return Err( self.reject_counted( &order, RejectReason::PriceOffTick ) );
-      }
-      if !qty_fits( &spec, order.quantity )
-      {
-        return Err( self.reject_counted( &order, RejectReason::QuantityOffLot ) );
-      }
+      return Err( self.reject_counted( &order, RejectReason::PriceOffTick ) );
+    }
+    if !qty_fits( &spec, order.quantity )
+    {
+      return Err( self.reject_counted( &order, RejectReason::QuantityOffLot ) );
     }
     // `cross` refuses a taking post-only order too, but without an event —
     // checked here so the refusal is on record.

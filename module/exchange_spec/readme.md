@@ -26,8 +26,9 @@ with the instrument's own `Tick`/`Lot` and `exact_arith::rounding_default()`
 
 `price_fits`/`qty_fits` say whether a value is on the grid. `exchange_core`
 refuses an order off it — `RejectReason::PriceOffTick`/`QuantityOffLot` —
-rather than snapping it to a price or size the submitter never asked for. An
-order for an unregistered instrument is still accepted unchecked.
+rather than snapping it to a price or size the submitter never asked for, and
+refuses an order for an instrument with no spec at all —
+`RejectReason::UnknownInstrument`.
 
 ## Responsibility Table
 

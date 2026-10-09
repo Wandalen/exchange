@@ -169,6 +169,8 @@ pub enum RejectReason
   /// The order's quantity is not a multiple of its instrument's lot — see
   /// `exchange_spec::qty_fits`.
   QuantityOffLot,
+  /// The order's instrument has no registered spec.
+  UnknownInstrument,
 }
 
 /// Why a remainder was withdrawn.

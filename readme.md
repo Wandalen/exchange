@@ -11,7 +11,7 @@ contract in isolation as it lands.
 ```rust
 use exchange_core::
 {
-  AccountId, Exchange, InboundCmd, InstrumentId, Money, Order, OrderId, Price, Quantity, Resting,
+  AccountId, AssetId, Exchange, InboundCmd, InstrumentId, Money, Order, OrderId, Price, Quantity, Resting,
   SelfMatchPolicy, Sequence, Side, Tif, inbound_flush, inbound_ring, verify,
 };
 
@@ -23,6 +23,7 @@ let four = Quantity::from_int( 4 ).unwrap();
 let mut exchange = Exchange::new();
 exchange.open_account( seller, Money::ZERO, Quantity::from_int( 10 ).unwrap() ).unwrap();
 exchange.open_account( buyer, Money::from_int( 1000 ).unwrap(), Quantity::ZERO ).unwrap();
+exchange.spec_register( instrument, AssetId( 1 ), AssetId( 2 ), Price::parse( "0.01" ).unwrap(), Quantity::from_int( 1 ).unwrap() ).unwrap();
 
 let mut ring = inbound_ring( 8 ).unwrap();
 let mut ends = ring.ends();

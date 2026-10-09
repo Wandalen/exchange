@@ -3,7 +3,7 @@
 use exact_arith::{ Money, Price, Quantity };
 use exchange_core::
 {
-  AccountId, Exchange, InboundCmd, Resting, SelfMatchPolicy, Side, StepOutcome, inbound_flush, inbound_ring,
+  AccountId, AssetId, Exchange, InboundCmd, Resting, SelfMatchPolicy, Side, StepOutcome, inbound_flush, inbound_ring,
 };
 use exchange_id::{ InstrumentId, OrderId };
 use exchange_order::Order;
@@ -23,6 +23,7 @@ fn main()
 
   let mut exchange = Exchange::new();
   exchange.open_account( order.account, Money::parse( "100" ).unwrap(), Quantity::from_int( 10 ).unwrap() ).unwrap();
+  exchange.spec_register( order.instrument, AssetId( 1 ), AssetId( 2 ), Price::parse( "0.01" ).unwrap(), Quantity::from_int( 1 ).unwrap() ).unwrap();
 
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();

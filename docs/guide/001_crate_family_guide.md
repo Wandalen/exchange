@@ -119,7 +119,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   assert_eq!( order.side, Side::Buy );
   ```
   Extracted from `exchange_types` with two fields added (`instrument`, `tif`) against the five the real struct had before. `exchange_types` re-exported `Order` unchanged for a time; that re-export is retired now (2026-10-05) and every call site depends on this crate directly.
-- **`exchange_spec`** (→ `exchange_id`) — `InstrumentSpec { id, base, quote, tick, lot, halted }`, `spec_new`, `price_snap`/`qty_snap`, `price_fits`/`qty_fits`. `Exchange::spec_register` stores specs; `step_place` reads one for its halt flag and refuses an order off its grid (`RejectReason::PriceOffTick`/`QuantityOffLot`). An order for an unregistered instrument is still accepted unchecked.
+- **`exchange_spec`** (→ `exchange_id`) — `InstrumentSpec { id, base, quote, tick, lot, halted }`, `spec_new`, `price_snap`/`qty_snap`, `price_fits`/`qty_fits`. `Exchange::spec_register` stores specs; `step_place` refuses an order whose instrument has none (`RejectReason::UnknownInstrument`), then reads its halt flag and refuses an order off its grid (`RejectReason::PriceOffTick`/`QuantityOffLot`).
   ```rust
   use exact_arith::{ Price, Quantity };
   use exchange_id::InstrumentId;

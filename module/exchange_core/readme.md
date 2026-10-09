@@ -9,7 +9,7 @@ anywhere in the family, in public API or in a private field.
 ```rust
 use exchange_core::
 {
-  AccountId, Exchange, InboundCmd, InstrumentId, Money, Order, OrderId, Price, Quantity, Resting,
+  AccountId, AssetId, Exchange, InboundCmd, InstrumentId, Money, Order, OrderId, Price, Quantity, Resting,
   SelfMatchPolicy, Sequence, Side, Tif, inbound_flush, inbound_ring, verify,
 };
 
@@ -21,6 +21,7 @@ let four = Quantity::from_int( 4 ).unwrap();
 let mut exchange = Exchange::new();
 exchange.open_account( seller, Money::ZERO, Quantity::from_int( 10 ).unwrap() ).unwrap();
 exchange.open_account( buyer, Money::from_int( 1000 ).unwrap(), Quantity::ZERO ).unwrap();
+exchange.spec_register( instrument, AssetId( 1 ), AssetId( 2 ), Price::parse( "0.01" ).unwrap(), Quantity::from_int( 1 ).unwrap() ).unwrap();
 
 let mut ring = inbound_ring( 8 ).unwrap();
 let mut ends = ring.ends();
@@ -54,8 +55,9 @@ Implemented 2026-08-30 and graded from outside by
 This crate owns `Exchange` — the five-step submission path — and re-exports
 everything else. Its own logic is the sequencing:
 
-1. **validate** — a zero quantity, a negative price, a halted instrument, or a
-   price or quantity off the instrument's tick/lot grid is `Rejected`;
+1. **validate** — a zero quantity, a negative price, an instrument with no
+   registered spec, a halted one, or a price or quantity off its tick/lot grid
+   is `Rejected`;
 2. **reserve** — whole or not at all, *before* the book sees the order;
 3. **match** — the crossing loop, taking from the front of the book;
 4. **settle** — each trade, in order, releasing price improvement to the buyer;
