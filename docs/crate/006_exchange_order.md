@@ -7,7 +7,7 @@
 - **In Scope**: The order record itself.
 - **Out of Scope**: Price levels — this crate has no concept of one.
 
-**Design status**: Built, in its own `exchange_order` crate (not folded into `exchange_types` — that summary predates this crate's extraction). Verified built-vs-proposed comparison: [`../../module/exchange_order/docs/item/readme.md`](../../module/exchange_order/docs/item/readme.md).
+**Design status**: Built. Built-vs-proposed comparison: [`../../module/exchange_order/docs/item/readme.md`](../../module/exchange_order/docs/item/readme.md).
 
 ### Statement
 
