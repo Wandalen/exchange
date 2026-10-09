@@ -62,10 +62,7 @@ match (`"cancel_resting"`/`"cancel_incoming"`/`"cancel_both"`).
 `CancelOldest`/`CancelNewest` vocabulary has to make two translations (the
 missing `Allow`, and the renamed pair) at once; this ADR and the module doc
 comment in [`../../src/lib.rs`](../../src/lib.rs) are both written to make
-that translation immediate. Separately, `exchange_core` currently hardcodes
-`SelfMatchPolicy::CancelIncoming` (`module/exchange_core/src/lib.rs:62,316,338`)
-rather than exposing a per-book choice among the three — a caller-side gap,
-not a divergence in this crate's own surface.
+that translation immediate.
 
 ## Related
 

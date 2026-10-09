@@ -12,7 +12,7 @@ External constraints `exchange_tif` absorbs.
 ### Overview
 
 **None.** `exchange_tif` is a dependency-free root of the family's tree — one
-enum and two pure predicates. Verify with:
+enum and three pure predicates. Verify with:
 
 ```bash
 cd module/exchange_tif && cargo tree --depth 1

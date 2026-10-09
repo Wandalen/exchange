@@ -6,7 +6,7 @@
 //! not a silent bug the way `exchange_spec`'s `base`/`quote` swap was. Nothing
 //! here needs a mutation test the way that one did; see `tests/manual/readme.md`.
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_side::Side;
@@ -23,6 +23,7 @@ fn order() -> Order
     price : Money::parse( "1.25" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
     tif : Tif::Ioc,
+    client : None,
   }
 }
 

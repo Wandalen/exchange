@@ -5,7 +5,7 @@
 //! "Revision" section for why a magnitude mismatch is no longer constructible
 //! through `Trade` data at all once both of a trade's legs go in together.
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity };
 use exchange_conserve::{ ConserveError, conserve_assert, fill_legs_sum };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };

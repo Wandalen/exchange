@@ -44,7 +44,7 @@
 //! extracts `exchange_escrow` as-is, and collapsing the redundancy would be
 //! an API change to a crate that stage explicitly does not touch.
 
-use exact_kind::{ Price, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::Obligation;
 use exchange_seq::Sequence;
@@ -153,6 +153,16 @@ pub enum RejectReason
   /// configured `max_levels`. Only reachable for an instrument with caps
   /// registered — see `exchange_cap`.
   LevelsFull,
+  /// A post-only order would have taken liquidity on arrival — see
+  /// `exchange_tif::Tif::PostOnly`.
+  PostOnlyWouldTake,
+  /// The account already placed an order under this `ClientOrderId` — a
+  /// retry, not a new order.
+  DuplicateClientId,
+  /// Resting this order would push its account past the configured
+  /// `max_account_rests`. Only reachable for an instrument with caps
+  /// registered — see `exchange_cap`.
+  AccountFull,
 }
 
 /// Why a remainder was withdrawn.

@@ -6,7 +6,7 @@ pin is load-bearing rather than redundant.
 ## M1 — the opposite relation is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_side/src/lib.rs, in Side::opposite,
+# In module/exchange_side/src/lib.rs, in Side::opposite,
 # replace  Self::Buy => Self::Sell  with  Self::Buy => Self::Buy
 cargo test -p exchange_side --all-features 2>&1 | grep -E 'FAILED|test result'
 ```

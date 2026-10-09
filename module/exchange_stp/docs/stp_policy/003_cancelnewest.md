@@ -7,22 +7,11 @@
 - **In Scope**: Cancelling the newer (incoming) side of a same-account cross.
 - **Out of Scope**: Cancelling the older (resting) side — that is `CancelOldest`'s job.
 
-**Design status**: Held by role, and the one actually wired up — the real
-`exchange_stp::SelfMatchPolicy::CancelIncoming` variant (`src/lib.rs`) is
-this policy's functional equivalent: the incoming order is always the
-*newer* one in a self-match, so "cancel incoming" and "cancel newest" pick
-the same order. `exchange_core::Exchange::submit`
-(`module/exchange_core/src/lib.rs:316,338`) hardcodes exactly this variant —
-its own doc comment at line 62 states the policy "is hardcoded below to
-`SelfMatchPolicy::CancelIncoming`," not yet caller-configurable. A third real
-variant, `CancelBoth` (withdraw both remainders), has no counterpart in this
-proposal's three named policies at all. Full reasoning:
+**Design status**: Held by role, not by name — `SelfMatchPolicy::CancelIncoming`
+(`src/lib.rs`). In a self-match the incoming order is always the newer one,
+so "cancel incoming" and "cancel newest" pick the same order. Selectable per
+drain through `exchange_core::Exchange::exchange_step`. Full reasoning:
 [`../decisions/001_no_allow_resting_incoming_naming.md`](../decisions/001_no_allow_resting_incoming_naming.md).
-
-(Superseded note: this file previously cited `exchange_match/src/lib.rs` as
-the owning module and different line numbers — `SelfMatchPolicy` has since
-moved to this crate, `exchange_stp`, which `exchange_match` now re-exports
-from.)
 
 ### Statement
 

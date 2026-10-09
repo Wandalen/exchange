@@ -13,7 +13,7 @@ alongside `Seq(u64)`/`seq_zero`/`seq_next`. `Sequence` already derives
 `PartialOrd`/`Ord`, so a free `seq_cmp` function would wrap `.cmp()` under
 a second name — the same "two sources of truth for one fact" pattern
 `exchange_types` warns against for `Trade` versus `Fill`. At one increment
-per accepted order, exhausting a `u64` counter takes longer than any run of
+per emitted event, exhausting a `u64` counter takes longer than any run of
 this exchange will ever last — `SeqError::Exhausted` would model a failure
 mode nothing can reach.
 
@@ -34,8 +34,8 @@ event alongside `Trade`.
 ### Option 2: Add `SeqError::Exhausted` and make `seq_next` fallible
 
 Rejected: there is no test that could ever legitimately exercise this
-path — a `u64` counter incrementing once per accepted order would need
-more orders than any real or synthetic run will ever submit. Modelling an
+path — a `u64` counter incrementing once per emitted event would need
+more events than any real or synthetic run will ever produce. Modelling an
 unreachable failure mode adds a `Result` every caller has to handle for a
 case that can never fire.
 

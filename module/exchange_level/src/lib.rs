@@ -50,7 +50,7 @@
 //! with no new API invented to do it. This mirrors [`LevelNode`]'s own
 //! all-public fields, and `Resting`'s before it.
 
-use exact_kind::{ Price, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_id::OrderId;
 use exchange_order::Order;
 use exchange_seq::Sequence;

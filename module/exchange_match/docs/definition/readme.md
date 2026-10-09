@@ -18,6 +18,7 @@
 | `MatchError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `SelfMatchPolicy` | enum (re-export) | `../../../exchange_stp/src/lib.rs`, re-exported at `src/lib.rs` | [`../item/readme.md`](../item/readme.md), full definition at [`../../../exchange_stp/docs/item/readme.md`](../../../exchange_stp/docs/item/readme.md) |
 | `cross` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `would_take` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
 No decisions collection — the real build's divergences from the proposal
 (one `cross` entry point instead of four phase functions, a 2-variant

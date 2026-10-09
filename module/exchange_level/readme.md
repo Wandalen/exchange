@@ -16,7 +16,7 @@ let order = Order
 {
   id : OrderId( 1 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ),
   side : Side::Buy, price : Money::parse( "2.50" ).unwrap(),
-  quantity : Quantity::from_int( 4 ).unwrap(), tif : Tif::Gtc,
+  quantity : Quantity::from_int( 4 ).unwrap(), tif : Tif::Gtc, client : None,
 };
 level_push( &mut level, LevelNode { order, remaining : order.quantity, arrival : Sequence( 1 ) } );
 

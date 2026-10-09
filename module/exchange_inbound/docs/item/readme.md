@@ -18,15 +18,16 @@ fuller `item_des.rulebook.md` per-declaration split is deferred).
 |------|------|-----------|
 | `InboundCmd` | enum | `{ Place(Resting), Cancel { instrument: InstrumentId, id: OrderId }, Replace { instrument: InstrumentId, old_id: OrderId, new_resting: Resting } }` |
 | `InboundOutcome` | enum | `{ Crossed(Crossing), Cancelled(Option<Resting>), Replaced(Result<Resting, RestReplaceError>) }` |
-| `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError) }` — added for `exchange_inbound/BUG-003` |
+| `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError), DuplicateClientId }` — `Idem` added for `exchange_inbound/BUG-003`, `DuplicateClientId` for `ClientOrderId` |
+| `Claims` | struct | `{ /* private */ }` with `pub fn new() -> Self` — order ids and `( AccountId, ClientOrderId )`s `inbound_apply` has claimed |
 | `inbound_ring` | fn | `(capacity: usize) -> Result<Split<InboundCmd>, BuildError>` |
 | `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: impl IntoIterator<Item = InboundCmd>) -> usize` |
 | `inbound_overflow_reject` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmd: InboundCmd) -> Result<(), InboundCmd>` |
 | `inbound_drain` | fn | `(consumer: &mut Consumer<'_, InboundCmd>) -> Vec<InboundCmd>` |
-| `inbound_apply` | fn | `(book: &mut Book, seen: &mut IdSet, policy: SelfMatchPolicy, cmd: InboundCmd) -> Result<InboundOutcome, InboundApplyError>` — `seen` parameter and `InboundApplyError` return type added for `exchange_inbound/BUG-003` |
+| `inbound_apply` | fn | `(book: &mut Book, claims: &mut Claims, policy: SelfMatchPolicy, cmd: InboundCmd) -> Result<InboundOutcome, InboundApplyError>` — the claims parameter and `InboundApplyError` return type added for `exchange_inbound/BUG-003`; `Claims` replaced a bare `IdSet` to carry client ids too |
 | `BuildError`, `RingConfig` | enum / struct (re-export) | `ring_factory`'s own types, unchanged |
 | `Consumer`, `Drain`, `Ends`, `Producer`, `Split` | struct (re-export) | `ring_handle`'s own types, unchanged |
-| `IdemError`, `IdSet` | enum / struct (re-export) | `exchange_idem`'s own types, unchanged — re-exported so a caller never has to name that crate directly just to construct the `seen` argument |
+| `IdemError`, `IdSet` | enum / struct (re-export) | `exchange_idem`'s own types, unchanged — re-exported so a caller never has to name that crate directly to match on `InboundApplyError::Idem` |
 
 ### Differs from the proposal
 

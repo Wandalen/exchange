@@ -17,7 +17,7 @@
 //!
 //! # Why arrival and not time
 //!
-//! Ties are broken by [`Sequence`], a claimed position, and never by a clock
+//! Ties are broken by `exchange_seq::Sequence`, a claimed position, and never by a clock
 //! reading. Two orders submitted in the same instant still receive distinct,
 //! ordered positions, so there is no tie left for a tie-break to resolve
 //! wrongly. This matters more than it looks: with time priority resolved by
@@ -33,18 +33,18 @@
 //! # One book per instrument
 //!
 //! [`Book`] holds every instrument's own bids and asks side by side, never
-//! mixed — hard problem 1. [`insert`](Self::insert) reads which instrument a
+//! mixed — hard problem 1. [`insert`](Book::insert) reads which instrument a
 //! `Resting` belongs to off its own `resting.order.instrument`, so that call
 //! keeps its original shape; every other method that touches one
-//! instrument's levels — [`cancel`](Self::cancel), [`side`](Self::side),
-//! [`best`](Self::best), [`consume_best`](Self::consume_best) — has no order
+//! instrument's levels — [`cancel`](Book::cancel), [`side`](Book::side),
+//! [`best`](Book::best), [`consume_best`](Book::consume_best) — has no order
 //! to read an instrument from, so each takes one as its own first argument
 //! instead. An instrument nothing has ever inserted into behaves exactly
 //! like an empty book, with no separate registration step: the first insert
 //! for a new instrument creates its slot, the same way the first order at a
 //! new price creates its level.
 //!
-//! [`iter`](Self::iter), [`len`](Self::len), and [`is_empty`](Self::is_empty)
+//! [`iter`](Book::iter), [`len`](Book::len), and [`is_empty`](Book::is_empty)
 //! stay global, across every instrument at once — the shape their one real
 //! caller needs: `exchange_core::Exchange::cancel` finds an order by id
 //! alone, with no instrument known ahead of time, so it needs a global
@@ -53,8 +53,8 @@
 //!
 //! # Representation
 //!
-//! One sorted [`Vec`] of `(`[`InstrumentId`](exchange_id::InstrumentId)`,
-//! `[`Level`](exchange_level::Level)`)` pairs per side, per instrument — best
+//! One sorted [`Vec`] of `(`[`InstrumentId`]`,
+//! `[`Level`]`)` pairs per side, per instrument — best
 //! level at index 0 within each instrument's own side; within each level,
 //! [`exchange_level`] keeps arrival order. Instruments are sorted and found
 //! by [`partition_point`](slice::partition_point), the same way prices
@@ -74,10 +74,10 @@
 //! `Resting { order, remaining, arrival }` literal and field access is
 //! unaffected by either that change or the instrument-keying one above it.
 
-use exact_kind::{ Price, Quantity };
-use exchange_id::{ InstrumentId, OrderId };
+use exact_arith::{ Price, Quantity };
+use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_level::{ Level, level_empty_is, level_len, level_new, level_pop_front, level_push, level_remove };
-use exchange_side::Side;
+use exchange_side::{ Side, side_ahead };
 
 /// An order on the book, with what is left of it.
 ///
@@ -110,21 +110,6 @@ impl Book
   pub fn new() -> Self
   {
     Self::default()
-  }
-
-  /// Whether a level at `existing` ranks ahead of one at `candidate` on
-  /// `side`.
-  ///
-  /// The single expression of the price half of the priority rule; the
-  /// arrival half is [`exchange_level`]'s own, inside one level. Every other
-  /// function here defers to this rather than restating it.
-  fn level_ranks_ahead( side : Side, existing : exact_kind::Price, candidate : exact_kind::Price ) -> bool
-  {
-    match side
-    {
-      Side::Buy => existing > candidate,
-      Side::Sell => existing < candidate,
-    }
   }
 
   /// Place `resting` at its priority position.
@@ -179,7 +164,7 @@ impl Book
     let price = resting.order.price;
     let book = Self::find_or_create_mut( &mut self.per_instrument, resting.order.instrument );
     let levels = Self::side_mut( book, side );
-    let at = levels.partition_point( | level | Self::level_ranks_ahead( side, level.price, price ) );
+    let at = levels.partition_point( | level | side_ahead( side, level.price, price ) );
 
     if levels.get( at ).is_some_and( | level | level.price == price )
     {
@@ -346,6 +331,17 @@ impl Book
   pub fn level_count( &self, instrument : InstrumentId, side : Side ) -> usize
   {
     self.levels( instrument, side ).len()
+  }
+
+  /// How many orders `account` currently rests on `instrument`'s book, both
+  /// sides — what `exchange_cap::cap_check_account` needs as
+  /// `current_account_rests`. A walk of the instrument's book.
+  #[ must_use ]
+  pub fn account_rests( &self, instrument : InstrumentId, account : AccountId ) -> usize
+  {
+    self.side( instrument, Side::Buy ).chain( self.side( instrument, Side::Sell ) )
+      .filter( | resting | resting.order.account == account )
+      .count()
   }
 
   /// `instrument`'s own levels on `side`, or an empty slice if nothing has

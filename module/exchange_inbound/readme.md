@@ -5,8 +5,7 @@ channel, to the book — the family's first genuinely concurrent code.
 
 ```rust
 use exchange_book::Book;
-use exchange_idem::IdSet;
-use exchange_inbound::{ inbound_apply, inbound_drain, inbound_ring, InboundCmd };
+use exchange_inbound::{ inbound_apply, inbound_drain, inbound_ring, Claims, InboundCmd };
 use exchange_id::{ InstrumentId, OrderId };
 use exchange_stp::SelfMatchPolicy;
 
@@ -17,10 +16,10 @@ let ( mut producer, mut consumer ) = ends.split();
 producer.try_push( InboundCmd::Cancel { instrument : InstrumentId( 1 ), id : OrderId( 1 ) } ).unwrap();
 
 let mut book = Book::new();
-let mut seen = IdSet::new();
+let mut claims = Claims::new();
 for cmd in inbound_drain( &mut consumer )
 {
-  inbound_apply( &mut book, &mut seen, SelfMatchPolicy::CancelResting, cmd ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 }
 ```
 
@@ -59,7 +58,7 @@ doc's "Overflow is a reject" section.
 | File | Responsibility |
 |------|----------------|
 | [`Cargo.toml`](Cargo.toml) | Manifest — `ring_factory`/`ring_handle`/`ring_types` plus the exchange crates `inbound_apply` dispatches to |
-| [`src/lib.rs`](src/lib.rs) | `InboundCmd`, `InboundOutcome`, `InboundApplyError`, `inbound_ring`, `inbound_flush`, `inbound_drain`, `inbound_apply`, `inbound_overflow_reject` |
+| [`src/lib.rs`](src/lib.rs) | `InboundCmd`, `InboundOutcome`, `InboundApplyError`, `Claims`, `inbound_ring`, `inbound_flush`, `inbound_drain`, `inbound_apply`, `inbound_overflow_reject` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/decisions/` | Why "two producers" is two rings, not one shared one |
 | `docs/pitfall/` | The 3 "Ring" pitfalls this crate's ring construction and drain combine bear on |
@@ -71,4 +70,4 @@ doc's "Overflow is a reject" section.
 
 - [`exchange_rest/`](../exchange_rest/readme.md) — what `Cancel`/`Replace` call through to
 - [`exchange_match/`](../exchange_match/readme.md) — what `Place` is crossed against before any remainder rests
-- [`exchange_idem/`](../exchange_idem/readme.md) — supplies `IdSet`, checked/claimed before `Place` rests, un-claimed on a successful `Cancel`/`Replace` (`exchange_inbound/BUG-003`)
+- [`exchange_idem/`](../exchange_idem/readme.md) — supplies the `IdSet`s behind `Claims`: order ids checked before `Place` crosses, claimed once it rests, un-claimed on a successful `Cancel`/`Replace`; client ids checked the same way and never released

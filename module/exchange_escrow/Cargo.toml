@@ -7,7 +7,7 @@ description = "The available/reserved balance partition, so an order cannot comm
 publish = false
 
 [dependencies]
-exact_kind = { path = "../../../exact/module/exact_kind" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
 exchange_fill = { path = "../exchange_fill" }
 exchange_id = { path = "../exchange_id" }
 exchange_order = { path = "../exchange_order" }
@@ -19,9 +19,6 @@ exchange_types = { path = "../exchange_types" }
 # crate's own src/ reads it; `InstrumentId` comes from `exchange_id` above,
 # now a real dependency in its own right.
 exchange_tif = { path = "../exchange_tif" }
-# reservation_test.rs's own boundary case needs `CEILING_WHOLE_UNITS` —
-# nothing in this crate's own src/ reads it.
-exact_scale = { path = "../../../exact/module/exact_scale" }
 
 [lints]
 workspace = true

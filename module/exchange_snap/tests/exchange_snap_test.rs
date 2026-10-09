@@ -1,7 +1,7 @@
 //! Test Matrix T01 — snapshot content, ordering, and independence from the
 //! live book (pitfalls 001–003: aliasing, hash order, clock reads).
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -24,6 +24,7 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
       price : Money::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),

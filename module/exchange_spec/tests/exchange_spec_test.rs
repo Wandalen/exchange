@@ -1,6 +1,6 @@
 //! Test Matrix T01 — spec construction and the snap grid, plus Phases P05/P06.
 
-use exact_kind::{ Price, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_id::InstrumentId;
 use exchange_spec::{ AssetId, SpecError, price_snap, qty_snap, spec_halted_is, spec_new };
 

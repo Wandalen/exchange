@@ -1,50 +1,38 @@
 //! The self-trade policy: how a candidate pair sharing one account resolves.
 //!
-//! A root of the dependency tree: no dependency on any other `exchange_*`
-//! crate, and this crate does not itself walk the book — it names the closed
-//! set of three policies `exchange_match` consults on every candidate pair.
-//! Without a named policy, a self-match either fills by accident or is
-//! resolved by convention nobody wrote down.
-//!
-//! `SelfMatchPolicy` moved here verbatim from `exchange_match`, which still
-//! re-exports it so existing callers are unaffected.
+//! A root of the dependency tree. This crate does not walk the book; it names
+//! the policies `exchange_match` applies to every candidate pair, and
+//! `exchange_match` re-exports [`SelfMatchPolicy`].
 //!
 //! # Not built: `Allow`
 //!
-//! The source design names three policies, including an `Allow` that lets a
-//! self-match cross like any other pair. The real design never had one: a
-//! self-match is refused unconditionally, by construction, before any trade
-//! for the pair is built — see `exchange_match`'s own module documentation,
-//! "Self-match prevention is ... fixed, never a mode." Adding `Allow` would
-//! not be an extraction, it would be new, unrequested permission for
-//! accounts to trade with themselves, so this crate keeps the real three:
-//! [`SelfMatchPolicy::CancelResting`], [`SelfMatchPolicy::CancelIncoming`],
-//! [`SelfMatchPolicy::CancelBoth`]. The first two correspond exactly to the
-//! source's `CancelOldest`/`CancelNewest` — in a self-match the resting order
-//! is always the older one and the incoming order is always the newer one,
-//! so "cancel resting" and "cancel oldest" withdraw the same order; the real
-//! names describe the order's *role* in the cross rather than its arrival
-//! time. `CancelBoth` has no counterpart in the source's three.
+//! A self-match is always refused — `exchange_match` treats that as fixed,
+//! never a mode — so the source design's `Allow` has nothing to select. Its
+//! `CancelOldest`/`CancelNewest` are named by role instead: in a self-match
+//! the resting order is always the older one, so
+//! [`SelfMatchPolicy::CancelResting`] withdraws the same order `CancelOldest`
+//! would, and [`SelfMatchPolicy::CancelIncoming`] the same as `CancelNewest`.
+//! [`SelfMatchPolicy::CancelBoth`] has no source counterpart. See
+//! `docs/decisions/001_no_allow_resting_incoming_naming.md`.
 
-/// One of the three ways a candidate pair sharing one account resolves.
+/// How a candidate pair sharing one account resolves.
 ///
-/// Configured per book, never per order — a submitter is never handed a
-/// choice of which side dies.
+/// Chosen by the operator, never by the submitter:
+/// `exchange_core::Exchange::exchange_step` takes one policy for a whole drain.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum SelfMatchPolicy
 {
-  /// The resting order is withdrawn; the incoming order's match loop resumes
-  /// at whatever is now the front of the book. Equivalent in effect to the
-  /// source design's `CancelOldest` — see the module documentation.
+  /// The resting order is withdrawn; the incoming order keeps matching
+  /// against the new front of the book. The source design's `CancelOldest`.
   CancelResting,
-  /// The incoming order's remainder is withdrawn; the resting order survives
-  /// untouched. Equivalent in effect to the source design's `CancelNewest`.
+  /// The incoming order's remainder is withdrawn; the resting order is
+  /// untouched. The source design's `CancelNewest`.
   CancelIncoming,
-  /// Both remainders are withdrawn. No counterpart in the source's three.
+  /// Both remainders are withdrawn. No source counterpart.
   CancelBoth,
 }
 
-/// A short, stable name for `policy` — the source design's `stp_name`.
+/// A stable `snake_case` name for `policy` — the source design's `stp_name`.
 #[ must_use ]
 pub const fn stp_name( policy : SelfMatchPolicy ) -> &'static str
 {

@@ -16,6 +16,7 @@
 | `stats_rest_add` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `stats_fill_add` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `stats_reject_add` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `stats_cancel_add` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `stats_snapshot` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
 Why there is no `exchange_id` dependency despite the source design naming one:

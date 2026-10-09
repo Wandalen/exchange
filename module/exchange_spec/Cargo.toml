@@ -8,9 +8,7 @@ publish = false
 
 [dependencies]
 exchange_id = { path = "../exchange_id" }
-exact_kind = { path = "../../../exact/module/exact_kind" }
-exact_round = { path = "../../../exact/module/exact_round" }
-exact_snap = { path = "../../../exact/module/exact_snap" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
 
 [lints]
 workspace = true

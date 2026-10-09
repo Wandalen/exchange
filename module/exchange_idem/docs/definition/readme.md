@@ -18,5 +18,4 @@
 | `idem_remove` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
 No `docs/decisions/` — this crate's built surface matches the source
-proposal exactly; see [`../item/readme.md`](../item/readme.md)'s own
-"Matches the proposal" section.
+proposal, plus a generic key; see [`../item/readme.md`](../item/readme.md).

@@ -22,15 +22,11 @@ per-declaration split is deferred).
 
 ### Differs from the proposal
 
-The source design's own exposed-item list
+The source design's exposed-item list
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:567-570`,
-also catalogued centrally at
+catalogued at
 [`../../../../docs/exposed_item/007_exchange_seq_items.md`](../../../../docs/exposed_item/007_exchange_seq_items.md))
 names `Seq(u64)` with `seq_zero`/`seq_next`/`seq_cmp` and a `SeqError`. The
-real build renames the type `Sequence` and builds `seq_next` exactly as
-named (the central catalog's claim that `seq_next` doesn't exist predates
-this crate's real Stage 1 build and is now stale — `exchange_core::emit`
-calls it directly today). `seq_zero` is covered by `Sequence::ZERO`, a
-const rather than a function — same value, no call needed. No `seq_cmp` and
-no `SeqError`: see
+type is named `Sequence`; `seq_next` is built as named; `seq_zero` is the
+const `Sequence::ZERO`. No `seq_cmp` and no `SeqError` — see
 [`../decisions/001_no_seq_cmp_or_seq_error.md`](../decisions/001_no_seq_cmp_or_seq_error.md).

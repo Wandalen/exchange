@@ -14,8 +14,10 @@
 | `InstrumentId` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `OrderId` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `AccountId` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `ClientOrderId` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `instrument_from_raw`/`instrument_raw` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `order_from_raw`/`order_raw` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `account_from_raw`/`account_raw` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `client_from_raw`/`client_raw` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
 Why there is no `IdError`: [`../decisions/readme.md`](../decisions/readme.md).

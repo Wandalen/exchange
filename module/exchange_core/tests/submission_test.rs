@@ -8,7 +8,7 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, CancelCause, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
+  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
   InstrumentId, Money, Obligation, Order, OrderId, Producer, Quantity, Receipt, RejectReason, Resting,
   SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
 };
@@ -57,7 +57,7 @@ fn submit
   quantity : Quantity,
 ) -> Result< Receipt, ExchangeError >
 {
-  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc };
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc, client : None };
   let resting = Resting { order, remaining : quantity, arrival : Sequence( 0 ) };
   let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
   assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
@@ -1037,6 +1037,155 @@ fn a_self_match_cancelled_order_is_not_reported_complete()
   );
 }
 
+/// A resting order withdrawn by self-match prevention counts as a cancel;
+/// the incoming one does not, since it never rested.
+#[ test ]
+fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : money( "2.50" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
+  inbound_flush( &mut producer, [ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
+  let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
+  assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.is_empty() ) );
+
+  assert_eq!( exchange.book().len(), 1, "the resting sell was withdrawn and the buy rested instead" );
+  assert_eq!( exchange.stats_get().cancels, 1 );
+}
+
+/// Each instrument keeps its own counters; the exchange-wide ones are their
+/// sum.
+#[ test ]
+fn stats_are_kept_per_instrument_and_in_total()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+  let other = InstrumentId( 2 );
+
+  let on = | instrument, account, side, quantity | Order
+  {
+    id : OrderId( 0 ), instrument, account, side, price : money( "2.50" ), quantity : qty( quantity ), tif : Tif::Gtc,
+    client : None,
+  };
+
+  let resting = submit_tif( &mut exchange, &mut producer, &mut consumer, on( INSTRUMENT, AccountId( 1 ), Side::Sell, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 1 ), Side::Sell, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 0 ) ).unwrap_err();
+
+  inbound_flush( &mut producer, [ InboundCmd::Cancel { instrument : INSTRUMENT, id : resting.order } ] );
+  assert!( matches!( exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming )[ 0 ], StepOutcome::Cancelled( Ok( _ ) ) ) );
+
+  let first = exchange.stats_get_for( INSTRUMENT );
+  let second = exchange.stats_get_for( other );
+  assert_eq!( ( first.rests, first.fills, first.rejects, first.cancels ), ( 1, 0, 0, 1 ) );
+  assert_eq!( ( second.rests, second.fills, second.rejects, second.cancels ), ( 1, 1, 1, 0 ) );
+  assert_eq!( exchange.stats_get_for( InstrumentId( 9 ) ), exchange_core::BookStats::default() );
+
+  let total = exchange.stats_get();
+  assert_eq!( ( total.rests, total.fills, total.rejects, total.cancels ), ( 2, 1, 1, 1 ) );
+}
+
+/// An account at its rest cap is refused on record; another account is not,
+/// and the capped account can still take liquidity.
+#[ test ]
+fn an_account_at_its_rest_cap_cannot_rest_another_order()
+{
+  let mut exchange = market();
+  exchange.caps_set( INSTRUMENT, BookCaps { max_rests : 10, max_levels : 10, max_account_rests : 2 } );
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 1 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1.00" ), qty( 1 ) ).unwrap();
+
+  let third = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.05" ), qty( 1 ) );
+  assert_eq!( third, Err( ExchangeError::Rejected( RejectReason::AccountFull ) ) );
+  assert_eq!( exchange.book().len(), 2 );
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.00" ), qty( 1 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.00" ), qty( 1 ) ).unwrap();
+  assert!( taking.is_complete(), "a fully filled order never rests, so the cap does not apply" );
+}
+
+/// A retry under the same `ClientOrderId` is refused even after the original
+/// filled; another account may use the same value; a rejected attempt does
+/// not claim it.
+#[ test ]
+fn a_retry_under_the_same_client_id_is_refused()
+{
+  let mut exchange = market();
+  exchange.open_account( AccountId( 3 ), money( "1" ), qty( 0 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let tagged = | account, side, price, client | Order
+  {
+    id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price : money( price ), quantity : qty( 4 ), tif : Tif::Gtc,
+    client : Some( ClientOrderId( client ) ),
+  };
+
+  let first = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) ).unwrap();
+  assert_eq!( first.client, Some( ClientOrderId( 7 ) ) );
+
+  let retry = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) );
+  assert_eq!( retry, Err( ExchangeError::Rejected( RejectReason::DuplicateClientId ) ) );
+  assert_eq!( exchange.book().len(), 1, "the retry never rested a second order" );
+
+  // Another account's 7 is its own; this one fills the original completely.
+  let other = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 2 ), Side::Buy, "2.50", 7 ) ).unwrap();
+  assert!( other.is_complete() );
+
+  let after_fill = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) );
+  assert_eq!( after_fill, Err( ExchangeError::Rejected( RejectReason::DuplicateClientId ) ), "filled is still placed" );
+
+  // A rejected attempt claims nothing: account 3 cannot afford it now, and
+  // the same id is accepted once it can.
+  let poor = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 3 ), Side::Buy, "2.50", 9 ) );
+  assert_eq!( poor, Err( ExchangeError::Rejected( RejectReason::InsufficientFunds ) ) );
+  exchange.open_account( AccountId( 3 ), money( "100" ), qty( 0 ) ).unwrap();
+  assert!( submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 3 ), Side::Buy, "2.50", 9 ) ).is_ok() );
+}
+
+/// A post-only order that would take is rejected on record and reserves
+/// nothing; one that would not take rests.
+#[ test ]
+fn a_post_only_order_rests_or_is_rejected_but_never_takes()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
+  let reservations = exchange.escrow().reservation_count();
+
+  let post_only = | price | Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy, price : money( price ), quantity : qty( 4 ), tif : Tif::PostOnly, client : None };
+
+  let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, post_only( "2.50" ) );
+  assert_eq!( taking, Err( ExchangeError::Rejected( RejectReason::PostOnlyWouldTake ) ) );
+  assert_eq!( exchange.escrow().reservation_count(), reservations, "a refused order reserves nothing" );
+  assert!( matches!
+  (
+    exchange.events().last().unwrap().kind,
+    EventKind::OrderRejected { reason : RejectReason::PostOnlyWouldTake },
+  ) );
+
+  let resting = submit_tif( &mut exchange, &mut producer, &mut consumer, post_only( "2.45" ) ).unwrap();
+  assert!( resting.trades.is_empty() );
+  assert_eq!( resting.resting, qty( 4 ) );
+  assert_eq!( exchange.book().len(), 2 );
+}
+
 /// An IOC taker that only partially fills must not rest its remainder —
 /// `exchange_match::cross` never inserts a remainder for any TIF by its own
 /// design (see that crate's module doc); whether a caller rests one is the
@@ -1056,6 +1205,7 @@ fn an_ioc_taker_never_rests_its_remainder_through_the_facade()
   {
     id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
     price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Ioc,
+    client : None,
   };
   let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
 
@@ -1102,6 +1252,7 @@ fn a_fok_taker_rejects_whole_against_a_thin_book_through_the_facade()
   {
     id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
     price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Fok,
+    client : None,
   };
   let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
 

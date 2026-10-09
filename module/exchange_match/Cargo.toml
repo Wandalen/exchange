@@ -16,7 +16,7 @@ exchange_order = { path = "../exchange_order" }
 exchange_side = { path = "../exchange_side" }
 exchange_stp = { path = "../exchange_stp" }
 exchange_tif = { path = "../exchange_tif" }
-exact_kind = { path = "../../../exact/module/exact_kind" }
+exact_arith = { path = "../../../exact/module/exact_arith" }
 
 [dev-dependencies]
 # The test helpers' `Order` fixtures need a `Sequence` value for `Resting`'s

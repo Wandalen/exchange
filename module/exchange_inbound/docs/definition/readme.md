@@ -13,6 +13,8 @@
 |------|------|----------|----------------|
 | `InboundCmd` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `InboundOutcome` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `InboundApplyError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `Claims` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `inbound_ring` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `inbound_flush` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `inbound_overflow_reject` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |

@@ -21,8 +21,7 @@
 //! orders resting at the same price contribute one row with their summed
 //! quantity, matching how a market-depth display is actually read.
 
-use exact_add::qty_saturating_add;
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity, qty_saturating_add };
 use exchange_book::{ Book, Resting };
 use exchange_id::InstrumentId;
 use exchange_side::Side;

@@ -7,9 +7,8 @@
 - **Responsibility**: Document the pitfall, how `exchange_cap` avoids it, and
   the test that verifies the avoidance.
 - **In Scope**: The one central "Identity and cap" pitfall about capacity
-  refusal being silent — the only one of that list's 3 pitfalls this crate's
-  own scope touches (the other 2 are about id reuse and retry-inserts-a-
-  second-rest, both `exchange_rest`'s concern, not this crate's).
+  refusal being silent — the other two in that list (retry inserts a second
+  rest, id reuse) belong to `exchange_idem` and `exchange_id`.
 - **Out of Scope**: External constraints this crate absorbs (→ [`../workaround/`](../workaround/readme.md)).
 
 ### Overview Table

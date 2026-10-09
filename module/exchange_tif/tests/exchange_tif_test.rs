@@ -1,14 +1,15 @@
-//! Test Matrix T01 — the three dispositions, and Phase P03's own smoke assertion.
+//! Test Matrix T01 — the four dispositions, and Phase P03's own smoke assertion.
 
-use exchange_tif::{ Tif, tif_requires_full, tif_rests };
+use exchange_tif::{ Tif, tif_requires_full, tif_rests, tif_takes };
 
-/// T01 — only GTC rests a remainder.
+/// T01 — only GTC and post-only rest a remainder.
 #[ test ]
-fn only_gtc_rests()
+fn only_gtc_and_post_only_rest()
 {
   assert!( tif_rests( Tif::Gtc ) );
   assert!( !tif_rests( Tif::Ioc ) );
   assert!( !tif_rests( Tif::Fok ) );
+  assert!( tif_rests( Tif::PostOnly ) );
 }
 
 /// T01 — only FOK demands a complete fill.
@@ -18,6 +19,17 @@ fn only_fok_requires_full()
   assert!( !tif_requires_full( Tif::Gtc ) );
   assert!( !tif_requires_full( Tif::Ioc ) );
   assert!( tif_requires_full( Tif::Fok ) );
+  assert!( !tif_requires_full( Tif::PostOnly ) );
+}
+
+/// T01 — only post-only refuses to take liquidity.
+#[ test ]
+fn only_post_only_never_takes()
+{
+  assert!( tif_takes( Tif::Gtc ) );
+  assert!( tif_takes( Tif::Ioc ) );
+  assert!( tif_takes( Tif::Fok ) );
+  assert!( !tif_takes( Tif::PostOnly ) );
 }
 
 /// Phase P03 — GTC rests, IOC does not, FOK requires full, in one pass.

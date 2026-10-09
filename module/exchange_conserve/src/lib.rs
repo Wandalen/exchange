@@ -54,7 +54,7 @@
 //! involved — callable the instant `cross` produces a batch, before escrow or
 //! the event stream see it at all.
 
-use exact_kind::Money;
+use exact_arith::Money;
 use exchange_fill::Trade;
 use exchange_side::Side;
 use exchange_types::TypeError;
@@ -111,7 +111,7 @@ impl core::error::Error for ConserveError
 /// range.
 ///
 /// ```rust
-/// use exact_kind::Money;
+/// use exact_arith::Money;
 /// use exchange_conserve::fill_legs_sum;
 ///
 /// let legs = [ Money::from_int( 10 ).unwrap(), Money::from_int( -10 ).unwrap() ];
@@ -141,7 +141,7 @@ pub fn fill_legs_sum( legs : &[ Money ] ) -> Result< Money, ConserveError >
 /// anything but zero.
 ///
 /// ```rust
-/// use exact_kind::{ Money, Quantity };
+/// use exact_arith::{ Money, Quantity };
 /// use exchange_conserve::conserve_assert;
 /// use exchange_fill::Trade;
 /// use exchange_id::{ AccountId, OrderId };

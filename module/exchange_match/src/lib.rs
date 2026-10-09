@@ -97,15 +97,21 @@
 //! Translating "FOK, nothing filled" into a rejection is
 //! `exchange_core`'s job, same as every other outcome this crate reports
 //! rather than judges.
+//!
+//! Post-only is refused outright: if [`would_take`] holds for an order whose
+//! `tif` fails [`tif_takes`], [`cross`] returns
+//! [`MatchError::PostOnlyWouldTake`] without touching `book`. This is a guard,
+//! not the reporting path — `exchange_core` checks [`would_take`] itself first
+//! so the refusal reaches the event stream as a rejection.
 
-use exact_kind::{ KindError, Quantity };
+use exact_arith::{ KindError, Quantity };
 use exchange_book::Book;
 use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::Order;
-use exchange_side::Side;
-use exchange_tif::tif_requires_full;
+use exchange_side::{ Side, side_accepts };
+use exchange_tif::{ tif_requires_full, tif_takes };
 use exchange_types::{ Price, notional };
 
 pub use exchange_stp::SelfMatchPolicy;
@@ -191,6 +197,8 @@ pub enum MatchError
   /// family's design. See `exchange_conserve`'s own module doc, "Revision"
   /// section.
   Conservation( ConserveError ),
+  /// A post-only order would have taken liquidity. `book` is untouched.
+  PostOnlyWouldTake,
 }
 
 impl core::fmt::Display for MatchError
@@ -202,6 +210,7 @@ impl core::fmt::Display for MatchError
       Self::Quantity( error ) => write!( f, "quantity arithmetic failed during matching: {error}" ),
       Self::BookDesynchronized => write!( f, "the book refused a reduction the match loop had decided on" ),
       Self::Conservation( error ) => write!( f, "this batch of trades did not conserve: {error}" ),
+      Self::PostOnlyWouldTake => write!( f, "a post-only order would have taken liquidity" ),
     }
   }
 }
@@ -214,7 +223,7 @@ impl core::error::Error for MatchError
     {
       Self::Quantity( error ) => Some( error ),
       Self::Conservation( error ) => Some( error ),
-      Self::BookDesynchronized => None,
+      Self::BookDesynchronized | Self::PostOnlyWouldTake => None,
     }
   }
 }
@@ -235,18 +244,16 @@ impl From< ConserveError > for MatchError
   }
 }
 
-/// Whether `incoming` is willing to trade at `resting`'s price.
+/// Whether `incoming` would trade on arrival — the best opposite price is
+/// within its limit.
 ///
-/// A buy crosses an ask priced at or below its limit; a sell crosses a bid
-/// priced at or above. Equality crosses in both directions — an order at
-/// exactly the other side's price is a match, not a near miss.
-fn crosses( incoming : &Order, resting_price : Price ) -> bool
+/// Price only: a self-match or an unsettleable fill could still stop the
+/// trade, but for post-only the intent to take is what gets refused.
+#[ must_use ]
+pub fn would_take( book : &Book, incoming : &Order ) -> bool
 {
-  match incoming.side
-  {
-    Side::Buy => resting_price <= incoming.price,
-    Side::Sell => resting_price >= incoming.price,
-  }
+  book.best( incoming.instrument, incoming.side.opposite() )
+    .is_some_and( | best | side_accepts( incoming.side, incoming.price, best.order.price ) )
 }
 
 /// Whether every currency amount this fill implies can be expressed exactly.
@@ -288,19 +295,26 @@ fn settleable( incoming : &Order, executed : Price, taken : Quantity ) -> bool
 /// `policy` resolves any candidate pair that shares a self-match key, per
 /// `docs/algorithm/002_self_match_prevention.md` — see [`SelfMatchPolicy`].
 ///
-/// `incoming.tif` matters only when it is [`exchange_tif::Tif::Fok`] — see the
-/// module doc's "Time-in-force" section for why every other value needs no
-/// special handling here.
+/// `incoming.tif` matters only when it is [`exchange_tif::Tif::Fok`] or
+/// [`exchange_tif::Tif::PostOnly`] — see the module doc's "Time-in-force"
+/// section for why every other value needs no special handling here.
 ///
 /// # Errors
 ///
-/// [`MatchError`] if a quantity step fails, the book disagrees with the loop
-/// about what rests, or this call's own batch of trades fails
-/// [`exchange_conserve::conserve_assert`]. None of the three is reachable
-/// through the exchange engine's submission path — the third is checked as
-/// defense-in-depth regardless; see [`MatchError::Conservation`]'s own doc.
+/// [`MatchError::PostOnlyWouldTake`] if `incoming` is post-only and
+/// [`would_take`] holds. Otherwise [`MatchError`] if a quantity step fails,
+/// the book disagrees with the loop about what rests, or this call's own
+/// batch of trades fails [`exchange_conserve::conserve_assert`] — none of
+/// those three is reachable through the exchange engine's submission path;
+/// the last is checked as defense-in-depth, see
+/// [`MatchError::Conservation`]'s own doc.
 pub fn cross( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) -> Result< Crossing, MatchError >
 {
+  if !tif_takes( incoming.tif ) && would_take( book, incoming )
+  {
+    return Err( MatchError::PostOnlyWouldTake );
+  }
+
   if tif_requires_full( incoming.tif )
   {
     // `cross_inner` is deterministic (see the module doc's "Determinism"
@@ -342,7 +356,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       break;
     };
 
-    if !crosses( incoming, best.order.price )
+    if !side_accepts( incoming.side, incoming.price, best.order.price )
     {
       break;
     }

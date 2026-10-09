@@ -92,12 +92,13 @@ pub use exact_arith::
 };
 pub use exchange_book::{ Book, Resting };
 pub use exchange_cap::BookCaps;
-use exchange_cap::{ cap_check_level, cap_check_rest, CapError };
+use exchange_cap::{ cap_check_account, cap_check_level, cap_check_rest, CapError };
 pub use exchange_depth::{ Depth, DepthError, LevelView };
 pub use exchange_escrow::{ Account, Conserved, Escrow, EscrowError, Holding };
 pub use exchange_fill::{ CancelCause, Event, EventKind, RejectReason, Trade };
 pub use exchange_halt::HaltError;
-pub use exchange_id::{ AccountId, InstrumentId, OrderId };
+pub use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
+use exchange_idem::{ IdSet, idem_insert, idem_seen };
 pub use exchange_inbound::
 {
   BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
@@ -113,9 +114,9 @@ pub use exchange_side::Side;
 pub use exchange_snap::{ BookSnap, RestRow };
 pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
 pub use exchange_stats::BookStats;
-use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add };
+use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add, stats_snapshot, stats_zero };
 pub use exchange_tif::Tif;
-use exchange_tif::tif_rests;
+use exchange_tif::{ tif_rests, tif_takes };
 pub use exchange_types::{ Price, TypeError, notional, obligation };
 
 /// The three escrow moves [`Exchange`] makes on the matching path, and the
@@ -197,6 +198,8 @@ pub struct Receipt
 {
   /// The id assigned to the submitted order.
   pub order : OrderId,
+  /// The submitter's own id for it, echoed back.
+  pub client : Option< ClientOrderId >,
   /// The trades it generated, in the order they were generated. Empty when
   /// the order crossed nothing — which is an outcome, not a failure.
   pub trades : Vec< Trade >,
@@ -399,6 +402,8 @@ pub struct Exchange< E = Escrow >
   specs : BTreeMap< InstrumentId, InstrumentSpec >,
   caps : BTreeMap< InstrumentId, BookCaps >,
   stats : BookStats,
+  instrument_stats : BTreeMap< InstrumentId, BookStats >,
+  clients : IdSet< ( AccountId, ClientOrderId ) >,
 }
 
 impl Exchange< Escrow >
@@ -445,6 +450,8 @@ impl< E : EscrowPort > Exchange< E >
       specs : BTreeMap::new(),
       caps : BTreeMap::new(),
       stats : BookStats::default(),
+      instrument_stats : BTreeMap::new(),
+      clients : IdSet::default(),
     }
   }
 
@@ -567,7 +574,15 @@ impl< E : EscrowPort > Exchange< E >
   #[ must_use ]
   pub fn stats_get( &self ) -> BookStats
   {
-    exchange_stats::stats_snapshot( &self.stats )
+    stats_snapshot( &self.stats )
+  }
+
+  /// [`Self::stats_get`], for `instrument` alone. All zero for an instrument
+  /// nothing has touched yet.
+  #[ must_use ]
+  pub fn stats_get_for( &self, instrument : InstrumentId ) -> BookStats
+  {
+    self.instrument_stats.get( &instrument ).map_or_else( stats_zero, stats_snapshot )
   }
 
   /// Drain `consumer` and apply every command it yields, in drain order, with
@@ -577,7 +592,12 @@ impl< E : EscrowPort > Exchange< E >
   /// # `exchange_step` owns sequencing
   ///
   /// A [`Resting`] inside an incoming [`InboundCmd::Place`] is a *draft*, not
-  /// a finished order — its `order.id` and `arrival` are never trusted. This
+  /// a finished order — its `order.id` and `arrival` are never trusted.
+  /// `order.client` is: it is the submitter's own id, so an account's second
+  /// placement under the same one is refused as
+  /// [`RejectReason::DuplicateClientId`]. Claimed once the order is accepted
+  /// and never released — a retry of a filled or cancelled order is still a
+  /// retry. The set grows with every client-tagged order. This
   /// is the single-threaded apply side of the ring (see `exchange_inbound`'s
   /// own module doc, "Two producers without two threads on one ring"), so it
   /// is the only place with authoritative access to `claim_order`'s
@@ -631,9 +651,12 @@ impl< E : EscrowPort > Exchange< E >
       InboundCmd::Place( draft ) => StepOutcome::Placed( self.step_place( draft.order, policy ) ),
       InboundCmd::Cancel { id, .. } =>
       {
-        let result = self.cancel( id );
-        if result.is_ok() { stats_cancel_add( &mut self.stats, 1 ); }
-        StepOutcome::Cancelled( result )
+        let result = self.cancel_resting( id );
+        if let Ok( resting ) = &result
+        {
+          self.count( resting.order.instrument, stats_cancel_add, 1 );
+        }
+        StepOutcome::Cancelled( result.map( | resting | resting.remaining ) )
       },
       InboundCmd::Replace { .. } => StepOutcome::ReplaceNotWired,
     }
@@ -648,6 +671,14 @@ impl< E : EscrowPort > Exchange< E >
   fn step_place( &mut self, draft : Order, policy : SelfMatchPolicy ) -> Result< Receipt, ExchangeError >
   {
     let order = Order { id : self.claim_order(), ..draft };
+
+    // 0. A retry of an order this account already placed. First, so a retry
+    // is named as one whatever else changed since the original.
+    if let Some( client ) = order.client
+      && idem_seen( &self.clients, ( order.account, client ) )
+    {
+      return Err( self.reject_counted( &order, RejectReason::DuplicateClientId ) );
+    }
 
     // 1. Validate. Unchanged from the old `submit`'s own step 1 — see that
     // method's former `Fix(a_negative_price_is_refused_before_it_can_rest)`
@@ -683,6 +714,12 @@ impl< E : EscrowPort > Exchange< E >
     if self.specs.get( &order.instrument ).is_some_and( exchange_halt::halt_is )
     {
       return Err( self.reject_counted( &order, RejectReason::Halted ) );
+    }
+    // `cross` refuses a taking post-only order too, but without an event —
+    // checked here so the refusal is on record.
+    if !tif_takes( order.tif ) && exchange_match::would_take( &self.book, &order )
+    {
+      return Err( self.reject_counted( &order, RejectReason::PostOnlyWouldTake ) );
     }
 
     // 2. Dry-run the whole operation — reserve, cross, settle every trade,
@@ -745,6 +782,11 @@ impl< E : EscrowPort > Exchange< E >
           return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
         }
       }
+      let current_account_rests = dry_book.account_rests( order.instrument, order.account );
+      if let Err( error ) = cap_check_account( caps, current_account_rests )
+      {
+        return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
+      }
     }
 
     // 3. The dry run above succeeded in full — replay it for real. Every
@@ -752,6 +794,10 @@ impl< E : EscrowPort > Exchange< E >
     // pure `cross`, and nothing else touches `self.escrow`/`self.book` in
     // between.
     let reserved = self.escrow.reserve( &order ).expect( "already validated by the dry run above" );
+    if let Some( client ) = order.client
+    {
+      idem_insert( &mut self.clients, ( order.account, client ) ).expect( "checked unseen in step 0" );
+    }
     let arrival = self.emit
     (
       order.id, order.account,
@@ -761,7 +807,7 @@ impl< E : EscrowPort > Exchange< E >
       .expect( "already produced by the identical dry run above — cross is pure" );
 
     // 4. Settle each trade in the step that generated it.
-    stats_fill_add( &mut self.stats, crossing.trades.len() as u64 );
+    self.count( order.instrument, stats_fill_add, crossing.trades.len() as u64 );
     for trade in &crossing.trades
     {
       self.escrow.settle( trade, order.side, order.price ).expect( "already validated by the dry run above" );
@@ -779,7 +825,15 @@ impl< E : EscrowPort > Exchange< E >
         cancellation.order, cancellation.account,
         EventKind::OrderCancelled { cause : CancelCause::SelfMatch, quantity : cancellation.quantity, released },
       );
-      incoming_cancelled |= cancellation.order == order.id;
+      if cancellation.order == order.id
+      {
+        incoming_cancelled = true;
+      }
+      else
+      {
+        // A resting order withdrawn here is a cancel like any other.
+        self.count( order.instrument, stats_cancel_add, 1 );
+      }
     }
 
     // 5. Rest the remainder, reservation retained — via `exchange_rest::rest_place`
@@ -869,16 +923,23 @@ impl< E : EscrowPort > Exchange< E >
         rest_place( &mut self.book, Resting { order, remaining : resting, arrival } ),
         "order id came from this exchange's own next_order counter, which never repeats",
       );
-      stats_rest_add( &mut self.stats, 1 );
+      self.count( order.instrument, stats_rest_add, 1 );
     }
 
-    Ok( Receipt { order : order.id, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
+    Ok( Receipt { order : order.id, client : order.client, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
+  }
+
+  /// Bump a counter for `instrument` and for the exchange as a whole.
+  fn count( &mut self, instrument : InstrumentId, add : fn( &mut BookStats, u64 ), n : u64 )
+  {
+    add( &mut self.stats, n );
+    add( self.instrument_stats.entry( instrument ).or_insert_with( stats_zero ), n );
   }
 
   /// [`Self::reject`], plus the stats counter [`Self::exchange_step`] keeps.
   fn reject_counted( &mut self, order : &Order, reason : RejectReason ) -> ExchangeError
   {
-    stats_reject_add( &mut self.stats, 1 );
+    self.count( order.instrument, stats_reject_add, 1 );
     self.reject( order, reason )
   }
 
@@ -910,6 +971,12 @@ impl< E : EscrowPort > Exchange< E >
   /// cannot undo.
   pub fn cancel( &mut self, id : OrderId ) -> Result< Quantity, ExchangeError >
   {
+    self.cancel_resting( id ).map( | resting | resting.remaining )
+  }
+
+  /// [`Self::cancel`], returning the withdrawn order whole.
+  fn cancel_resting( &mut self, id : OrderId ) -> Result< Resting, ExchangeError >
+  {
     let ( account, instrument ) = self.book.iter().find( | resting | resting.order.id == id )
       .map( | resting | ( resting.order.account, resting.order.instrument ) )
       .ok_or( ExchangeError::NotResting( id ) )?;
@@ -923,7 +990,7 @@ impl< E : EscrowPort > Exchange< E >
       EventKind::OrderCancelled { cause : CancelCause::Request, quantity : resting.remaining, released },
     );
 
-    Ok( resting.remaining )
+    Ok( resting )
   }
 
   /// Everything that has happened, in order.
@@ -1103,7 +1170,8 @@ impl< E : EscrowPort > Exchange< E >
     }
   }
 
-  /// [`RejectReason::RestsFull`]/[`RejectReason::LevelsFull`] translation —
+  /// [`RejectReason::RestsFull`]/[`RejectReason::LevelsFull`]/
+  /// [`RejectReason::AccountFull`] translation —
   /// its own function rather than folded into [`Self::reason_for`] since
   /// [`CapError`] and [`EscrowError`] are unrelated source types with no
   /// shared variant to combine.
@@ -1113,6 +1181,7 @@ impl< E : EscrowPort > Exchange< E >
     {
       CapError::RestsFull => RejectReason::RestsFull,
       CapError::LevelsFull => RejectReason::LevelsFull,
+      CapError::AccountFull => RejectReason::AccountFull,
     }
   }
 }

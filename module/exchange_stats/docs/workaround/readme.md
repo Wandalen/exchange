@@ -12,7 +12,7 @@ External constraints `exchange_stats` absorbs.
 ### Overview
 
 **None.** `exchange_stats` is a dependency-free root of the family's tree — one
-struct and four pure counter functions. Verify with:
+struct and six pure functions. Verify with:
 
 ```bash
 cd module/exchange_stats && cargo tree --depth 1

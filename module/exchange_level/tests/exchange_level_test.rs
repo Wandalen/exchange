@@ -1,6 +1,6 @@
 //! `Level`'s whole contract: one price, FIFO arrival order, nothing else.
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_level::
 {
@@ -25,6 +25,7 @@ fn node( id : u64, quantity : i64, arrival : u64 ) -> LevelNode
       price : Money::parse( "2.50" ).unwrap(),
       quantity : Quantity::from_int( quantity ).unwrap(),
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : Quantity::from_int( quantity ).unwrap(),
     arrival : Sequence( arrival ),

@@ -10,7 +10,7 @@
 //! never been exercised together. Named here as open rather than silently
 //! dropped or faked with behavior not actually verified.
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::{ SelfMatchCancellation, SelfMatchPolicy, cross };
@@ -30,6 +30,7 @@ fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -
     price : Money::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
+    client : None,
   }
 }
 

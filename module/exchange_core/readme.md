@@ -27,7 +27,7 @@ let mut ends = ring.ends();
 let ( mut producer, mut consumer ) = ends.split();
 
 let place = | account, side, price, quantity | InboundCmd::Place
-( Resting { order : Order { id : OrderId( 0 ), instrument, account, side, price, quantity, tif : Tif::Gtc }, remaining : quantity, arrival : Sequence::ZERO } );
+( Resting { order : Order { id : OrderId( 0 ), instrument, account, side, price, quantity, tif : Tif::Gtc, client : None }, remaining : quantity, arrival : Sequence::ZERO } );
 
 inbound_flush( &mut producer, [ place( seller, Side::Sell, price, four ) ] );
 exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming );
@@ -42,6 +42,8 @@ assert!( verify( &exchange.postings().unwrap() ).unwrap().is_balanced() );
 
 `id`/`arrival` on the pushed order are placeholders — [`Exchange::exchange_step`] never trusts
 them, assigning both itself on drain (see that method's own doc, "owns sequencing").
+`client` is trusted: an account's second order under the same `ClientOrderId` is
+rejected as `DuplicateClientId`, so a retry after a lost acknowledgement cannot rest twice.
 
 Created per `task/decisions.md` Q-10.
 Implemented 2026-08-30 and graded from outside by

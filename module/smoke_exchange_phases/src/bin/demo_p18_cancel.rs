@@ -21,6 +21,7 @@ fn main()
     price : Money::parse( "1.00" ).unwrap(),
     quantity : Quantity::from_int( 4 ).unwrap(),
     tif : Tif::Gtc,
+    client : None,
   };
 
   let mut book = Book::new();

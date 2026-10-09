@@ -6,7 +6,7 @@ whether that pin is load-bearing rather than redundant.
 ## M1 — the raw round-trip guard is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_id/src/lib.rs, in order_raw,
+# In module/exchange_id/src/lib.rs, in order_raw,
 # replace  id.0  with  0  (and the parameter with  _id  to silence the warning)
 cargo test -p exchange_id --all-features 2>&1 | grep -E 'FAILED|test result'
 ```

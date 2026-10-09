@@ -42,7 +42,7 @@
 
 use std::collections::BTreeMap;
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::{ Obligation, Order };
@@ -52,12 +52,12 @@ use exchange_types::{ Price, TypeError, notional };
 /// The arithmetic a [`Holding`] needs of whatever it holds.
 ///
 /// Exists because two different things are conserved here — currency and the
-/// asset — and they are two unrelated concrete types in `exact_kind`. The
+/// asset — and they are two unrelated concrete types in `exact_arith`. The
 /// alternative was to write [`Holding`] twice, which is the same code with two
 /// names and two places for a bug to be fixed in one of.
 ///
 /// Deliberately minimal: zero, and the two checked moves. Anything richer
-/// would be `exact_kind` re-implemented one crate up.
+/// would be `exact_arith` re-implemented one crate up.
 pub trait Conserved : Copy + Ord + core::fmt::Debug
 {
   /// Nothing held.

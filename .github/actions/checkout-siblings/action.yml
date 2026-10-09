@@ -1,0 +1,10 @@
+name: exact and ring next to the checkout
+description: Clones Wandalen/exact and Wandalen/ring at the workflow's EXACT_REV / RING_REV into ../exact and ../ring, where the manifests' path dependencies look for them.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        git clone -q https://github.com/Wandalen/exact ../exact && git -C ../exact checkout -q "${EXACT_REV:?}"
+        git clone -q https://github.com/Wandalen/ring ../ring && git -C ../ring checkout -q "${RING_REV:?}"

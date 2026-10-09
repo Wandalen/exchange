@@ -6,7 +6,7 @@
 //! no-cross case distinguishes a matching engine from a machine that pairs
 //! whatever it is handed.
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Money, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_match::{ Crossing, MatchError, SelfMatchPolicy, cross as cross_with_policy };
@@ -36,6 +36,7 @@ fn order( id : u64, side : Side, price : &str, quantity : i64 ) -> Order
     price : Money::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
+    client : None,
   }
 }
 
