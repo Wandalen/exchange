@@ -1,18 +1,13 @@
-//! An on/off switch for matching alone — resting orders are never touched.
+//! Halt and resume one instrument: while halted, `exchange_core` refuses
+//! new orders on it; resting orders and cancels are untouched.
 //!
-//! Without this crate there is no way to stop a market: no circuit breaker,
-//! no station lockdown. Closes hard problem 18 (halt) and feature 18
-//! (`book_halt`/`book_resume`).
+//! The flag is `InstrumentSpec::halted`; this crate guards its transitions.
+//! `Exchange::halt_set`/`halt_clear`/`halt_is` call straight through, and
+//! `step_place` refuses an order on a halted instrument with
+//! `RejectReason::Halted`.
 //!
-//! # Only `exchange_spec`, not `exchange_book`
-//!
-//! The source design names `exchange_book` as a second dependency. Nothing
-//! in the real match loop checks `InstrumentSpec::halted` yet — that wiring
-//! belongs to whichever stage reworks `exchange_match`/`exchange_rest`, the
-//! same place `exchange_cap`'s own `BookCaps` is still waiting to be
-//! consulted. Taking the dependency now would buy nothing: there is no real
-//! behavior today it would let this crate add. See
-//! [`docs/decisions`](docs/decisions) for the full reasoning.
+//! Depends on `exchange_spec` only, not the source design's `exchange_book` —
+//! see `docs/decisions/001_no_exchange_book_dependency.md`.
 
 use exchange_spec::{ InstrumentSpec, spec_halted_is };
 
@@ -24,6 +19,19 @@ pub enum HaltError
   /// already-halted instrument, or resuming one that was never halted.
   Already,
 }
+
+impl core::fmt::Display for HaltError
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::Already => write!( f, "the instrument is already in the requested state" ),
+    }
+  }
+}
+
+impl core::error::Error for HaltError {}
 
 /// Halt `spec`'s instrument, refusing a no-op halt.
 ///
@@ -55,12 +63,8 @@ pub fn halt_clear( spec : &mut InstrumentSpec ) -> Result< (), HaltError >
   Ok( () )
 }
 
-/// Whether `spec`'s instrument is currently halted.
-///
-/// A thin, `exchange_halt`-named wrapper over
-/// [`exchange_spec::spec_halted_is`] — giving this crate the complete
-/// three-function surface the proposal names, without a second
-/// implementation of the one-line read it already is.
+/// Whether `spec`'s instrument is currently halted —
+/// [`exchange_spec::spec_halted_is`] under the source design's name.
 #[ must_use ]
 pub fn halt_is( spec : &InstrumentSpec ) -> bool
 {

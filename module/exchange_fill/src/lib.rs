@@ -1,48 +1,13 @@
 //! The trade record and the event stream — the Contract's two outputs.
 //!
-//! # Naming — `Trade`, not `Fill`
+//! [`Trade`] is the one record of a match. "Fill" survives only as a verb —
+//! an order is fully or partially filled — never as a second record that
+//! could disagree with the first. [`Event`] numbers every state change;
+//! [`EventKind`] says which one it was.
 //!
-//! The family's Contract says *trades out*; the matching algorithm talks
-//! about *fills*. They are one thing, so there is one type: [`Trade`], the
-//! record of one match. "Fill" survives as this crate's own name and as a
-//! verb — an order is *fully filled* or *partially filled* — describing what
-//! a Trade did to an order, never a second record of it. Two types here
-//! would be two sources of truth for one event, and they would disagree
-//! exactly when something had already gone wrong.
-//!
-//! # Extraction
-//!
-//! `Trade`, `Event`, `EventKind`, `RejectReason` and `CancelCause` moved here
-//! from `exchange_types`, which re-exports all five unchanged — the same
-//! compatibility convention every earlier extraction in this family has
-//! used. `CancelCause` moved alongside `EventKind` rather than staying
-//! behind: `EventKind::OrderCancelled` holds one, so leaving it in
-//! `exchange_types` while `EventKind` left would have forced a circular
-//! dependency back up to the crate this one is extracted from — the same
-//! "move the whole self-contained cluster together" reasoning
-//! `exchange_order` already documents for `Order`/`Obligation`/`TypeError`.
-//!
-//! `notional`/`TypeError`/`obligation` are **not** here — they stayed in
-//! `exchange_types` when `Order`/`Obligation` moved to `exchange_order`, and
-//! nothing in this crate's own cluster (`Trade`/`Event`/`EventKind`/
-//! `RejectReason`/`CancelCause`) needs them. `RejectReason::ObligationUnrepresentable`'s
-//! own doc comment mentions `notional` in prose rather than as an intra-doc
-//! link for exactly this reason: this crate does not depend on
-//! `exchange_types`, so a bracketed link to it could never resolve.
-//!
-//! # `taker_side`, added to `Trade`
-//!
-//! The real struct lacked a field recording which side the taker was on.
-//! `exchange_escrow::settle` already takes `taker_side` as its own separate
-//! parameter, computed by the caller from the original submission context —
-//! so this field is redundant with that parameter, not a new requirement.
-//! It is added anyway, on `Trade` itself, because `exchange_conserve`
-//! (built from this crate, not from `exchange_escrow`) needs to classify a
-//! *batch* of trades by taker side with no submission context available at
-//! all — only the trades themselves. `exchange_escrow::settle`'s own
-//! signature is left untouched: decision 2 of this family's refactor plan
-//! extracts `exchange_escrow` as-is, and collapsing the redundancy would be
-//! an API change to a crate that stage explicitly does not touch.
+//! [`Trade::taker_side`] repeats what `exchange_escrow::settle` takes as a
+//! parameter: `exchange_conserve` classifies a batch of trades with nothing
+//! but the trades themselves.
 
 use exact_arith::{ Price, Quantity };
 use exchange_id::{ AccountId, OrderId };
@@ -78,19 +43,13 @@ pub struct Trade
 
 impl Trade
 {
-  /// The executed-price rule this family applies: **a match executes at
-  /// the resting order's price**, never at the aggressor's.
+  /// The executed-price rule: **a match executes at the resting order's
+  /// price**, never at the aggressor's.
   ///
-  /// The family's matching algorithm lists this as open and leaves it to
-  /// the implementation; this is where it is closed. The reason is that the
-  /// resting order's price is the only one both parties had a chance to see:
-  /// the maker published it and the taker crossed it deliberately. Executing
-  /// at the taker's limit instead would quietly hand the entire spread to
-  /// whoever arrived second, which is a fee by another name and one the fee
-  /// schedule could not account for.
-  ///
-  /// Stated as a documented function rather than a comment on the match loop
-  /// so that the rule has one home and a test can name it.
+  /// The maker published its price and the taker crossed it deliberately.
+  /// Executing at the taker's limit would hand the spread to whoever arrived
+  /// second — a fee by another name. A function rather than a comment on the
+  /// match loop, so the rule has one home and a test can name it.
   #[ must_use ]
   pub const fn executed_price( maker : Price, _taker : Price ) -> Price
   {
@@ -100,10 +59,9 @@ impl Trade
 
 /// Why an order was refused.
 ///
-/// A closed set rather than a string. Which reasons exist will grow; that a
-/// caller can branch on the reason rather than parse prose is the part that
-/// cannot be added later without every existing caller's error handling being
-/// wrong.
+/// A closed set rather than a string, so a caller branches on the reason
+/// instead of parsing prose. A new reason is a new variant, and every
+/// exhaustive match downstream has to name it.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum RejectReason
 {
@@ -112,16 +70,10 @@ pub enum RejectReason
   ZeroQuantity,
   /// The order's price was below zero.
   ///
-  /// `Price` is signed, and nothing in the type refuses a negative — so the
-  /// refusal is here. A negative price makes a buy's notional negative,
-  /// which is a commitment that pays the account rather than costing it; and
-  /// it lets a sell rest at a price that turns its eventual settlement
-  /// inside out. Both are value created from nothing.
-  ///
-  /// Zero is deliberately still accepted. A gift at zero moves asset for no
-  /// currency, which is odd but conserves exactly — both sides consented and
-  /// nothing appears. Only strictly-below-zero is refused, because only
-  /// strictly-below-zero mints.
+  /// `Price` is signed. A negative buy notional would pay the account for
+  /// committing, and a negative sell would settle inside out — value from
+  /// nothing either way. Zero is accepted: it moves the asset for no
+  /// currency, which is odd but conserves.
   NegativePrice,
   /// The account is not known to the exchange.
   UnknownAccount,
@@ -131,16 +83,12 @@ pub enum RejectReason
   /// representable ceiling, or does not land exactly on the scale. See
   /// `notional` in `exchange_types`.
   ObligationUnrepresentable,
-  /// The account's funds were sufficient, but committing them would push its
-  /// *cumulative reservation* — the sum already promised to its other live
-  /// orders, plus this one — past the representable ceiling.
+  /// The account's funds were sufficient, but adding this order to what it
+  /// already has reserved would pass the representable ceiling.
   ///
   /// Distinct from [`RejectReason::InsufficientFunds`]: nothing is missing.
-  /// Reachable when an account already carries a large reservation from an
-  /// earlier order and then earns fresh, genuinely spendable funds — settling
-  /// as a seller, say — before placing another: `available` comfortably
-  /// covers the new order, but folding it into `reserved` alongside the
-  /// existing commitment would not fit the type's declared ceiling.
+  /// Reachable when an account with a large reservation earns fresh funds —
+  /// settling as a seller, say — and places another order.
   ReservationUnrepresentable,
   /// The order's instrument is currently halted — see `exchange_halt`.
   /// Resting orders are untouched; only a new arrival is refused.
@@ -179,27 +127,20 @@ pub enum CancelCause
 {
   /// The owner asked for it.
   Request,
-  /// The engine withdrew it under the self-match policy configured for the
-  /// book, because it would otherwise have crossed an order sharing the same
-  /// self-match key — see `SelfMatchPolicy` in the matching engine.
+  /// It would have crossed an order from the same account, and the
+  /// self-match policy withdrew it — see `exchange_stp::SelfMatchPolicy`.
   SelfMatch,
-  /// The order's own Time-in-Force forbade resting an unfilled remainder —
-  /// IOC dropped what was left after a partial fill, or FOK found it could
-  /// not be filled in full and the whole order came back untraded. Added
-  /// once `exchange_core::Exchange::step_place` actually disposed of a
-  /// remainder this way instead of only `exchange_match::cross` reporting
-  /// one — see that method's own `Fix(tif_dropped_remainder_leaked_its_own_reservation)`
-  /// comment for why a cause variant and a release both had to exist
-  /// together, not just one of them.
+  /// The order's time-in-force forbade resting the remainder — IOC dropped
+  /// what a partial fill left, or FOK could not fill in full and traded
+  /// nothing.
   TimeInForce,
 }
 
-/// One entry in the event stream — the Contract's second output, beside the
-/// trades themselves.
+/// One entry in the event stream.
 ///
-/// Every state change emits exactly one of these, and no state changes without
-/// one. Four fields are common to every kind, and for a [`EventKind::Trade`]
-/// they name the **aggressor**; the resting side travels in the payload.
+/// Every state change emits exactly one, and nothing changes without one.
+/// For an [`EventKind::Trade`] the common fields name the **aggressor**; the
+/// resting side travels in the payload.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub struct Event
 {
@@ -216,12 +157,9 @@ pub struct Event
 
 /// What an [`Event`] records.
 ///
-/// There is deliberately no `OrderFilled` kind: an order is filled when its
-/// trades' quantities sum to its submitted quantity, a fact the
-/// [`EventKind::Trade`] events already carry exactly. A dedicated terminal
-/// event would be a second record of one fact, and a consumer that trusted it
-/// would diverge from one that computed it — silently, in exactly the cases
-/// where the two disagree.
+/// No `OrderFilled` kind: an order is filled when its trades' quantities sum
+/// to what it submitted, which the [`EventKind::Trade`] events already say.
+/// A terminal event would be a second record of one fact.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum EventKind
 {

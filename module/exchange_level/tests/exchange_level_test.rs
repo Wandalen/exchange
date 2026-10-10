@@ -98,14 +98,26 @@ fn qty_sum_adds_every_resting_nodes_remaining()
   level_push( &mut level, node( 1, 4, 1 ) );
   level_push( &mut level, node( 2, 7, 2 ) );
 
-  assert_eq!( level_qty_sum( &level ), Quantity::from_int( 11 ).unwrap() );
+  assert_eq!( level_qty_sum( &level ), Ok( Quantity::from_int( 11 ).unwrap() ) );
 }
 
 #[ test ]
 fn qty_sum_of_an_empty_level_is_zero()
 {
   let level = level_new( Price::parse( "2.50" ).unwrap() );
-  assert_eq!( level_qty_sum( &level ), Quantity::ZERO );
+  assert_eq!( level_qty_sum( &level ), Ok( Quantity::ZERO ) );
+}
+
+/// Two orders each at the quantity ceiling sum past it — reported, not a
+/// panic.
+#[ test ]
+fn qty_sum_past_the_ceiling_is_an_error()
+{
+  let mut level = level_new( Price::parse( "2.50" ).unwrap() );
+  level_push( &mut level, LevelNode { remaining : Quantity::MAX, ..node( 1, 1, 1 ) } );
+  level_push( &mut level, LevelNode { remaining : Quantity::MAX, ..node( 2, 1, 2 ) } );
+
+  assert!( level_qty_sum( &level ).is_err() );
 }
 
 #[ test ]
@@ -128,7 +140,7 @@ fn the_front_nodes_remaining_can_be_reduced_in_place()
   let mut level = level_new( Price::parse( "2.50" ).unwrap() );
   level_push( &mut level, node( 1, 4, 1 ) );
 
-  let front = level.nodes.first_mut().unwrap();
+  let front = level.nodes.front_mut().unwrap();
   front.remaining = front.remaining.checked_sub( Quantity::from_int( 1 ).unwrap() ).unwrap();
 
   assert_eq!( level.nodes[ 0 ].remaining, Quantity::from_int( 3 ).unwrap() );

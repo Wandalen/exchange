@@ -2,10 +2,8 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_fill`'s own
 `Trade`) and now lives at
-[`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md)'s
-"Closes hard problem 21, and features 12 and 13" section. (`instrument` is
-not yet one of `Trade`'s fields, since every real book is still one
-instrument deep — see that section's note.)
+[`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md). (`Trade` carries no
+`instrument`.)
 
 ### Sources
 

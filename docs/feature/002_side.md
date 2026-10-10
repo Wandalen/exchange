@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_side`'s own
 `Side`) and now lives at
-[`../../module/exchange_side/readme.md`](../../module/exchange_side/readme.md)'s
-"Closes feature 2" section.
+[`../../module/exchange_side/readme.md`](../../module/exchange_side/readme.md).
 
 ### Sources
 

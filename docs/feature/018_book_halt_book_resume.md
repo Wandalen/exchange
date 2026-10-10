@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_halt`'s own
 `halt_set`/`halt_clear`) and now lives at
-[`../../module/exchange_halt/readme.md`](../../module/exchange_halt/readme.md)'s
-"## Genuinely new" section.
+[`../../module/exchange_halt/readme.md`](../../module/exchange_halt/readme.md).
 
 ### Sources
 

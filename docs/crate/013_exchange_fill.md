@@ -7,10 +7,9 @@
 - **In Scope**: The three output types.
 - **Out of Scope**: Writing the wallet — this crate never does that.
 
-**Design status**: Built, in its own `exchange_fill` crate (extracted out
-of `exchange_types` this session) — `Trade`, `Event`, `EventKind` cover
-this role (no type literally named `Fill`). Full writeup moved to the
-crate's own docs: [`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md),
+**Design status**: Built — `Trade`, `Event`, `EventKind` cover this role;
+no type is named `Fill`, and no instrument travels on a trade. Full writeup
+moved to the crate's own docs: [`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md),
 [`../../module/exchange_fill/docs/item/readme.md`](../../module/exchange_fill/docs/item/readme.md).
 Also depends directly on `exact_arith` (006's facade; proposed leaf was
 `exact_kind`) — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s

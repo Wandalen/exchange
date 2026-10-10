@@ -11,17 +11,10 @@ External constraints `exchange_level` absorbs.
 
 ### Overview
 
-**None.**
-
-`exchange_level` depends on four in-workspace crates — `exchange_id`,
-`exchange_order`, `exchange_seq`, `exact_arith` — and zero published crates.
-The `Vec`-based FIFO (rather than the source proposal's intrusive linked
-list) is a design decision, documented in
-[`../decisions/001_no_level_error.md`](../decisions/001_no_level_error.md)
-and this crate's `readme.md` — not a workaround, since nothing external
-forces it; Rust's own safety model is why the alternative was never
-attempted, not a constraint this crate works around after the fact. Verify
-with:
+**None.** `exchange_level` depends on four in-workspace crates —
+`exchange_id`, `exchange_order`, `exchange_seq`, `exact_arith` — and no
+published crate. Keeping the nodes in a collection rather than the proposal's
+intrusive list is a design choice, not a workaround. Verify with:
 
 ```bash
 cd module/exchange_level && cargo tree --depth 1

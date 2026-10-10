@@ -21,8 +21,7 @@ on actual pop *order* across more than one node does.
 1. Edited `src/lib.rs`'s `level_push` from `level.nodes.push( node )` to
    `level.nodes.insert( 0, node )` — newest arrival now lands at the front,
    turning the queue into a stack.
-2. Ran `cargo test -p exchange_level` (`docs/-0022_level_mutation.log`).
-   Result: 2 of 9 failed —
+2. Ran `cargo test -p exchange_level`. Result: 2 of 9 failed —
    `pushed_nodes_pop_in_the_order_they_arrived` and
    `removing_by_id_finds_a_node_wherever_it_sits` (the latter asserts the two
    survivors keep their original relative order after a middle removal). The
@@ -30,16 +29,21 @@ on actual pop *order* across more than one node does.
    front mutation — are insensitive to push/pop end and correctly kept
    passing.
 3. Reverted to `level.nodes.push( node )`.
-4. Re-ran `cargo test -p exchange_level` (`docs/-0023_level_revert_check.log`).
-   Result: 9/9 passed again.
+4. Re-ran `cargo test -p exchange_level`. Result: 9/9 passed again.
 
 Confirms the suite fails loudly, and only on the tests whose job is exactly
 this, when FIFO silently inverts to LIFO.
 
+### Re-run on `VecDeque` — 2026-10-10
+
+The nodes moved to a `VecDeque`, so the same mutation is now `level_push`'s
+`level.nodes.push_back( node )` → `level.nodes.push_front( node )`. Result: 2
+of 10 failed — the same two tests. Reverted; 10/10 passed again.
+
 ### Why no other mutation test
 
 `LevelNode`'s three fields (`order: Order`, `remaining: Quantity`,
-`arrival: Sequence`) and `Level`'s two (`price: Price`, `nodes: Vec<LevelNode>`)
+`arrival: Sequence`) and `Level`'s two (`price: Price`, `nodes: VecDeque<LevelNode>`)
 are all distinctly typed — no same-typed-field-pair swap compiles, so there
 is no second silent-transposition class to probe (matching `exchange_order`'s
 own documented reasoning, [`../../../exchange_order/tests/manual/readme.md`](../../../exchange_order/tests/manual/readme.md)).

@@ -17,7 +17,7 @@
 
 `module/` holds 24 `exchange_*` crates plus two smoke lanes (`smoke_exchange_book`, `smoke_exchange_phases`). Each crate does one thing; nothing here is a kitchen-sink `utils`. The family splits into dependency **tiers** — tier *N* may depend only on tiers below it — which is the one piece of structure this guide adds on top of what each crate's own readme already says. Four things worth knowing before the table:
 
-1. **`exchange_types` was a legacy re-export aggregator — retired as of 2026-10-05.** It originally held everything in this family's original 4-crate build (`Side`, `AccountId`, `OrderId`, `Sequence`, `Order`, `Obligation`, `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause`) plus its own `Amount` alias. All twelve are gone now — every call site depends on the owning leaf crate directly — and `exchange_types` owns only what was always genuinely its own: `TypeError`, `notional()`, and `obligation()`. The four crates that used to route through the aggregator (`exchange_book`, `exchange_conserve`, `exchange_escrow`, `exchange_event`) no longer do either: `exchange_book` and `exchange_event` dropped the dependency entirely, while `exchange_conserve` and `exchange_escrow` still depend on the narrowed crate, now for `TypeError` alone. The tier distortion this point used to warn about is resolved as a side effect, not a separate fix — `exchange_types` fell from Tier 3 to Tier 2, and the four dependent crates fell from Tier 4 to Tier 3, both landing at the tier their conceptual role actually suggests. See `exchange_types/readme.md`'s own "Extraction" section for the retirement itself.
+1. **`exchange_types` was a legacy re-export aggregator — retired as of 2026-10-05.** It originally held everything in this family's original 4-crate build (`Side`, `AccountId`, `OrderId`, `Sequence`, `Order`, `Obligation`, `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause`) plus its own `Amount` alias. All twelve are gone now — every call site depends on the owning leaf crate directly — and `exchange_types` owns only what was always genuinely its own: `TypeError`, `notional()`, and `obligation()`. The four crates that used to route through the aggregator (`exchange_book`, `exchange_conserve`, `exchange_escrow`, `exchange_event`) no longer do either: `exchange_book` and `exchange_event` dropped the dependency entirely, while `exchange_conserve` and `exchange_escrow` still depend on the narrowed crate, now for `TypeError` alone. The tier distortion this point used to warn about is resolved as a side effect, not a separate fix — `exchange_types` fell from Tier 3 to Tier 2, and the four dependent crates fell from Tier 4 to Tier 3, both landing at the tier their conceptual role actually suggests.
 2. **Most of the family is wired into `exchange_core` now — one crate still isn't.** The Stage 9 facade rework (2026-10-03) gave `Exchange` real methods calling straight through to `exchange_depth`, `exchange_event`, `exchange_halt`, `exchange_snap`, `exchange_spec`, and `exchange_stats`, plus `exchange_inbound` as the ring `exchange_step` itself drains; `exchange_cap` followed, checked in `step_place`'s dry run, and `exchange_idem`, refusing a retried `ClientOrderId`. Only `exchange_conserve` remains standalone — it appears nowhere in `exchange_core/src/lib.rs` (`exchange_match` calls it). `exchange_rest` is a partial case: `rest_place` is called from inside `step_place`, but `rest_replace` is reachable only directly — `exchange_step` drains an `InboundCmd::Replace` and returns `StepOutcome::ReplaceNotWired` rather than applying it (see `exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md`). This is the family's own established "skeleton-first" pattern, now mostly but not fully closed: build and prove a crate in isolation, wire it into the facade in a later stage. Call the two remaining names directly; don't expect `Exchange` to reach them yet.
 3. **24 real crates against a 23-crate proposal — not a 1:1 match.** The proposal names 23 crates; the real build now has 24 `exchange_*` directories, and not the same 23 either. `exchange_types` is not one of the proposed 23 at all — it is the legacy crate everything else used to live in — and `exchange_inbound` (the ring-ingress bridge, the proposal's 23rd) landed only after this guide's first pass, built against `ring_factory`+`ring_handle`+`ring_types` rather than `ring_core` directly.
 4. **`Money` and `Price` are distinct types.** `exact_arith::Price` is its own struct, not an alias of `Money`; neither converts into the other. A price is per unit, `Money` (and `exchange_order::Amount`) is a total, and `exchange_types::notional` is the one bridge between them.
@@ -37,7 +37,7 @@
 | 1 | [`exchange_order`](../../module/exchange_order/readme.md) | One order record — instrument, account, side, tif included |
 | 1 | [`exchange_spec`](../../module/exchange_spec/readme.md) | Tick, lot, the asset pair, and the halt flag on one instrument |
 | 2 | [`exchange_fill`](../../module/exchange_fill/readme.md) | `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause` |
-| 2 | [`exchange_halt`](../../module/exchange_halt/readme.md) | An on/off switch for matching alone |
+| 2 | [`exchange_halt`](../../module/exchange_halt/readme.md) | Halt and resume new orders on one instrument |
 | 2 | [`exchange_level`](../../module/exchange_level/readme.md) | One price, FIFO rest |
 | 2 | [`exchange_types`](../../module/exchange_types/readme.md) | `TypeError`, plus `notional`/`obligation` |
 | 3 | [`exchange_book`](../../module/exchange_book/readme.md) | The resting order book, one per instrument, in price-time priority |
@@ -137,7 +137,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   let maker = Price::parse( "2.50" ).unwrap();
   assert_eq!( Trade::executed_price( maker, Price::parse( "3.00" ).unwrap() ), maker );
   ```
-- **`exchange_halt`** (→ `exchange_spec`) — `halt_set`/`halt_clear`/`halt_is` on an `InstrumentSpec`'s own flag. Wired since Stage 9: `Exchange::halt_set`/`halt_clear`/`halt_is` call straight through, one-to-one by name.
+- **`exchange_halt`** (→ `exchange_spec`) — `halt_set`/`halt_clear`/`halt_is` on an `InstrumentSpec`'s own flag. Wired since Stage 9: `Exchange::halt_set`/`halt_clear`/`halt_is` call straight through, one-to-one by name, and `step_place` refuses a new order on a halted instrument (`RejectReason::Halted`).
   ```rust
   use exact_arith::{ Price, Quantity };
   use exchange_halt::{ halt_is, halt_set };
@@ -147,7 +147,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   halt_set( &mut spec ).unwrap();
   assert!( halt_is( &spec ) );
   ```
-  The proposal names `exchange_book` as a second dependency too; dropped here since nothing in the real match loop checks halt yet, so there is no real behavior a book dependency would support (own `docs/decisions/` entry).
+  The proposal names `exchange_book` as a second dependency too; not taken, since nothing here reads a book (own `docs/decisions/` entry).
 - **`exchange_level`** (→ `exchange_id`, `exchange_order`, `exchange_seq`) — `Level`/`LevelNode`, the explicit FIFO queue at one price: `level_new`, `level_push`, `level_pop_front`.
   ```rust
   use exchange_level::{ level_new, level_pop_front };
@@ -155,7 +155,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   let mut level = level_new( Price::parse( "2.50" ).unwrap() );
   assert!( level_pop_front( &mut level ).is_none() );
   ```
-  Genuinely new, not yet exercised: `exchange_book` takes this as a Cargo.toml dependency, but per `exchange_book`'s own readme its real storage today is still one flat sorted `Vec<Resting>` per side — the per-price `Vec<Level>` retrofit `exchange_level`'s own readme describes under "Related" is a stated intent, not yet a landed change. A dependency edge in `Cargo.toml` is not proof a type is actually used — the two were cross-checked against each other here, not assumed from either readme alone.
+  `exchange_book` keeps one `Level` per price per side, and `Resting` is an alias of `LevelNode`. The nodes sit in a `VecDeque`, so taking the front of a level is O(1).
 - **`exchange_types`** (→ `exchange_order`, `exchange_side`) — narrowed down to what was always genuinely its own: `TypeError` and `notional`/`obligation`. See Introduction, point 1 — the eleven re-exports this crate used to carry are gone as of 2026-10-05, which is also why it moved from Tier 3 to Tier 2 here.
   ```rust
   use exchange_types::notional;
@@ -165,7 +165,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
 
 ## Tier 3
 
-- **`exchange_book`** (→ `exchange_id`, `exchange_level`, `exchange_side`) — the resting order book, keyed by `InstrumentId`, one sorted `Vec<Resting>` per side, best at the front (better price first, earlier arrival breaks a tie — never wall-clock time, only a caller-supplied `Sequence`).
+- **`exchange_book`** (→ `exchange_id`, `exchange_level`, `exchange_side`) — the resting order book, keyed by `InstrumentId`, one sorted `Vec<Level>` per side, best at the front (better price first, earlier arrival breaks a tie — never wall-clock time, only a caller-supplied `Sequence`).
   ```rust
   use exchange_book::Book;
   use exchange_id::{ InstrumentId, OrderId };

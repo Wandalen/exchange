@@ -1,12 +1,12 @@
 # module
 
-Every crate in the `substrate/exchange` workspace.
+Every crate in the workspace.
 
 ## Responsibility Table
 
 | Directory | Responsibility |
 |-----------|-----------------|
-| [`exchange_id/`](exchange_id/readme.md) | `InstrumentId`/`OrderId`/`AccountId` — plain id newtypes |
+| [`exchange_id/`](exchange_id/readme.md) | `InstrumentId`/`OrderId`/`ClientOrderId`/`AccountId` — plain id newtypes |
 | [`exchange_side/`](exchange_side/readme.md) | `Side { Buy, Sell }` and its opposite relation |
 | [`exchange_seq/`](exchange_seq/readme.md) | `Sequence` and `seq_next` — time priority without a clock |
 | [`exchange_cap/`](exchange_cap/readme.md) | `BookCaps` — a configurable limit on book growth |
@@ -14,15 +14,15 @@ Every crate in the `substrate/exchange` workspace.
 | [`exchange_tif/`](exchange_tif/readme.md) | `Tif { Gtc, Ioc, Fok, PostOnly }` — time-in-force disposition |
 | [`exchange_spec/`](exchange_spec/readme.md) | `InstrumentSpec` — tick, lot, asset pair, halt flag |
 | [`exchange_stats/`](exchange_stats/readme.md) | `BookStats` — running rest/fill/reject/cancel counters for the hot path |
-| [`exchange_types/`](exchange_types/readme.md) | `notional`/`obligation`/`TypeError`/`Price` — the settlement logic; no longer re-exports `Order`/`Trade` and friends, which now live solely in their own crates |
+| [`exchange_types/`](exchange_types/readme.md) | `notional`/`obligation`/`TypeError` — exact notionals and what an order commits |
 | [`exchange_order/`](exchange_order/readme.md) | `Order`, `Obligation` — one order record, instrument and tif included |
-| [`exchange_idem/`](exchange_idem/readme.md) | `IdSet` — refuse a duplicate `OrderId` before it reaches the book |
+| [`exchange_idem/`](exchange_idem/readme.md) | `IdSet` — refuse a key already seen: a duplicate `OrderId`, or a retried `ClientOrderId` |
 | [`exchange_fill/`](exchange_fill/readme.md) | `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause` — the event-stream vocabulary |
 | [`exchange_conserve/`](exchange_conserve/readme.md) | `conserve_assert`/`fill_legs_sum` — a fill batch nets to zero across its legs |
 | [`exchange_level/`](exchange_level/readme.md) | `Level`/`LevelNode` — one price, FIFO rest |
 | [`exchange_book/`](exchange_book/readme.md) | The resting order book and price-time priority |
 | [`exchange_depth/`](exchange_depth/readme.md) | `depth_top` — top-N book depth without a full walk |
-| [`exchange_halt/`](exchange_halt/readme.md) | `halt_set`/`halt_clear`/`halt_is` — an on/off switch for matching |
+| [`exchange_halt/`](exchange_halt/readme.md) | `halt_set`/`halt_clear`/`halt_is` — halt and resume new orders on one instrument |
 | [`exchange_event/`](exchange_event/readme.md) | `event_drain` — the one owned drain point for the event stream |
 | [`exchange_snap/`](exchange_snap/readme.md) | `snap_take` — a plain, copied snapshot of a book's resting rows |
 | [`exchange_match/`](exchange_match/readme.md) | `cross()` — an incoming order against the book, producing trades |
