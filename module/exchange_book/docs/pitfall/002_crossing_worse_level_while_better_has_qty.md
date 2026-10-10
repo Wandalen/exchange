@@ -27,8 +27,8 @@ current front one; a caller cannot reach the second-best level until
 `consume_best` has driven the best one to empty, because nothing in this
 crate's surface lets it name the second-best level at all.
 `grep -n "front(\|front_mut(\|pop_front(" module/exchange_book/src/lib.rs`
-shows every selection and removal point in the crate going through the front
-only. Verified directly:
+shows every selection and consumption point in the crate going through the
+front only; `cancel` alone removes elsewhere, by id. Verified directly:
 [`tests/priority_test.rs`](../../tests/priority_test.rs)'s
 `a_partly_consumed_order_keeps_its_place` (a level reduced but not drained
 stays at the front — the next `best()` call returns the same level, not a
