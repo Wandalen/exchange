@@ -7,7 +7,8 @@
 //!
 //! The source design names `Level { price, head, len }` /
 //! `LevelNode { order, next }`. Safe Rust has no self-referential node chain
-//! without `Box` or `Rc`, so [`Level`] keeps its nodes in a [`Vec`].
+//! without `Box` or `Rc`, so [`Level`] keeps its nodes in a [`VecDeque`]:
+//! taking the front is O(1), so sweeping a level is linear in its length.
 //! `LevelError` is not built — see `docs/decisions/001_no_level_error.md`.
 //!
 //! # `nodes` is public
@@ -15,6 +16,8 @@
 //! A partial fill reduces the front node's `remaining` in place. The
 //! alternative — pop, then push back to the front — needs an operation that
 //! would let any caller break arrival order.
+
+use std::collections::VecDeque;
 
 use exact_arith::{ KindError, Price, Quantity };
 use exchange_id::OrderId;
@@ -47,14 +50,14 @@ pub struct Level
   pub price : Price,
   /// The resting nodes, oldest first. Public so a book can reduce the front
   /// node's `remaining` in place — see the module doc.
-  pub nodes : Vec< LevelNode >,
+  pub nodes : VecDeque< LevelNode >,
 }
 
 /// An empty level at `price`.
 #[ must_use ]
 pub fn level_new( price : Price ) -> Level
 {
-  Level { price, nodes : Vec::new() }
+  Level { price, nodes : VecDeque::new() }
 }
 
 /// Add `node` as the newest arrival — the back of the queue.
@@ -63,7 +66,7 @@ pub fn level_new( price : Price ) -> Level
 /// checks both before a node reaches a level.
 pub fn level_push( level : &mut Level, node : LevelNode )
 {
-  level.nodes.push( node );
+  level.nodes.push_back( node );
 }
 
 /// Remove and return the oldest arrival — the front of the queue.
@@ -71,14 +74,7 @@ pub fn level_push( level : &mut Level, node : LevelNode )
 /// [`None`] if the level is empty.
 pub fn level_pop_front( level : &mut Level ) -> Option< LevelNode >
 {
-  if level.nodes.is_empty()
-  {
-    None
-  }
-  else
-  {
-    Some( level.nodes.remove( 0 ) )
-  }
+  level.nodes.pop_front()
 }
 
 /// Remove the node with this id, wherever it sits in arrival order.
@@ -88,7 +84,7 @@ pub fn level_pop_front( level : &mut Level ) -> Option< LevelNode >
 pub fn level_remove( level : &mut Level, id : OrderId ) -> Option< LevelNode >
 {
   let at = level.nodes.iter().position( | node | node.order.id == id )?;
-  Some( level.nodes.remove( at ) )
+  level.nodes.remove( at )
 }
 
 /// How many nodes rest in this level.

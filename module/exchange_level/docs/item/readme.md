@@ -12,7 +12,7 @@
 | Item | Signature | Purpose |
 |------|-----------|---------|
 | `LevelNode` | `pub struct LevelNode { order: Order, remaining: Quantity, arrival: Sequence }` | One resting order, what's left of it, and its arrival position |
-| `Level` | `pub struct Level { price: Price, nodes: Vec<LevelNode> }` | Every order resting at one price, oldest-first |
+| `Level` | `pub struct Level { price: Price, nodes: VecDeque<LevelNode> }` | Every order resting at one price, oldest-first |
 | `level_new` | `pub fn level_new(price: Price) -> Level` | An empty level at `price` |
 | `level_push` | `pub fn level_push(level: &mut Level, node: LevelNode)` | Add the newest arrival at the back |
 | `level_pop_front` | `pub fn level_pop_front(level: &mut Level) -> Option<LevelNode>` | Remove and return the oldest arrival |
@@ -29,7 +29,7 @@ catalogued at
 names the same seven `level_*` functions, built as named, plus:
 
 - **`Level { price, head, len }` / `LevelNode { order, next }`** — an
-  intrusive list. Built as `price` plus a `Vec` of nodes instead, each node
+  intrusive list. Built as `price` plus a `VecDeque` of nodes instead, each node
   holding `order`, `remaining` and `arrival`; see the readme.
 - **`LevelError { Full, Missing }`** — not built; see
   [`../decisions/001_no_level_error.md`](../decisions/001_no_level_error.md).

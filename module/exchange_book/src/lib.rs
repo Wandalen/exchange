@@ -240,7 +240,7 @@ impl Book
   #[ must_use ]
   pub fn best( &self, instrument : InstrumentId, side : Side ) -> Option< &Resting >
   {
-    self.levels( instrument, side ).first()?.nodes.first()
+    self.levels( instrument, side ).first()?.nodes.front()
   }
 
   /// Reduce the best order on `instrument`'s `side` by `taken`, removing it
@@ -263,7 +263,7 @@ impl Book
       return false;
     };
 
-    let best = level.nodes.first_mut()
+    let best = level.nodes.front_mut()
       .expect( "a level is removed the instant it empties; it never rests here with zero nodes" );
 
     let Ok( left ) = best.remaining.checked_sub( taken )
