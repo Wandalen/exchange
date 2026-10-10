@@ -47,8 +47,8 @@
 //! # Relationship to `exchange_core::postings`
 //!
 //! `exchange_core::postings` builds the same debit-buyer/credit-seller cash
-//! pair per trade, plus the asset pair moving the other way, across the
-//! exchange's *entire* event log, for
+//! pair per trade, plus the asset pair moving the other way, across whatever
+//! slice of the exchange's event stream it is given, for
 //! [`exact_arith::verify`] to grade with machinery the exchange did not
 //! write (see that function's own doc comment). This crate's
 //! [`conserve_assert`] is its cash half at a narrower, pre-ledger grain — one

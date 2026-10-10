@@ -46,6 +46,7 @@ This crate's own `pub` surface, indexed against
 | `ExchangeError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `StepOutcome` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `PostingAsset` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `postings` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Exchange` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
 Everything else `exchange_core` exports is a re-export from the thirteen

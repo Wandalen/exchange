@@ -39,10 +39,10 @@ grep -rn 'EventKind::' module/*/src | grep -v '^module/exchange_fill/'
 stands in for the rest.
 
 **Observed 2026-10-10:** every use is in `exchange_core/src/lib.rs` — five
-constructions, `let EventKind::Trade( trade ) = event.kind else { continue }`
-in `postings`, and `matches!( event.kind, EventKind::OrderAccepted { side : Side::Buy, .. } )`
-in `parties`. Both readers name one variant; the `..` elides fields, not
-variants.
+constructions and one reader, `let EventKind::Trade( trade ) = event.kind else { continue }`
+in `postings`, which names one variant. (A second reader, `parties`, matched
+`EventKind::OrderAccepted { side : Side::Buy, .. }` until `postings` took the
+side from `Trade::taker_side` instead.)
 
 ## Run Record
 

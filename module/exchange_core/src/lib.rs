@@ -1056,68 +1056,18 @@ impl< E : EscrowPort > Exchange< E >
     &self.escrow
   }
 
-  /// Every trade as two pairs of postings — the buyer debited the notional
-  /// and credited the quantity, the seller the reverse — ready for [`verify`],
-  /// which nets each [`PostingAsset`] separately.
+  /// Every trade still in the stream, as [`postings`] reads it.
   ///
-  /// This is the bridge to `exact_arith`'s conservation auditor, and it is
-  /// worth having for one reason: the auditor was built to grade a transaction
-  /// log it knows nothing about, so running it here checks the exchange with
-  /// machinery the exchange did not write. A conservation test the exchange
-  /// authored itself would agree with the exchange by construction.
+  /// Covers only the events [`Self::event_drain`] has not taken: a drained
+  /// batch leaves this audit with the trades and is audited by passing it to
+  /// [`postings`] directly.
   ///
   /// # Errors
   ///
-  /// [`ExchangeError::Rejected`] carrying
-  /// [`RejectReason::ObligationUnrepresentable`] if a trade's own notional
-  /// cannot be expressed, which would mean it should never have executed.
+  /// As [`postings`].
   pub fn postings( &self ) -> Result< Vec< Entry< AccountId, PostingAsset > >, ExchangeError >
   {
-    let mut entries = Vec::new();
-
-    for event in &self.events
-    {
-      let EventKind::Trade( trade ) = event.kind
-      else
-      {
-        continue;
-      };
-
-      let paid = notional( trade.price, trade.quantity )
-      .map_err( | _ | ExchangeError::Rejected( RejectReason::ObligationUnrepresentable ) )?;
-
-      let ( buyer, seller ) = self.parties( &trade );
-      entries.push( Entry::new( buyer, PostingAsset::Cash, -paid.minor() ) );
-      entries.push( Entry::new( seller, PostingAsset::Cash, paid.minor() ) );
-      entries.push( Entry::new( buyer, PostingAsset::Asset, trade.quantity.minor() ) );
-      entries.push( Entry::new( seller, PostingAsset::Asset, -trade.quantity.minor() ) );
-    }
-
-    Ok( entries )
-  }
-
-  /// Which of a trade's two accounts bought, and which sold.
-  ///
-  /// Read back from the aggressor's own `OrderAccepted` event rather than from
-  /// the book, because by the time this is called both orders may be long
-  /// gone — a filled order leaves no book state at all, and postings must
-  /// still be derivable from the record alone.
-  fn parties( &self, trade : &Trade ) -> ( AccountId, AccountId )
-  {
-    let taker_bought = self.events.iter().any( | event |
-    {
-      event.order == trade.taker
-      && matches!( event.kind, EventKind::OrderAccepted { side : Side::Buy, .. } )
-    } );
-
-    if taker_bought
-    {
-      ( trade.taker_account, trade.maker_account )
-    }
-    else
-    {
-      ( trade.maker_account, trade.taker_account )
-    }
+    postings( &self.events )
   }
 
   fn claim_order( &mut self ) -> OrderId
@@ -1229,4 +1179,53 @@ impl< E : EscrowPort > Exchange< E >
       CapError::AccountFull => RejectReason::AccountFull,
     }
   }
+}
+
+/// Every trade in `events` as two pairs of postings — the buyer debited the
+/// notional and credited the quantity, the seller the reverse — ready for
+/// [`verify`], which nets each [`PostingAsset`] separately.
+///
+/// This is the bridge to `exact_arith`'s conservation auditor, and it is
+/// worth having for one reason: the auditor was built to grade a transaction
+/// log it knows nothing about, so running it here checks the exchange with
+/// machinery the exchange did not write. A conservation test the exchange
+/// authored itself would agree with the exchange by construction.
+///
+/// Each trade's postings net to zero on their own, so a slice missing trades
+/// balances as well as a whole log: the audit covers exactly what it is given.
+///
+/// # Errors
+///
+/// [`ExchangeError::Rejected`] carrying
+/// [`RejectReason::ObligationUnrepresentable`] if a trade's own notional
+/// cannot be expressed, which would mean it should never have executed.
+pub fn postings( events : &[ Event ] ) -> Result< Vec< Entry< AccountId, PostingAsset > >, ExchangeError >
+{
+  let mut entries = Vec::new();
+
+  for event in events
+  {
+    let EventKind::Trade( trade ) = event.kind
+    else
+    {
+      continue;
+    };
+
+    let paid = notional( trade.price, trade.quantity )
+    .map_err( | _ | ExchangeError::Rejected( RejectReason::ObligationUnrepresentable ) )?;
+
+    // The trade names its taker's side, so neither the book nor the taker's
+    // own `OrderAccepted` (perhaps already drained) is needed.
+    let ( buyer, seller ) = match trade.taker_side
+    {
+      Side::Buy => ( trade.taker_account, trade.maker_account ),
+      Side::Sell => ( trade.maker_account, trade.taker_account ),
+    };
+    entries.push( Entry::new( buyer, PostingAsset::Cash, -paid.minor() ) );
+    entries.push( Entry::new( seller, PostingAsset::Cash, paid.minor() ) );
+    entries.push( Entry::new( buyer, PostingAsset::Asset, trade.quantity.minor() ) );
+    entries.push( Entry::new( seller, PostingAsset::Asset, -trade.quantity.minor() ) );
+  }
+
+  Ok( entries )
 }

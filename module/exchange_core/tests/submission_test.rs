@@ -10,7 +10,7 @@ use exchange_core::
 {
   AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, Entry, EscrowError, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
   InstrumentId, Money, Obligation, Order, OrderId, PostingAsset, Price, Producer, Quantity, Receipt, RejectReason, Resting,
-  SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
+  SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, postings, verify,
 };
 
 /// The one instrument every test in this suite submits against —
@@ -405,6 +405,31 @@ fn a_trade_posts_cash_to_the_seller_and_quantity_to_the_buyer()
     Entry::new( AccountId( 2 ), PostingAsset::Asset, four ),
     Entry::new( AccountId( 1 ), PostingAsset::Asset, -four ),
   ] );
+}
+
+/// Draining the stream takes its trades out of [`Exchange::postings`], and
+/// the drained batch still audits on its own.
+///
+/// Every trade's postings net to zero by themselves, so a log missing trades
+/// balances just as well as a whole one. The audit can only cover what it is
+/// given; draining hands the trades, and their audit, to the caller.
+#[ test ]
+fn a_drained_batch_audits_on_its_own()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
+  let before = exchange.postings().unwrap();
+
+  let drained = exchange.event_drain();
+
+  assert!( exchange.postings().unwrap().is_empty(), "the stream no longer holds the trade" );
+  assert_eq!( postings( &drained ).unwrap(), before );
+  assert!( verify( &before ).unwrap().is_balanced() );
 }
 
 /// A sweep across two price levels pays each its own price.
