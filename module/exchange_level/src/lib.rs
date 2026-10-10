@@ -6,9 +6,11 @@
 //! # Not the proposal's intrusive list
 //!
 //! The source design names `Level { price, head, len }` /
-//! `LevelNode { order, next }`. Safe Rust has no self-referential node chain
-//! without `Box` or `Rc`, so [`Level`] keeps its nodes in a [`VecDeque`]:
-//! taking the front is O(1), so sweeping a level is linear in its length.
+//! `LevelNode { order, next }`. In safe Rust that chain is a `Box` per node
+//! or an arena linked by index; for push-back and pop-front neither beats a
+//! [`VecDeque`], which takes the front in O(1), so sweeping a level is linear
+//! in its length. What a list would add — O(1) removal mid-queue — also needs
+//! an id-to-node index, so [`level_remove`] stays a linear scan.
 //! `LevelError` is not built — see `docs/decisions/001_no_level_error.md`.
 //!
 //! # `nodes` is public
