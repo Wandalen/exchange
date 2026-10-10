@@ -1,18 +1,7 @@
-//! Test Matrix T01 — the vocabulary, and the two rules that live in it.
+//! Test Matrix T01 — `obligation`, and `notional`'s exact-or-refused rule.
 //!
-//! Beyond T01's own row this file pins the notional's exactness and the
-//! executed-price rule, because both are decisions this crate makes on behalf
-//! of the whole family and neither is observable from the matching tests:
-//! a rounded notional and an exact one produce identical trades and differ
-//! only in a total nobody sums until an audit.
-//!
-//! `Order`'s own field-exactness test moved to `exchange_order/tests/`
-//! alongside the type itself; what stays here exercises `obligation`/
-//! `notional`, which stayed in this crate (see `src/lib.rs`'s "Extraction"
-//! section). `every_side_has_exactly_one_opposite` moved to
-//! `exchange_side/tests/` in Stage 1 and is not duplicated here, and
-//! `a_trade_executes_at_the_makers_price` moved to `exchange_fill/tests/`
-//! alongside `Trade` itself in Stage 5.
+//! A rounded notional and an exact one produce identical trades and differ
+//! only in a total nobody sums until an audit, so the rule is pinned here.
 
 use exact_arith::{ Money, Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
