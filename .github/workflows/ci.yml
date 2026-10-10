@@ -21,8 +21,8 @@ env:
   RUSTFLAGS: "-D warnings"
   # Manifests path-depend on `../exact` and `../ring`; pinned so a change there
   # breaks CI only when the pin moves.
-  EXACT_REV: fd1b3d1e9e3a5b6f0967e6cba38127b6c638abf8
-  RING_REV: 8ce53986356d291161aa7fdecdafc686b79a4a7e
+  EXACT_REV: ca9682a481a2d6ee434963c0a0dde0130f3bc7d5
+  RING_REV: 95988754d34458f0c6c3a5b3ae893b72aeac1505
 
 jobs:
   test:
