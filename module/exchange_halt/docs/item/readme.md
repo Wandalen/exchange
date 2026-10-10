@@ -11,7 +11,7 @@
 
 | Item | Kind | Signature |
 |------|------|-----------|
-| `HaltError` | enum | `{ Already }` |
+| `HaltError` | enum | `{ Already }`, with `Display` and `Error` |
 | `halt_set` | fn | `(&mut InstrumentSpec) -> Result<(), HaltError>` |
 | `halt_clear` | fn | `(&mut InstrumentSpec) -> Result<(), HaltError>` |
 | `halt_is` | fn | `(&InstrumentSpec) -> bool` |

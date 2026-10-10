@@ -20,6 +20,19 @@ pub enum HaltError
   Already,
 }
 
+impl core::fmt::Display for HaltError
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::Already => write!( f, "the instrument is already in the requested state" ),
+    }
+  }
+}
+
+impl core::error::Error for HaltError {}
+
 /// Halt `spec`'s instrument, refusing a no-op halt.
 ///
 /// # Errors
