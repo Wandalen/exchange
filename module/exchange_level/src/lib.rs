@@ -16,7 +16,7 @@
 //! alternative — pop, then push back to the front — needs an operation that
 //! would let any caller break arrival order.
 
-use exact_arith::{ Price, Quantity };
+use exact_arith::{ KindError, Price, Quantity };
 use exchange_id::OrderId;
 use exchange_order::Order;
 use exchange_seq::Sequence;
@@ -100,18 +100,13 @@ pub fn level_len( level : &Level ) -> usize
 
 /// The sum of every node's `remaining` in this level.
 ///
-/// # Panics
+/// # Errors
 ///
-/// If the sum overflows `Quantity`'s representable range. No real caller
-/// approaches this: it would require more total quantity resting at a
-/// single price than the backing currency can express across every order
-/// ever placed. Left as an honest `expect` rather than threading a `Result`
-/// through a function no test or caller has ever needed to fail.
-#[ must_use ]
-pub fn level_qty_sum( level : &Level ) -> Quantity
+/// [`KindError`] if the sum passes `Quantity`'s ceiling — two accounts each
+/// resting close to it at one price are enough.
+pub fn level_qty_sum( level : &Level ) -> Result< Quantity, KindError >
 {
   level.nodes.iter().try_fold( Quantity::ZERO, | sum, node | sum.checked_add( node.remaining ) )
-    .expect( "no level in this family ever rests enough total quantity to overflow Quantity" )
 }
 
 /// Whether this level has no nodes left — the signal a book uses to drop the

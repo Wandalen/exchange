@@ -18,7 +18,7 @@
 | `level_pop_front` | `pub fn level_pop_front(level: &mut Level) -> Option<LevelNode>` | Remove and return the oldest arrival |
 | `level_remove` | `pub fn level_remove(level: &mut Level, id: OrderId) -> Option<LevelNode>` | Remove the node with this id, wherever it sits |
 | `level_len` | `pub fn level_len(level: &Level) -> usize` | How many nodes rest in this level |
-| `level_qty_sum` | `pub fn level_qty_sum(level: &Level) -> Quantity` | The sum of every node's `remaining` |
+| `level_qty_sum` | `pub fn level_qty_sum(level: &Level) -> Result<Quantity, KindError>` | The sum of every node's `remaining`, or why it does not fit |
 | `level_empty_is` | `pub fn level_empty_is(level: &Level) -> bool` | Whether this level has no nodes left |
 
 ### Differs from the proposal
