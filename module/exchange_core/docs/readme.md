@@ -23,8 +23,8 @@ without a spike — no `spike/exchange_core` was ever created, and the family wa
 built directly against these instances. Two of the three questions they named
 open were closed by that work and are recorded with their reasoning in
 [`algorithm/001`](algorithm/001_price_time_priority_matching.md): the
-executed-price rule is the maker's price, and the book is a sorted `Vec` per
-side. Stop-trigger mechanics remain open and untouched. No `format/` directory
+executed-price rule is the maker's price, and the book is a sorted
+`VecDeque` of price levels per side. Stop-trigger mechanics remain open and untouched. No `format/` directory
 exists — a chosen structure is not a frozen layout, and nothing outside
 `exchange_book` may depend on its shape. The event stream's *shape* is
 therefore routed through

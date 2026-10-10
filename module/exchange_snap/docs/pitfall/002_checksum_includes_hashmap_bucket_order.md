@@ -18,7 +18,7 @@ the one input such a checksum would be built over.
 
 ### How this crate avoids contributing to it
 
-`exchange_book::Book`'s own representation is a sorted `Vec`, never a
+`exchange_book::Book`'s own representation is sorted levels per side, never a
 `HashMap`; `snap_take` reads it via `Book::iter()`, so `BookSnap::rows`
 inherits the same hash-free, deterministic order — bids best-first, then
 asks best-first, each side still ranked by the book's own price-time
