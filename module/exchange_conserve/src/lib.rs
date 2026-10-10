@@ -159,3 +159,9 @@ pub fn conserve_assert( fills : &[ Trade ] ) -> Result< (), ConserveError >
     ConservationError::Overflow => ConserveError::Overflow,
   } )
 }
+
+// The readme's example repeats `conserve_assert`'s doctest; compiling it here
+// keeps that copy from drifting.
+#[ cfg( doctest ) ]
+#[ doc = include_str!( "../readme.md" ) ]
+struct ReadmeDoctest;
