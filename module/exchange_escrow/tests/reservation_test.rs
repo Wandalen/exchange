@@ -902,21 +902,10 @@ fn a_negative_first_deposit_is_refused()
   assert!( escrow.account( AccountId( 7 ) ).is_none(), "no account was created" );
 }
 
-/// A buy at price zero holds `Cash( 0 )` from the start, so its reservation
-/// must outlive a partial fill on its quantity, not its amount: the
-/// remainder still rests, and has to stay cancellable and settleable.
-#[ test ]
-fn a_zero_price_buy_keeps_its_reservation_until_its_quantity_is_filled()
+/// One unit at price zero, `taker` against `maker`.
+fn zero_price_fill( taker : &Order, maker : &Order ) -> Trade
 {
-  let mut escrow = two_sided();
-  let buyer = order( 1, 2, Side::Buy, "0", 2 );
-  let first = order( 2, 1, Side::Sell, "0", 1 );
-  let second = order( 3, 1, Side::Sell, "0", 1 );
-  escrow.reserve( &buyer ).unwrap();
-  escrow.reserve( &first ).unwrap();
-  escrow.reserve( &second ).unwrap();
-
-  let fill = | taker : &Order, maker : &Order | Trade
+  Trade
   {
     taker : taker.id,
     taker_account : taker.account,
@@ -925,15 +914,54 @@ fn a_zero_price_buy_keeps_its_reservation_until_its_quantity_is_filled()
     maker_account : maker.account,
     price : price( "0" ),
     quantity : qty( 1 ),
-  };
+  }
+}
 
-  escrow.settle( &fill( &buyer, &first ), Side::Buy, buyer.price ).unwrap();
+/// A zero-price buy for 2 from account 2, half filled by the first of two
+/// zero-price sells for 1. Returns the escrow, the buy, and the unfilled sell.
+///
+/// A buy at price zero holds `Cash( 0 )` from the start, so its reservation
+/// must outlive a partial fill on its quantity, not its amount.
+fn zero_price_buy_half_filled() -> ( Escrow, Order, Order )
+{
+  let mut escrow = two_sided();
+  let buyer = order( 1, 2, Side::Buy, "0", 2 );
+  let first = order( 2, 1, Side::Sell, "0", 1 );
+  let second = order( 3, 1, Side::Sell, "0", 1 );
+  escrow.reserve( &buyer ).unwrap();
+  escrow.reserve( &first ).unwrap();
+  escrow.reserve( &second ).unwrap();
+  escrow.settle( &zero_price_fill( &buyer, &first ), Side::Buy, buyer.price ).unwrap();
+  ( escrow, buyer, second )
+}
+
+/// The unfilled remainder of a zero-price buy still rests, so it keeps its
+/// reservation.
+#[ test ]
+fn a_half_filled_zero_price_buy_keeps_its_reservation()
+{
+  let ( escrow, buyer, _ ) = zero_price_buy_half_filled();
+
   assert_eq!( escrow.reserved_for( buyer.id ), Some( Obligation::Cash( Money::ZERO ) ), "one unit is still unfilled" );
+}
 
-  let mut cancelled = escrow.clone();
-  assert_eq!( cancelled.release( AccountId( 2 ), buyer.id ), Ok( Obligation::Cash( Money::ZERO ) ), "the remainder can be cancelled" );
+/// The unfilled remainder of a zero-price buy can be cancelled.
+#[ test ]
+fn a_half_filled_zero_price_buy_can_be_cancelled()
+{
+  let ( mut escrow, buyer, _ ) = zero_price_buy_half_filled();
 
-  escrow.settle( &fill( &second, &buyer ), Side::Sell, second.price ).unwrap();
+  assert_eq!( escrow.release( AccountId( 2 ), buyer.id ), Ok( Obligation::Cash( Money::ZERO ) ), "the remainder can be cancelled" );
+}
+
+/// Filling the rest of a zero-price buy discharges its reservation and
+/// delivers every unit.
+#[ test ]
+fn a_zero_price_buy_is_discharged_once_fully_filled()
+{
+  let ( mut escrow, buyer, second ) = zero_price_buy_half_filled();
+
+  escrow.settle( &zero_price_fill( &second, &buyer ), Side::Sell, second.price ).unwrap();
   assert_eq!( escrow.reserved_for( buyer.id ), None, "fully filled, fully discharged" );
   assert_eq!( escrow.reservation_count(), 0 );
   assert_eq!( escrow.account( AccountId( 2 ) ).unwrap().asset.available(), qty( 102 ) );
