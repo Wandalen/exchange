@@ -2,8 +2,7 @@
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_cap`'s
 own `cap_check_rest`/`cap_check_level`) and now lives at
-[`../../module/exchange_cap/readme.md`](../../module/exchange_cap/readme.md)'s
-"## Genuinely new" section.
+[`../../module/exchange_cap/readme.md`](../../module/exchange_cap/readme.md).
 
 ### Sources
 

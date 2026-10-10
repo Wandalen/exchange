@@ -2,8 +2,8 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_tif`'s own
 `Tif`) and now lives at
-[`../../module/exchange_tif/readme.md`](../../module/exchange_tif/readme.md)'s
-"## Genuinely new" section. (The central Design status this entry used to
+[`../../module/exchange_tif/readme.md`](../../module/exchange_tif/readme.md).
+(The central Design status this entry used to
 carry — "Not implemented", cross-referencing hard problem 20's own stale
 status — is likewise stale: see that redistributed entry at
 [`../hard_problem/020_time_in_force.md`](../hard_problem/020_time_in_force.md).)

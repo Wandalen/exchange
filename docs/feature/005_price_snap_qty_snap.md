@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_spec`'s own
 `price_snap`/`qty_snap`) and now lives at
-[`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md)'s
-"## Also closes features 4 and 5" section.
+[`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md).
 
 ### Sources
 

@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_cap`'s own
 `BookCaps`) and now lives at
-[`../../module/exchange_cap/readme.md`](../../module/exchange_cap/readme.md)'s
-"## Genuinely new" section.
+[`../../module/exchange_cap/readme.md`](../../module/exchange_cap/readme.md).
 
 ### Sources
 
