@@ -34,10 +34,16 @@ on actual pop *order* across more than one node does.
 Confirms the suite fails loudly, and only on the tests whose job is exactly
 this, when FIFO silently inverts to LIFO.
 
+### Re-run on `VecDeque` — 2026-10-10
+
+The nodes moved to a `VecDeque`, so the same mutation is now `level_push`'s
+`level.nodes.push_back( node )` → `level.nodes.push_front( node )`. Result: 2
+of 10 failed — the same two tests. Reverted; 10/10 passed again.
+
 ### Why no other mutation test
 
 `LevelNode`'s three fields (`order: Order`, `remaining: Quantity`,
-`arrival: Sequence`) and `Level`'s two (`price: Price`, `nodes: Vec<LevelNode>`)
+`arrival: Sequence`) and `Level`'s two (`price: Price`, `nodes: VecDeque<LevelNode>`)
 are all distinctly typed — no same-typed-field-pair swap compiles, so there
 is no second silent-transposition class to probe (matching `exchange_order`'s
 own documented reasoning, [`../../../exchange_order/tests/manual/readme.md`](../../../exchange_order/tests/manual/readme.md)).

@@ -140,7 +140,7 @@ fn the_front_nodes_remaining_can_be_reduced_in_place()
   let mut level = level_new( Price::parse( "2.50" ).unwrap() );
   level_push( &mut level, node( 1, 4, 1 ) );
 
-  let front = level.nodes.first_mut().unwrap();
+  let front = level.nodes.front_mut().unwrap();
   front.remaining = front.remaining.checked_sub( Quantity::from_int( 1 ).unwrap() ).unwrap();
 
   assert_eq!( level.nodes[ 0 ].remaining, Quantity::from_int( 3 ).unwrap() );

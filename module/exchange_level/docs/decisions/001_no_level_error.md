@@ -24,7 +24,7 @@ own account, and "not found by id" is `None`, not an `Err`.
 Rejected: a ceiling on how many orders may rest is `exchange_cap`'s concern
 (`CapError::RestsFull`), enforced by the caller before a node ever reaches
 `level_push`. `Level` itself has no notion of "too many" — it stores
-whatever `Vec<LevelNode>` is given. Adding a capacity check here would
+whatever nodes it is given. Adding a capacity check here would
 duplicate `exchange_cap`'s own check under a second name, or require this
 crate to depend on `exchange_cap` for a limit that is the caller's
 responsibility to enforce before calling, not this crate's to re-derive.
