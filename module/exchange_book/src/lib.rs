@@ -223,10 +223,49 @@ impl Book
   /// or been cancelled already, or `instrument` itself has never had an
   /// order rest on it. Drops the level too, if removing its last node
   /// empties it — a level never persists empty.
+  ///
+  /// Each side's best order is checked first and removed in O(1). Any other
+  /// order costs a walk of the instrument's book, bids before asks.
   pub fn cancel( &mut self, instrument : InstrumentId, id : OrderId ) -> Option< Resting >
   {
     let book = Self::find_mut( &mut self.per_instrument, instrument )?;
+    Self::try_cancel_best( book, id ).or_else( || Self::try_cancel_walk( book, id ) )
+  }
 
+  /// [`Self::cancel`] when `id` is either side's best order: removed in O(1).
+  /// [`None`] if it is not, though it may still rest further back.
+  ///
+  /// `insert` refuses a duplicate id, so a front match is the order
+  /// [`Self::try_cancel_walk`] would find.
+  fn try_cancel_best( book : &mut InstrumentBook, id : OrderId ) -> Option< Resting >
+  {
+    for levels in [ &mut book.bids, &mut book.asks ]
+    {
+      let Some( level ) = levels.front_mut()
+      else
+      {
+        continue;
+      };
+      if level.nodes.front().is_some_and( | best | best.order.id == id )
+      {
+        let removed = level_pop_front( level );
+        if level_empty_is( level )
+        {
+          levels.pop_front();
+        }
+        return removed;
+      }
+    }
+    None
+  }
+
+  /// [`Self::cancel`] for any order: a walk of `book`, bids before asks.
+  ///
+  /// Keeps its own copy of remove-and-drop-level rather than sharing one with
+  /// [`Self::try_cancel_best`]: a shared helper made cancels that miss the front
+  /// slower (see the commit that added the best-order check).
+  fn try_cancel_walk( book : &mut InstrumentBook, id : OrderId ) -> Option< Resting >
+  {
     for levels in [ &mut book.bids, &mut book.asks ]
     {
       for at in 0..levels.len()
