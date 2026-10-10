@@ -369,9 +369,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       {
         SelfMatchPolicy::CancelResting =>
         {
-          // `best` is the front, so taking all it has left removes it
-          // without the id search `Book::cancel` makes.
-          let _ = book.consume_best( instrument, opposite, best.remaining );
+          let _ = book.cancel( instrument, best.order.id );
           cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
           // The passed-over order was cancelled, not skipped, so nothing
           // ranks ahead of it that did not before — resume at whatever is
@@ -385,7 +383,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
         },
         SelfMatchPolicy::CancelBoth =>
         {
-          let _ = book.consume_best( instrument, opposite, best.remaining );
+          let _ = book.cancel( instrument, best.order.id );
           cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
           cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining } );
           break;
