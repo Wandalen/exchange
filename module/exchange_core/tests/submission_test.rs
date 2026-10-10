@@ -1320,7 +1320,7 @@ fn a_refused_halt_chains_its_halt_error()
 
   let refused = exchange.halt_set( INSTRUMENT ).unwrap_err();
   let source = core::error::Error::source( &refused ).expect( "a refused halt names its cause" );
-  assert_eq!( source.to_string(), HaltError::Already.to_string() );
+  assert_eq!( source.downcast_ref::< HaltError >(), Some( &HaltError::Already ) );
   assert_eq!( refused.to_string(), format!( "halt refused: {}", HaltError::Already ) );
 }
 
