@@ -50,8 +50,10 @@ production edge, which still matches the pasted claim that neither imports
 006 directly in the build that ships.
 
 006 crates 002 uses nowhere, under either the facade or the granular route:
-`exact_parse`, `exact_fmt`, `exact_bytes`, `exact_ratio`, `exact_dust`,
-`exact_add`, `exact_sign`, `exact_round`, `exact_minor`, `exact_scale`. `i128`
+`exact_parse`, `exact_fmt`, `exact_bytes`, `exact_dust`, `exact_add`,
+`exact_sign`, `exact_minor`, `exact_scale`. `exchange_types` reaches
+`exact_ratio`'s `price_mul_qty` and `exact_round`'s `Rounding::Exact` through
+the facade for `notional`. `i128`
 is a Cargo feature on `exact_minor`, not a dependency — 002 does not enable it.
 
 ### Sources

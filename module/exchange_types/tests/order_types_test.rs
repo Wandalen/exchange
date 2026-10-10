@@ -100,13 +100,12 @@ fn a_notional_over_the_ceiling_is_refused_by_name()
 /// way, but not on the same line.
 ///
 /// The test above picks a quotient so large it does not even fit `Backing`'s
-/// own width, so `Backing::try_from` is what refuses it. `notional` has a
-/// second refusal a few lines later: a quotient that fits `Backing`
+/// own width. `exact_arith::price_mul_qty`, which `notional` delegates to, has
+/// a second refusal after that one: a quotient that fits `Backing`
 /// comfortably but still exceeds the currency's own declared
 /// `CEILING_MINOR_UNITS`, which `Money::from_minor` refuses on its own
-/// account, on its own `map_err`. Both happen to read `NotionalOutOfRange`
-/// today, but only the first line had a test — a copy-paste that left the
-/// second reading `NotionalInexact` instead would have shipped silently.
+/// account. Both must read `NotionalOutOfRange`; a mapping that sent the
+/// second anywhere else would ship silently without this test.
 #[ test ]
 fn a_notional_over_the_currencys_ceiling_but_within_backing_width_is_refused()
 {
@@ -117,6 +116,23 @@ fn a_notional_over_the_currencys_ceiling_but_within_backing_width_is_refused()
   let quantity = Quantity::from_int( 10 ).unwrap();
 
   assert_eq!( notional( price, quantity ), Err( TypeError::NotionalOutOfRange ) );
+}
+
+/// A notional both inexact and out of range reads `NotionalInexact`.
+///
+/// The remainder is checked before the range, so the refusal names the
+/// rounding the caller would otherwise get, not the size. Pinned because the
+/// order lives inside `exact_arith::price_mul_qty` now, where an upstream
+/// change could flip it without touching this crate.
+#[ test ]
+fn a_notional_both_inexact_and_out_of_range_reads_inexact()
+{
+  // ( 10^15 + 1 ) x ( 10^12 + 1 ) minor units leaves a remainder of one at the
+  // currency's scale, and its quotient (about 10^21) is past `Backing`'s width.
+  let price = Price::parse( "1000000000.000001" ).unwrap();
+  let quantity = Quantity::parse( "1000000.000001" ).unwrap();
+
+  assert_eq!( notional( price, quantity ), Err( TypeError::NotionalInexact ) );
 }
 
 /// Exact notionals come back exact, at every scale the currency has.
