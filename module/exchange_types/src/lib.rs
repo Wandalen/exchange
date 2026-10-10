@@ -1,58 +1,12 @@
-//! The vocabulary every other `exchange_*` crate
-//! speaks. Orders, trades, settlement obligations, and the event stream the
-//! Contract names as half the family's output.
+//! What an order commits, priced exactly: [`notional`], [`obligation`] and
+//! [`TypeError`].
 //!
-//! Two properties of this crate are the family's, not this crate's, and
-//! both are enforced here because this is where the types are declared:
+//! A notional is exact or an error, never rounded: a rounded settlement
+//! amount is value created or destroyed one minor unit at a time, and every
+//! per-account sum still balances.
 //!
-//! **No ECS type, anywhere.** The Contract's prohibition is absolute — no
-//! `Entity`, no `World`, no `Component`, no `Query`, no system registration.
-//! A trader is identified by `AccountId`, a number `exchange_id` owns. The
-//! failure this prevents is not a compile error anyone would notice: an
-//! exchange holding an `Entity` handle in a private field matches perfectly,
-//! passes every behavioural test, and couples the market to the simulation's
-//! storage layer. Keeping identity a plain integer is what makes the exchange
-//! a library that a simulation may call rather than a part of one.
-//!
-//! **No floating point, anywhere.** Every price, quantity and amount is an
-//! [`exact_arith`] value. The dependency is on the facade rather than on
-//! `exact_kind` directly, so the family below it can be re-split without
-//! this crate noticing.
-//!
-//! # Naming — `Trade`, not `Fill`
-//!
-//! The family's Contract says *trades out*; the matching algorithm talks
-//! about *fills*. They are one thing, so there is one type: `Trade` (now
-//! declared in `exchange_fill`), the record of one match. "Fill" survives as
-//! a verb — an order is *fully filled*
-//! or *partially filled* — describing what a Trade did to an order, never a
-//! second record of it. Two types here would be two sources of truth for one
-//! event, and they would disagree exactly when something had already gone
-//! wrong.
-//!
-//! Design: the family's shared algorithm, protocol, and state-machine
-//! documents specify behavior at family grain rather than per crate.
-//!
-//! # Extraction — retired as a re-export aggregator
-//!
-//! `Side`, `AccountId`, `OrderId` and `Sequence` moved out to their own
-//! root crates — `exchange_side`, `exchange_id` (both ids), `exchange_seq` —
-//! as part of aligning this family's crate composition with its source
-//! design. `Order` and `Obligation` moved out next, to `exchange_order`,
-//! gaining the `instrument`/`tif` fields the real struct was missing — see
-//! that crate's own module doc for the full reasoning. `Trade`, `Event`,
-//! `EventKind`, `RejectReason` and `CancelCause` moved out next again, to
-//! `exchange_fill`, gaining a `taker_side` field on `Trade` — see that
-//! crate's own module doc for why. All eleven were re-exported here
-//! unchanged for a time, so every `use exchange_types::{ ... }` kept
-//! resolving through the move; every call site has since been cut over to
-//! the leaf crate directly, and the re-export block is gone — this crate no
-//! longer carries any type it does not itself declare.
-//!
-//! `notional`/`TypeError`/`obligation` stay here: they are the one piece of
-//! real logic this crate still owns. `Order`/`Obligation`/`Side` are named in
-//! `obligation`'s own signature and body, so `exchange_order`/`exchange_side`
-//! remain real dependencies — just no longer re-exported from here.
+//! The family's two prohibitions — no ECS type, no floating point — are
+//! checked across every crate by `exchange_core/tests/contract_test.rs`.
 
 use exact_arith::{ Backing, MONEY_SCALE, Money, Price, Quantity, pow10 };
 use exchange_order::{ Obligation, Order };
