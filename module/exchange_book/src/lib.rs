@@ -99,11 +99,26 @@ struct InstrumentBook
 
 /// Every instrument's resting orders, kept apart — see the module doc's
 /// "One book per instrument" section.
-#[ derive( Debug, Clone, Default, PartialEq, Eq ) ]
+#[ derive( Debug, Clone, Default ) ]
 pub struct Book
 {
   per_instrument : Vec< ( InstrumentId, InstrumentBook ) >,
+  /// The highest id ever seated. No resting id exceeds it, so an id above it
+  /// is no duplicate — the check every caller minting ids in order hits.
+  id_high : Option< OrderId >,
 }
+
+/// Equal when the same orders rest the same way; `id_high` is a cache of
+/// past inserts, not part of what rests.
+impl PartialEq for Book
+{
+  fn eq( &self, other : &Self ) -> bool
+  {
+    self.per_instrument == other.per_instrument
+  }
+}
+
+impl Eq for Book {}
 
 impl Book
 {
@@ -157,10 +172,13 @@ impl Book
   #[ must_use ]
   pub fn insert( &mut self, resting : Resting ) -> bool
   {
-    if resting.remaining == Quantity::ZERO || self.contains_id( resting.order.id )
+    let id = resting.order.id;
+    let maybe_seated = self.id_high.is_some_and( | high | id <= high );
+    if resting.remaining == Quantity::ZERO || ( maybe_seated && self.contains_id( id ) )
     {
       return false;
     }
+    self.id_high = self.id_high.max( Some( id ) );
 
     let side = resting.order.side;
     let price = resting.order.price;
