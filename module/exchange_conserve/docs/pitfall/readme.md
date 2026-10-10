@@ -11,7 +11,7 @@
 
 | ID | Name | Purpose | Status |
 |----|------|---------|--------|
-| 001 | [Conservation That Adds Floats](001_conservation_that_adds_floats.md) | Why `fill_legs_sum`/`conserve_assert` never touch `f32`/`f64` | 🔄 |
+| 001 | [Conservation That Adds Floats](001_conservation_that_adds_floats.md) | Why `conserve_assert` never touches `f32`/`f64` | 🔄 |
 
 ### Regenerate
 

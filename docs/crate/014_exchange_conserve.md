@@ -7,8 +7,9 @@
 - **In Scope**: The assertion itself.
 - **Out of Scope**: Walking the book — this crate does not do that.
 
-**Design status**: Built, as its own crate — `conserve_assert`/`fill_legs_sum`
-match the proposal's own function names (its `ConserveError` has 3 variants
+**Design status**: Built, as its own crate — `conserve_assert` matches the
+proposal's own function name; the proposed `fill_legs_sum` was dropped for
+`exact_arith::money_sum_assert_zero`, which does the same sum (its `ConserveError` has 3 variants
 rather than the proposed 2; see the crate's own item doc). Full writeup
 moved to [`../../module/exchange_conserve/readme.md`](../../module/exchange_conserve/readme.md),
 [`../../module/exchange_conserve/docs/item/readme.md`](../../module/exchange_conserve/docs/item/readme.md).

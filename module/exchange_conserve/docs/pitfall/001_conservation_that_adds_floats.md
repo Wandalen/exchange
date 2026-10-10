@@ -4,7 +4,7 @@
 
 - **Purpose**: Name a specific mistake this crate must avoid.
 - **Responsibility**: Implementing the sum-to-zero conservation check using floating-point addition.
-- **In Scope**: `fill_legs_sum` and `conserve_assert`'s own arithmetic.
+- **In Scope**: `conserve_assert`'s own arithmetic.
 
 ### Statement
 
@@ -16,15 +16,16 @@ actually conserved value.
 
 ### How this crate avoids it
 
-Every leg `fill_legs_sum` folds is an `exact_arith::Money`, summed with
-`Money::checked_add` ([`src/lib.rs`](../../src/lib.rs)) — there is no `f32`/
-`f64` anywhere in this crate (`grep -n "f32\|f64" module/exchange_conserve/src/lib.rs`
-returns zero hits). `checked_add` is exact by construction: it either returns
-the true sum or refuses with `ConserveError::Overflow`, never a rounded
-approximation, so the result cannot depend on the order legs were pushed in.
-Verified directly: [`tests/exchange_conserve_test.rs`](../../tests/exchange_conserve_test.rs)'s
-`a_balanced_leg_set_sums_to_zero` and `a_mixed_batch_of_different_magnitudes_still_conserves`
-exercise multi-leg sums of varying magnitude and order.
+Every leg `conserve_assert` builds is an `exact_arith::Money`, summed by
+`exact_arith::money_sum_assert_zero` ([`src/lib.rs`](../../src/lib.rs)) in an
+`i128` accumulator — there is no `f32`/`f64` anywhere in this crate
+(`grep -n "f32\|f64" module/exchange_conserve/src/lib.rs` returns zero hits).
+The sum is exact by construction: it either returns the true total or refuses
+with `ConserveError::Overflow`, never a rounded approximation, so the result
+cannot depend on the order legs were pushed in. Verified directly:
+[`tests/exchange_conserve_test.rs`](../../tests/exchange_conserve_test.rs)'s
+`a_mixed_batch_of_different_magnitudes_still_conserves` exercises a multi-leg
+sum of varying magnitude and order.
 
 ### Sources
 

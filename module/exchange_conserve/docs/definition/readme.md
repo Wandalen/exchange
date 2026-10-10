@@ -12,7 +12,6 @@
 | Item | Kind | Declared | Documented in |
 |------|------|----------|----------------|
 | `ConserveError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
-| `fill_legs_sum` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `conserve_assert` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
 Why this crate exists alongside `exchange_escrow::total_cash`/`total_asset`

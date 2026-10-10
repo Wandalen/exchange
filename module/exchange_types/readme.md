@@ -18,8 +18,9 @@ assert_eq!( notional( price, quantity ).unwrap(), Money::parse( "10" ).unwrap() 
 6. The division is exact or refused: a remainder is `NotionalInexact`, never a
 rounding. A rounded settlement amount leaks one minor unit at a time, in the
 direction the rounding mode prefers, and every per-account sum still balances.
-The product is formed in `i128`; a result that does not fit `Money` is
-`NotionalOutOfRange`, not a wrap.
+The arithmetic is `exact_arith::price_mul_qty` under `Rounding::Exact`: it
+multiplies in `i128` and narrows back to `Backing`, so a result that does not
+fit `Money` is `NotionalOutOfRange`, not a wrap.
 
 ## A buy commits its limit
 

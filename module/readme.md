@@ -18,7 +18,7 @@ Every crate in the workspace.
 | [`exchange_order/`](exchange_order/readme.md) | `Order`, `Obligation` — one order record, instrument and tif included |
 | [`exchange_idem/`](exchange_idem/readme.md) | `IdSet` — refuse a key already seen: a duplicate `OrderId`, or a retried `ClientOrderId` |
 | [`exchange_fill/`](exchange_fill/readme.md) | `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause` — the event-stream vocabulary |
-| [`exchange_conserve/`](exchange_conserve/readme.md) | `conserve_assert`/`fill_legs_sum` — a fill batch nets to zero across its legs |
+| [`exchange_conserve/`](exchange_conserve/readme.md) | `conserve_assert` — a fill batch nets to zero across its legs |
 | [`exchange_level/`](exchange_level/readme.md) | `Level`/`LevelNode` — one price, FIFO rest |
 | [`exchange_book/`](exchange_book/readme.md) | The resting order book and price-time priority |
 | [`exchange_depth/`](exchange_depth/readme.md) | `depth_top` — top-N book depth without a full walk |
