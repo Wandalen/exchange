@@ -109,6 +109,7 @@ Full comparison against `matchcore`, `orderbook-rs`, and `limitbook`:
 | [`smoke_exchange_book/`](module/smoke_exchange_book/readme.md) | P30 — the wall smoke, exercising every stage in one run |
 | [`smoke_exchange_phases/`](module/smoke_exchange_phases/readme.md) | The P01–P29 phase-smoke ladder — one new contract graded per phase |
 | [`license`](license) | MIT license text |
+| [`verb/`](verb/readme.md) | do-protocol verb scripts (`test`, `lint`, `doc`, ...), mirroring `../ring/verb/`. Not a crate, no `Cargo.toml` |
 | [`.github/`](.github/workflows/ci.yml) | CI — nextest, doctests, clippy, and a clean rustdoc build on every push/PR |
 
 Each crate's own readme explains its design decisions and trade-offs in
@@ -117,13 +118,13 @@ depth — this page only orients; nothing below is duplicated here.
 ## Build & Test
 
 ```bash
-cargo check --workspace
-cargo nextest run --workspace --all-features
-cargo clippy --all-targets --all-features -- -D warnings
+verb/test                            # full suite, every crate. Final verification
+verb/test_only crate::exchange_book  # filtered to one crate. Ordinary development
 ```
 
-The same three commands CI runs on every push and pull request — see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+CI runs `verb/test` levels 1-3 and `verb/doc` on every push and pull request — see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml). [`verb/readme.md`](verb/readme.md)
+lists every verb and what each needs installed.
 
 ## Provenance
 
