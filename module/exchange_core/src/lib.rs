@@ -301,7 +301,7 @@ impl core::fmt::Display for ExchangeError
       Self::Spec( error ) => write!( f, "spec refused: {error}" ),
       Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
       Self::Depth( DepthError::BadN ) => write!( f, "depth refused: the top zero levels has no answer" ),
-      Self::Halt( HaltError::Already ) => write!( f, "halt refused: the instrument is already in that state" ),
+      Self::Halt( error ) => write!( f, "halt refused: {error}" ),
     }
   }
 }
@@ -315,8 +315,9 @@ impl core::error::Error for ExchangeError
       Self::Escrow( error ) => Some( error ),
       Self::Matching( error ) => Some( error ),
       Self::Spec( error ) => Some( error ),
+      Self::Halt( error ) => Some( error ),
       Self::Rejected( _ ) | Self::NotResting( _ ) | Self::UnknownInstrument( _ )
-      | Self::SpecAlreadyRegistered( _ ) | Self::Depth( _ ) | Self::Halt( _ ) => None,
+      | Self::SpecAlreadyRegistered( _ ) | Self::Depth( _ ) => None,
     }
   }
 }
