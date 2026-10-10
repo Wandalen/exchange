@@ -351,9 +351,7 @@ impl Escrow
   /// # Errors
   ///
   /// [`EscrowError::Arithmetic`] if adding to an existing balance overflows
-  /// either side. [`EscrowError::NegativeAmount`] if `cash` is negative —
-  /// reachable only on this merge path, since a fresh account's own first
-  /// deposit has no prior balance for a negative amount to corrupt.
+  /// either side. [`EscrowError::NegativeAmount`] if `cash` is negative.
   ///
   /// Fix(open_wiped_reserved_out_from_under_a_live_reservation): Root cause:
   /// `open` always ran `self.accounts.insert(id, Account { cash :
@@ -399,6 +397,13 @@ impl Escrow
       },
       None =>
       {
+        // Fix(open_accepted_a_negative_first_deposit): a fresh account could
+        // start below zero — a holding `checked_minus` promises never exists.
+        // Root cause: only the merge branch ran `receive`, the edge that
+        // checks the amount's sign.
+        // Pitfall: a "nothing to corrupt yet" branch still has to establish
+        // the invariant every other edge assumes.
+        Holding::movement( cash )?;
         self.accounts.insert( id, Account { cash : Holding::new( cash ), asset : Holding::new( asset ) } );
       },
     }

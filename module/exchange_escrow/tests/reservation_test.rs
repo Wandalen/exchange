@@ -811,14 +811,8 @@ fn a_second_open_tops_up_available_and_leaves_a_live_reservation_intact()
   assert_eq!( escrow.reservation_count(), 0 );
 }
 
-/// `open` on a brand-new `id` is unaffected by the merge path — it still
-/// goes through `Holding::new`, which performs no validation, so a fresh
-/// account's own first deposit has never been rejected for negativity.
-/// This is the companion `open` needs after gaining an `Err` return: the
-/// merge path can now fail (see the test above's sibling coverage of
-/// `EscrowError` via `NegativeAmount`/`Arithmetic` at the account level),
-/// so the always-succeeds fresh-account path is pinned here to keep both
-/// branches of the new `match` under test.
+/// `open` on a brand-new `id` with a non-negative deposit succeeds — the
+/// fresh-account branch, pinned beside the merge path's failures.
 #[ test ]
 fn opening_a_brand_new_account_still_always_succeeds()
 {
@@ -896,4 +890,14 @@ fn a_second_open_failing_on_the_asset_leg_leaves_the_cash_leg_uncommitted()
     "a merge failing on its second leg changes nothing at all — not even the first \
      leg, which, in isolation, would have succeeded",
   );
+}
+
+/// A fresh account cannot start below zero — the same refusal a top-up gets.
+#[ test ]
+fn a_negative_first_deposit_is_refused()
+{
+  let mut escrow = Escrow::new();
+
+  assert_eq!( escrow.open( AccountId( 7 ), money( "-1" ), qty( 0 ) ), Err( EscrowError::NegativeAmount ) );
+  assert!( escrow.account( AccountId( 7 ) ).is_none(), "no account was created" );
 }
