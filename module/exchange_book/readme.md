@@ -61,8 +61,8 @@ every trade is well-formed, every balance conserves, and the wrong account got
 paid.
 
 So every test in [`tests/priority_test.rs`](tests/priority_test.rs) reads
-`side()` rather than any internal, and the ranking rule lives in one private
-function that both `insert` and the tests' own re-derivation agree on:
+`side()` rather than any internal, and the ranking rule lives in one function,
+`exchange_side::side_ahead`, that `insert` calls and the tests re-derive:
 
 - better price first — higher for bids, lower for asks;
 - at one price, earlier arrival first.
@@ -118,7 +118,7 @@ a book of 40 000 orders took 443 ms with the walk on every insert, and takes
 | File | Responsibility |
 |------|----------------|
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_id`, `exchange_level`, `exchange_side`, `exact_arith` |
-| [`src/lib.rs`](src/lib.rs) | `Book`, `Resting`, and the one ranking function |
+| [`src/lib.rs`](src/lib.rs) | `Book` (per instrument, a sorted `VecDeque` of levels per side) and `Resting` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/pitfall/` | The 2 "Book" pitfalls that are purely this crate's own storage choice and indexing |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
