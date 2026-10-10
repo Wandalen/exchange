@@ -16,7 +16,7 @@ per-declaration split is deferred).
 
 | Item | Kind | Signature |
 |------|------|-----------|
-| `ConserveError` | enum | `{ Notional(TypeError), Overflow, Unbalanced }` |
+| `ConserveError` | enum | `{ Notional(TypeError), Overflow, Unbalanced { got: i128 } }` |
 | `conserve_assert` | fn | `(&[Trade]) -> Result<(), ConserveError>` |
 
 ### Differs from the proposal

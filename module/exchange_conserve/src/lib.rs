@@ -71,7 +71,12 @@ pub enum ConserveError
   Overflow,
   /// Every leg was expressible and summed without overflow, but the total
   /// was not zero.
-  Unbalanced,
+  Unbalanced
+  {
+    /// The batch's net, in minor currency units: positive means value
+    /// appeared, negative that it vanished.
+    got : i128,
+  },
 }
 
 impl core::fmt::Display for ConserveError
@@ -82,7 +87,7 @@ impl core::fmt::Display for ConserveError
     {
       Self::Notional( error ) => write!( f, "a trade's notional is not expressible: {error}" ),
       Self::Overflow => write!( f, "a debit or the batch's total left the representable range" ),
-      Self::Unbalanced => write!( f, "the batch's signed legs did not sum to zero" ),
+      Self::Unbalanced { got } => write!( f, "the batch's signed legs summed to {got} minor units, not zero" ),
     }
   }
 }
@@ -94,7 +99,7 @@ impl core::error::Error for ConserveError
     match self
     {
       Self::Notional( error ) => Some( error ),
-      Self::Overflow | Self::Unbalanced => None,
+      Self::Overflow | Self::Unbalanced { .. } => None,
     }
   }
 }
@@ -150,7 +155,7 @@ pub fn conserve_assert( fills : &[ Trade ] ) -> Result< (), ConserveError >
 
   money_sum_assert_zero( &legs ).map_err( | error | match error
   {
-    ConservationError::NotZero { .. } => ConserveError::Unbalanced,
+    ConservationError::NotZero { got } => ConserveError::Unbalanced { got },
     ConservationError::Overflow => ConserveError::Overflow,
   } )
 }

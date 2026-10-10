@@ -95,3 +95,13 @@ fn p17_conserve_assert_distinguishes_ok_from_inexact()
   assert_eq!( conserve_assert( &ordinary ), Ok( () ) );
   assert_eq!( conserve_assert( &inexact ), Err( ConserveError::Notional( TypeError::NotionalInexact ) ) );
 }
+
+/// An unbalanced batch's message names the amount it was off by. No `Trade`
+/// batch reaches this today (see `src/lib.rs`'s "Revision" section), so the
+/// variant is built directly.
+#[ test ]
+fn an_unbalanced_batch_reports_its_net()
+{
+  let message = ConserveError::Unbalanced { got : -1 }.to_string();
+  assert!( message.contains( "-1 minor units" ), "{message}" );
+}
