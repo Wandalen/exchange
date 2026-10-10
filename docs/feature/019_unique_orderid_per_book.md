@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_idem`'s own
 duplicate-`OrderId` check) and now lives at
-[`../../module/exchange_idem/readme.md`](../../module/exchange_idem/readme.md)'s
-"## Net new" section.
+[`../../module/exchange_idem/readme.md`](../../module/exchange_idem/readme.md).
 
 ### Sources
 

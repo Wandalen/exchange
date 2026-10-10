@@ -71,6 +71,13 @@ guards are needed; neither implies the other.
 `reserve`, `release` and `settle` on `Escrow`, so there is no path that changes
 one side of the partition without the other.
 
+## One asset per account
+
+`Account` holds one cash and one asset `Holding`, whatever the instrument. The
+`base`/`quote` an `InstrumentSpec` names are not read here, so two instruments
+on one exchange draw on the same holdings — hard problem 19 stays open until
+holdings are keyed by `AssetId`.
+
 ## Responsibility Table
 
 | File | Responsibility |

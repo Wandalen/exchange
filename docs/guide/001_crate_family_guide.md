@@ -27,13 +27,13 @@
 | Tier | Crate | One-line purpose |
 |------|-------|-------------------|
 | 0 — Roots | [`exchange_cap`](../../module/exchange_cap/readme.md) | A limit on book growth, with a named refusal past it |
-| 0 — Roots | [`exchange_id`](../../module/exchange_id/readme.md) | Plain id newtypes — `InstrumentId`, `OrderId`, `AccountId` |
+| 0 — Roots | [`exchange_id`](../../module/exchange_id/readme.md) | Plain id newtypes — `InstrumentId`, `OrderId`, `ClientOrderId`, `AccountId` |
 | 0 — Roots | [`exchange_seq`](../../module/exchange_seq/readme.md) | A monotonic sequence for time priority, no wall clock |
 | 0 — Roots | [`exchange_side`](../../module/exchange_side/readme.md) | `Side { Buy, Sell }` and its opposite relation |
 | 0 — Roots | [`exchange_stats`](../../module/exchange_stats/readme.md) | Running rest/fill/reject/cancel counters |
 | 0 — Roots | [`exchange_stp`](../../module/exchange_stp/readme.md) | The self-trade policy, as a closed set of three |
-| 0 — Roots | [`exchange_tif`](../../module/exchange_tif/readme.md) | `Tif { Gtc, Ioc, Fok }` — time-in-force disposition |
-| 1 | [`exchange_idem`](../../module/exchange_idem/readme.md) | Refuse an `OrderId` the book has already seen |
+| 0 — Roots | [`exchange_tif`](../../module/exchange_tif/readme.md) | `Tif { Gtc, Ioc, Fok, PostOnly }` — time-in-force disposition |
+| 1 | [`exchange_idem`](../../module/exchange_idem/readme.md) | Refuse a key already seen — an `OrderId`, or `( AccountId, ClientOrderId )` |
 | 1 | [`exchange_order`](../../module/exchange_order/readme.md) | One order record — instrument, account, side, tif included |
 | 1 | [`exchange_spec`](../../module/exchange_spec/readme.md) | Tick, lot, the asset pair, and the halt flag on one instrument |
 | 2 | [`exchange_fill`](../../module/exchange_fill/readme.md) | `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause` |
@@ -63,7 +63,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   let caps = BookCaps { max_rests : 2, max_levels : 2, max_account_rests : 4 };
   assert_eq!( cap_check_rest( caps, 2 ), Err( CapError::RestsFull ) );
   ```
-- **`exchange_id`** — `InstrumentId`/`OrderId`/`AccountId`, plus `*_from_raw`/`*_raw` accessors. The id vocabulary every other crate builds on.
+- **`exchange_id`** — `InstrumentId`/`OrderId`/`ClientOrderId`/`AccountId`, plus `*_from_raw`/`*_raw` accessors. The id vocabulary every other crate builds on.
   ```rust
   use exchange_id::{ OrderId, order_from_raw, order_raw };
   let id = order_from_raw( 7 );

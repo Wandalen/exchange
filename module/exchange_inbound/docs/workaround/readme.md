@@ -13,16 +13,16 @@ External constraints `exchange_inbound` absorbs.
 
 **None.** `exchange_inbound` depends on five sibling workspace crates
 (`exchange_book`, `exchange_id`, `exchange_match`, `exchange_rest`,
-`exchange_tif`) and three `ring_*` crates from the sibling `substrate/ring`
-repository (`ring_factory`, `ring_handle`, `ring_types`) — all three on that
+`exchange_tif`) and three `ring_*` crates from the `Wandalen/ring` repository,
+pinned in the root `Cargo.toml` (`ring_factory`, `ring_handle`, `ring_types`) — all three on that
 family's own blessed external-facing five. Verify with:
 
 ```bash
 cd module/exchange_inbound && cargo tree --depth 1
 ```
 
-**Expected:** the eight crates named above, all path dependencies, no
-published (non-workspace) external crate.
+**Expected:** the eight crates named above, the `exchange_*` ones by path and
+the `ring_*` ones by pinned git revision, no published (non-workspace) external crate.
 
 ### Workarounds
 

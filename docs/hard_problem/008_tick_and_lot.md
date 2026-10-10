@@ -2,8 +2,8 @@
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_spec`'s
 own `InstrumentSpec`/`price_snap`/`qty_snap`) and now lives at
-[`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md)'s
-"## Net new" section. (The central Design status this entry used to carry —
+[`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md).
+(The central Design status this entry used to carry —
 "Not addressed... no `InstrumentSpec`... exists" — is stale: that type and
 its snap functions are built and tested.)
 

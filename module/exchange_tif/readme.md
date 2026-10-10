@@ -20,7 +20,7 @@ order's own `tif` into `exchange_core::Exchange::exchange_step`.
 
 | Function | Consulted by | Effect |
 |----------|--------------|--------|
-| `tif_requires_full` | `exchange_match::cross` | A FOK that cannot fill entirely is rejected before any trade |
+| `tif_requires_full` | `exchange_match::cross` | A FOK that cannot fill entirely is killed whole before any trade |
 | `tif_rests` | `exchange_core` (`step_place`), `exchange_inbound` (`inbound_apply`) | An IOC/FOK remainder is dropped instead of resting |
 | `tif_takes` | `exchange_match::cross`, `exchange_core` (`step_place`) | A post-only order that would take is refused whole |
 

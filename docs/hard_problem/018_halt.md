@@ -6,8 +6,8 @@ own `halt_set`/`halt_clear`/`halt_is`) and now lives at
 "## Genuinely new" section. (The central Design status this entry used to
 carry — "Not addressed... no `halt_set`/`halt_clear`/`halt_is`... exists" —
 is stale: `exchange_halt` now builds and tests exactly those three.
-`exchange_spec/readme.md`'s own "## Net new" section also lists this hard
-problem among four it claims; `exchange_halt`'s dedicated `halt_set`/
+`exchange_spec/readme.md` also lists this hard problem;
+`exchange_halt`'s dedicated `halt_set`/
 `halt_clear`/`halt_is` functions are the more precise, mechanistic owner, so
 this redistribution points here rather than to `exchange_spec`.)
 

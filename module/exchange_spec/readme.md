@@ -3,8 +3,10 @@
 Tick, lot, the asset pair, and the halt flag on one instrument. Depends on
 `exchange_id` (for `InstrumentId`) and `exact_arith` (for the decimal grid
 itself) — nothing else. Closes hard problems 1 (one book per instrument), 8
-(tick and lot), 18 (halt) and 19 (more than one asset), and features 4
-(`InstrumentSpec`) and 5 (`price_snap`/`qty_snap`).
+(tick and lot) and 18 (halt), and features 4 (`InstrumentSpec`) and 5
+(`price_snap`/`qty_snap`). Not hard problem 19 (more than one asset): `base`
+and `quote` are recorded here, but `exchange_escrow` holds one asset per
+account for every instrument.
 
 ```rust
 use exact_arith::{ Price, Quantity };

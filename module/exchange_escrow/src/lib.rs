@@ -314,6 +314,19 @@ impl From< TypeError > for EscrowError
   }
 }
 
+/// One live reservation: what it still holds, and how much of its order is
+/// still unfilled.
+///
+/// The entry lives until both reach zero. A buy at price zero holds
+/// `Cash( 0 )` from the start, so the amount alone cannot say when the order
+/// is done.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
+struct Reservation
+{
+  obligation : Obligation,
+  unfilled : Quantity,
+}
+
 /// Every account's balances, and every live reservation.
 ///
 /// Both maps are ordered, not hashed. Iteration order is part of the
@@ -325,7 +338,7 @@ impl From< TypeError > for EscrowError
 pub struct Escrow
 {
   accounts : BTreeMap< AccountId, Account >,
-  reservations : BTreeMap< OrderId, Obligation >,
+  reservations : BTreeMap< OrderId, Reservation >,
 }
 
 impl Escrow
@@ -351,9 +364,7 @@ impl Escrow
   /// # Errors
   ///
   /// [`EscrowError::Arithmetic`] if adding to an existing balance overflows
-  /// either side. [`EscrowError::NegativeAmount`] if `cash` is negative —
-  /// reachable only on this merge path, since a fresh account's own first
-  /// deposit has no prior balance for a negative amount to corrupt.
+  /// either side. [`EscrowError::NegativeAmount`] if `cash` is negative.
   ///
   /// Fix(open_wiped_reserved_out_from_under_a_live_reservation): Root cause:
   /// `open` always ran `self.accounts.insert(id, Account { cash :
@@ -399,6 +410,13 @@ impl Escrow
       },
       None =>
       {
+        // Fix(open_accepted_a_negative_first_deposit): a fresh account could
+        // start below zero — a holding `checked_minus` promises never exists.
+        // Root cause: only the merge branch ran `receive`, the edge that
+        // checks the amount's sign.
+        // Pitfall: a "nothing to corrupt yet" branch still has to establish
+        // the invariant every other edge assumes.
+        Holding::movement( cash )?;
         self.accounts.insert( id, Account { cash : Holding::new( cash ), asset : Holding::new( asset ) } );
       },
     }
@@ -420,7 +438,7 @@ impl Escrow
   #[ must_use ]
   pub fn reserved_for( &self, order : OrderId ) -> Option< Obligation >
   {
-    self.reservations.get( &order ).copied()
+    self.reservations.get( &order ).map( | reservation | reservation.obligation )
   }
 
   /// How many reservations are live.
@@ -461,7 +479,7 @@ impl Escrow
       Obligation::Asset( quantity ) => account.asset.reserve( quantity )?,
     }
 
-    self.reservations.insert( order.id, obligation );
+    self.reservations.insert( order.id, Reservation { obligation, unfilled : order.quantity } );
     Ok( obligation )
   }
 
@@ -504,7 +522,7 @@ impl Escrow
   /// exactly as it was.
   pub fn release( &mut self, owner : AccountId, order : OrderId ) -> Result< Obligation, EscrowError >
   {
-    let obligation = self.reservations.get( &order ).copied().ok_or( EscrowError::NoReservation( order ) )?;
+    let obligation = self.reservations.get( &order ).ok_or( EscrowError::NoReservation( order ) )?.obligation;
     let account = self.accounts.get_mut( &owner ).ok_or( EscrowError::UnknownAccount( owner ) )?;
 
     match obligation
@@ -577,7 +595,7 @@ impl Escrow
     seller_account.asset.deliver( trade.quantity )?;
     seller_account.cash.receive( paid )?;
 
-    let taker_obligation = Self::reduced_obligation
+    let taker_reservation = Self::reduced_obligation
     (
       self.reservations.get( &trade.taker ).copied(),
       trade.taker,
@@ -585,7 +603,7 @@ impl Escrow
       reserved_for_this_fill,
       trade.quantity,
     )?;
-    let maker_obligation = Self::reduced_obligation
+    let maker_reservation = Self::reduced_obligation
     (
       self.reservations.get( &trade.maker ).copied(),
       trade.maker,
@@ -604,8 +622,8 @@ impl Escrow
       *self.accounts.get_mut( &buyer ).expect( "looked up above" ) = buyer_account;
       *self.accounts.get_mut( &seller ).expect( "looked up above" ) = seller_account;
     }
-    Self::commit_reservation( &mut self.reservations, trade.taker, taker_obligation );
-    Self::commit_reservation( &mut self.reservations, trade.maker, maker_obligation );
+    Self::commit_reservation( &mut self.reservations, trade.taker, taker_reservation );
+    Self::commit_reservation( &mut self.reservations, trade.maker, maker_reservation );
 
     Ok( () )
   }
@@ -644,54 +662,66 @@ impl Escrow
 
   /// Compute what `order`'s reservation becomes after taking out the filled
   /// portion, without committing it — the compute half of `settle`'s
-  /// compute-then-commit split. `Ok( None )` means fully discharged.
+  /// compute-then-commit split. `Ok( None )` means fully discharged: nothing
+  /// held and nothing unfilled.
   ///
   /// Uses [`Conserved::checked_minus`] for both shapes uniformly, the same
   /// abstraction every edge in [`Holding`] already uses — not the raw
   /// per-type `checked_sub`, which for `Money` (signed, unlike `Quantity`)
   /// does not itself refuse to go below zero.
   ///
+  /// Fix(a_zero_price_buy_lost_its_reservation_on_a_partial_fill):
+  /// Root cause: the entry was dropped once the held amount reached zero, and
+  /// a buy at price zero holds `Cash( 0 )` from the start — its first partial
+  /// fill dropped the entry while the remainder still rested, so it could no
+  /// longer be cancelled or settled.
+  /// Pitfall: an amount reaching zero is not the order finishing; only the
+  /// unfilled quantity says that.
+  ///
   /// # Errors
   ///
   /// [`EscrowError::NoReservation`] if `order` holds none,
   /// [`EscrowError::ObligationMismatch`] if the stored shape does not match
-  /// `side`, [`EscrowError::NotReserved`] if the amount named exceeds what
-  /// remains.
+  /// `side`, [`EscrowError::NotReserved`] if the amount or quantity named
+  /// exceeds what remains.
   fn reduced_obligation
   (
-    current : Option< Obligation >,
+    current : Option< Reservation >,
     order : OrderId,
     side : Side,
     cash_spent : Money,
     asset_delivered : Quantity,
-  ) -> Result< Option< Obligation >, EscrowError >
+  ) -> Result< Option< Reservation >, EscrowError >
   {
-    let obligation = current.ok_or( EscrowError::NoReservation( order ) )?;
+    let reservation = current.ok_or( EscrowError::NoReservation( order ) )?;
 
-    match ( side, obligation )
+    let ( obligation, drained ) = match ( side, reservation.obligation )
     {
       ( Side::Buy, Obligation::Cash( held ) ) =>
       {
         let remaining = held.checked_minus( cash_spent ).ok_or( EscrowError::NotReserved )?;
-        Ok( if remaining == Money::ZERO { None } else { Some( Obligation::Cash( remaining ) ) } )
+        ( Obligation::Cash( remaining ), remaining == Money::ZERO )
       },
       ( Side::Sell, Obligation::Asset( held ) ) =>
       {
         let remaining = held.checked_minus( asset_delivered ).ok_or( EscrowError::NotReserved )?;
-        Ok( if remaining == Quantity::ZERO { None } else { Some( Obligation::Asset( remaining ) ) } )
+        ( Obligation::Asset( remaining ), remaining == Quantity::ZERO )
       },
-      _ => Err( EscrowError::ObligationMismatch ),
-    }
+      _ => return Err( EscrowError::ObligationMismatch ),
+    };
+    let unfilled = reservation.unfilled.checked_minus( asset_delivered ).ok_or( EscrowError::NotReserved )?;
+
+    Ok( if drained && unfilled == Quantity::ZERO { None } else { Some( Reservation { obligation, unfilled } ) } )
   }
 
   /// Write a previously-computed reservation update, dropping the record
   /// entirely once nothing is left. The commit half of `settle`'s
   /// compute-then-commit split.
-  fn commit_reservation( reservations : &mut BTreeMap< OrderId, Obligation >, order : OrderId, updated : Option< Obligation > )
+  fn commit_reservation( reservations : &mut BTreeMap< OrderId, Reservation >, order : OrderId, updated : Option< Reservation > )
   {
     match updated
     {
-      Some( obligation ) => { reservations.insert( order, obligation ); },
+      Some( reservation ) => { reservations.insert( order, reservation ); },
       None => { reservations.remove( &order ); },
     }
   }

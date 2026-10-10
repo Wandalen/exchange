@@ -15,8 +15,9 @@ External constraints `exchange_core` absorbs.
 
 `exchange_core` has 8 real dependencies — `exact_arith`, `exchange_book`,
 `exchange_escrow`, `exchange_id`, `exchange_match`, `exchange_seq`,
-`exchange_tif`, `exchange_types` — every one of them an in-workspace or
-first-party sibling path crate, and zero published (non-workspace) crates.
+`exchange_tif`, `exchange_types` — every one of them an in-workspace path
+crate or, for `exact_arith`, a first-party git dependency pinned in the root
+`Cargo.toml`, and zero published (non-workspace) crates.
 This list was previously recorded here as empty, which was stale: as the
 facade over the rest of the family, a non-trivial dependency list is this
 crate's whole point, unlike a leaf crate. None of the eight originates

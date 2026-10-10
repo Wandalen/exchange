@@ -29,6 +29,22 @@ members = [
   "module/smoke_exchange_phases",
 ]
 
+# exact and ring, pinned by revision; the three ring crates share one rev, so
+# bump them together. To build against local checkouts instead, override them in
+# .cargo/config.toml (ignored by git). Cargo ignores, with a warning, a checkout
+# whose crate versions are incompatible with the pinned ones:
+#   [patch."https://github.com/Wandalen/exact"]
+#   exact_arith = { path = "../exact/module/exact_arith" }
+#   [patch."https://github.com/Wandalen/ring"]
+#   ring_factory = { path = "../ring/ring_factory" }
+#   ring_handle = { path = "../ring/ring_handle" }
+#   ring_types = { path = "../ring/ring_types" }
+[workspace.dependencies]
+exact_arith = { git = "https://github.com/Wandalen/exact", rev = "ca9682a481a2d6ee434963c0a0dde0130f3bc7d5" }
+ring_factory = { git = "https://github.com/Wandalen/ring", rev = "95988754d34458f0c6c3a5b3ae893b72aeac1505" }
+ring_handle = { git = "https://github.com/Wandalen/ring", rev = "95988754d34458f0c6c3a5b3ae893b72aeac1505" }
+ring_types = { git = "https://github.com/Wandalen/ring", rev = "95988754d34458f0c6c3a5b3ae893b72aeac1505" }
+
 [workspace.package]
 edition = "2024"
 license = "MIT"

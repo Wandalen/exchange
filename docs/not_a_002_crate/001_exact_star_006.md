@@ -7,7 +7,7 @@
 - **In Scope**: Clarifying that `exact_*` crates are a dependency, not a crate this workstream owns or ships.
 - **Out of Scope**: Any statement about what `exact_*` itself contains — that is workstream 006's own territory.
 
-**Design status**: Held — `exchange_core`'s real `Cargo.toml` depends on `exact_arith` by path dependency; no `exact_*` crate lives inside `substrate/exchange/module/`.
+**Design status**: Held — `exchange_core`'s real `Cargo.toml` depends on `exact_arith` as a git dependency pinned in the root `Cargo.toml`; no `exact_*` crate lives inside `substrate/exchange/module/`.
 
 ### Statement
 

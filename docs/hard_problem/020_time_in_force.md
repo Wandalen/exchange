@@ -2,8 +2,8 @@
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_tif`'s
 own `Tif`/`tif_requires_full`) and now lives at
-[`../../module/exchange_tif/readme.md`](../../module/exchange_tif/readme.md)'s
-"## Genuinely new" section. (The central Design status this entry used to
+[`../../module/exchange_tif/readme.md`](../../module/exchange_tif/readme.md).
+(The central Design status this entry used to
 carry — "Not implemented" per `exchange_types`' own doc comment — is stale:
 `exchange_tif` now builds it, and `exchange_order`/`exchange_match` both
 carry and consult it.)

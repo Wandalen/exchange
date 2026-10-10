@@ -11,7 +11,7 @@ exchange_spec = { path = "../exchange_spec" }
 
 [dev-dependencies]
 exchange_id = { path = "../exchange_id" }
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 
 [lints]
 workspace = true

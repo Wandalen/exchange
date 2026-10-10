@@ -40,7 +40,7 @@ above).
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — `exchange_id`, `exchange_level`, `exchange_side`, `exact_arith` — all in-workspace path dependencies |
+| `Cargo.toml` | The dependency surface examined for this finding — `exchange_id`, `exchange_level`, `exchange_side`, `exact_arith` — `exact_arith` a git dependency pinned in the root `Cargo.toml`, the rest in-workspace path dependencies |
 
 ### Regenerate
 

@@ -3,7 +3,9 @@
 //! Snapping is not implemented here: [`price_snap`]/[`qty_snap`] wrap
 //! `exact_arith`'s `price_snap_tick`/`qty_snap_lot`, which already refuse a
 //! zero grid and pick the rounding — one source of truth for the arithmetic.
-//! Closes hard problems 1, 8, 18 and 19, and features 4 and 5.
+//! Closes hard problems 1, 8 and 18, and features 4 and 5. Not 19: `base`
+//! and `quote` are recorded, but `exchange_escrow` holds one asset per
+//! account.
 
 use exact_arith::{ Lot, Price, Quantity, SnapError, Tick, price_snap_tick, qty_snap_lot, rounding_default };
 use exchange_id::InstrumentId;
