@@ -57,9 +57,9 @@
 //! instrument; each instrument's side is a [`VecDeque`] of [`Level`]s sorted
 //! best first, so an emptied best level leaves in O(1) and a taker sweeping
 //! many prices pays linear, not quadratic, cost. Within each level,
-//! [`exchange_level`] keeps arrival order. Instruments and prices are both
-//! found by `partition_point` — a second keyed dimension does not reopen the
-//! "no hash iteration anywhere" clause above.
+//! [`exchange_level`] keeps arrival order. Every lookup finds its instrument,
+//! and `insert` its price, by `partition_point` — a second keyed dimension
+//! does not reopen the "no hash iteration anywhere" clause above.
 //!
 //! This used to be a single flat `Vec<Resting>` per side, with same-price
 //! orders simply sitting adjacent to each other — this crate's own design
