@@ -21,6 +21,5 @@
 | `level_qty_sum` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `level_empty_is` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
-Why there is no `LevelError` despite the source design naming one, and why
-the backing storage is `Vec<LevelNode>` rather than the proposal's intrusive
-linked list: [`../decisions/readme.md`](../decisions/readme.md).
+Why there is no `LevelError`: [`../decisions/001_no_level_error.md`](../decisions/001_no_level_error.md).
+Why the nodes are not an intrusive list: [`../../readme.md`](../../readme.md).

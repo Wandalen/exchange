@@ -21,8 +21,7 @@ on actual pop *order* across more than one node does.
 1. Edited `src/lib.rs`'s `level_push` from `level.nodes.push( node )` to
    `level.nodes.insert( 0, node )` — newest arrival now lands at the front,
    turning the queue into a stack.
-2. Ran `cargo test -p exchange_level` (`docs/-0022_level_mutation.log`).
-   Result: 2 of 9 failed —
+2. Ran `cargo test -p exchange_level`. Result: 2 of 9 failed —
    `pushed_nodes_pop_in_the_order_they_arrived` and
    `removing_by_id_finds_a_node_wherever_it_sits` (the latter asserts the two
    survivors keep their original relative order after a middle removal). The
@@ -30,8 +29,7 @@ on actual pop *order* across more than one node does.
    front mutation — are insensitive to push/pop end and correctly kept
    passing.
 3. Reverted to `level.nodes.push( node )`.
-4. Re-ran `cargo test -p exchange_level` (`docs/-0023_level_revert_check.log`).
-   Result: 9/9 passed again.
+4. Re-ran `cargo test -p exchange_level`. Result: 9/9 passed again.
 
 Confirms the suite fails loudly, and only on the tests whose job is exactly
 this, when FIFO silently inverts to LIFO.
