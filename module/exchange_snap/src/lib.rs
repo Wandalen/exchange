@@ -18,7 +18,7 @@
 //!    reference into `Book`'s own storage — a cancel or fill after
 //!    [`snap_take`] can never reach back into an already-taken [`BookSnap`].
 //! 2. **A checksum riding hash-bucket order.** `Book`'s own representation
-//!    is a sorted `Vec`, never a `HashMap`; [`snap_take`] reads it via
+//!    is sorted levels per side, never a `HashMap`; [`snap_take`] reads it via
 //!    `Book::side()`, so `BookSnap::rows` inherits the same hash-free,
 //!    deterministic order. A checksum built over it later is sound on this
 //!    count without that later code having to re-establish it.

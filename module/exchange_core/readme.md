@@ -138,7 +138,7 @@ open, and code cannot be written without answering them:
 | Question | Answer | Why |
 |----------|--------|-----|
 | Executed price | The maker's | It is the only price both parties saw before the trade existed. The taker's limit hands the spread to whoever arrived second — a venue fee no schedule accounts for |
-| Book representation | A sorted `Vec` per side | The observable property is the published order, and a flat vector *is* that order. A price-level map wins on insertion cost at depths nothing here has measured |
+| Book representation | A sorted `VecDeque` of price levels per side, each level a FIFO queue | The observable property is the published order, which a test reads directly. Only the front is consumed: 40 000 one-order levels sweep in 0.9 ms, where a `Vec` took 452 ms |
 
 Both are recorded in the algorithm instance with their reasoning, and both are
 reversible behind the same interfaces.
