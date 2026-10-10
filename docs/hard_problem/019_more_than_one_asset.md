@@ -1,9 +1,9 @@
 # Hard Problem: More Than One Asset
 
-**Relocated.** This hard problem is single-crate-relevant (`exchange_spec`'s
-own `InstrumentSpec` asset-pair fields) and now lives at
-[`../../module/exchange_spec/readme.md`](../../module/exchange_spec/readme.md)'s
-"## Net new" section.
+**Not closed.** `exchange_spec` names an instrument's `base`/`quote`
+assets, but `exchange_escrow` keeps one cash and one asset holding per
+account, shared by every instrument — see
+[`../../module/exchange_escrow/readme.md`](../../module/exchange_escrow/readme.md).
 
 ### Sources
 
