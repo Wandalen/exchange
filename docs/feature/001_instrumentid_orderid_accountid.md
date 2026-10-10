@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_id`'s own
 `InstrumentId`/`OrderId`/`AccountId`) and now lives at
-[`../../module/exchange_id/readme.md`](../../module/exchange_id/readme.md)'s
-"Closes feature 1" section.
+[`../../module/exchange_id/readme.md`](../../module/exchange_id/readme.md).
 
 ### Sources
 

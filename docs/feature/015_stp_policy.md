@@ -2,12 +2,11 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_stp`'s own
 `SelfMatchPolicy`) and now lives at
-[`../../module/exchange_stp/readme.md`](../../module/exchange_stp/readme.md)'s
-"Closes feature 15" section. (The central Design status this entry used to
+[`../../module/exchange_stp/readme.md`](../../module/exchange_stp/readme.md).
+(The central Design status this entry used to
 carry named `exchange_match::SelfMatchPolicy` as the owner — that type has
 since moved to `exchange_stp`, which `exchange_match` now depends on and
-re-exports; see `exchange_stp/readme.md`'s own "Extracted from
-`exchange_match`" section.)
+re-exports.)
 
 ### Sources
 

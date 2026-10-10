@@ -2,11 +2,10 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_order`'s own
 `Order`) and now lives at
-[`../../module/exchange_order/readme.md`](../../module/exchange_order/readme.md)'s
-"Closes feature 3" section. (The central Design status this entry used to
+[`../../module/exchange_order/readme.md`](../../module/exchange_order/readme.md).
+(The central Design status this entry used to
 carry — "Partially held... no `tif` field and no `instrument` field" — is
-stale: `exchange_order::Order` now carries both; see that section for the
-detail.)
+stale: `exchange_order::Order` now carries both; see the readme.)
 
 ### Sources
 

@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_seq`'s own
 `Sequence`/`seq_next`) and now lives at
-[`../../module/exchange_seq/readme.md`](../../module/exchange_seq/readme.md)'s
-"Closes feature 28" section.
+[`../../module/exchange_seq/readme.md`](../../module/exchange_seq/readme.md).
 
 ### Sources
 
