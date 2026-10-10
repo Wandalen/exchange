@@ -78,17 +78,15 @@ silently absorbed.
   `exchange_fill` as `Trade::executed_price`, taking both prices and
   returning one, so it has a single home rather than being an expression
   inlined in the match loop.
-- **Book representation** is a **sorted `Vec` per side**, best at index 0. The
-  observable property this algorithm actually promises is the published order,
-  and a flat vector *is* that order — a test reads it directly instead of
-  reconstructing it from a map of levels each carrying its own queue and its
-  own invariant. Insertion finds its position by `partition_point`, so the
-  search is logarithmic and only the shift is linear. A price-level map wins
-  on that shift at book depths this crate has not reached and does not
-  yet measure; when a benchmark measures it, the representation changes behind
-  `insert`/`best`/`consume_best` without touching this algorithm. Choosing the
-  measured-cost structure first would have been deciding a question no code
-  yet asks.
+- **Book representation** is a **sorted `VecDeque` of price levels per
+  side**, best at the front, each level a FIFO queue (`exchange_level`). The
+  observable property this algorithm actually promises is the published
+  order, and a test reads it directly. Insertion finds its position by
+  `partition_point`. Matching only ever consumes the front, so an emptied
+  level leaves in O(1): 40 000 one-order levels sweep in 0.9 ms, against
+  452 ms when each side was a `Vec` and every emptied level shifted the rest.
+  The change sat behind `insert`/`best`/`consume_best` and did not touch this
+  algorithm.
 
 Both choices are recorded rather than merely made, because both are reversible
 and neither was forced by the corpus: the design corpus ties the engine to no

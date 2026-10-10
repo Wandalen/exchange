@@ -11,7 +11,7 @@
 
 | ID | Name | Purpose | Status |
 |----|------|---------|--------|
-| 001 | [HashMap Iteration As Price Order](001_hashmap_iteration_as_price_order.md) | Why `bids`/`asks` are plain sorted `Vec<Level>`, never a hash-keyed container | 🔄 |
+| 001 | [HashMap Iteration As Price Order](001_hashmap_iteration_as_price_order.md) | Why `bids`/`asks` are a sorted `VecDeque<Level>`, never a hash-keyed container | 🔄 |
 | 002 | [Crossing Worse Level While Better Has Qty](002_crossing_worse_level_while_better_has_qty.md) | Why `best`/`consume_best` can never reach a level but the current-front one | 🔄 |
 
 ### Regenerate

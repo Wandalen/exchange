@@ -18,7 +18,7 @@ per-declaration split is deferred).
 |------|------|-----------|
 | `LevelView` | struct | `{ price: Money, qty: Quantity }` |
 | `Depth` | struct | `{ bids: Vec<LevelView>, asks: Vec<LevelView> }` |
-| `DepthError` | enum | `{ BadN }` |
+| `DepthError` | enum | `{ BadN }`, with `Display` and `Error` |
 | `depth_top` | fn | `(&Book, InstrumentId, usize) -> Result<Depth, DepthError>` |
 
 ### Matches the proposal exactly

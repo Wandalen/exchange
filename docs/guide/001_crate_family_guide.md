@@ -165,7 +165,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
 
 ## Tier 3
 
-- **`exchange_book`** (→ `exchange_id`, `exchange_level`, `exchange_side`) — the resting order book, keyed by `InstrumentId`, one sorted `Vec<Level>` per side, best at the front (better price first, earlier arrival breaks a tie — never wall-clock time, only a caller-supplied `Sequence`).
+- **`exchange_book`** (→ `exchange_id`, `exchange_level`, `exchange_side`) — the resting order book, keyed by `InstrumentId`, one sorted `VecDeque<Level>` per side, best at the front (better price first, earlier arrival breaks a tie — never wall-clock time, only a caller-supplied `Sequence`).
   ```rust
   use exchange_book::Book;
   use exchange_id::{ InstrumentId, OrderId };

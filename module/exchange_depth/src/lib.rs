@@ -55,6 +55,19 @@ pub enum DepthError
   BadN,
 }
 
+impl core::fmt::Display for DepthError
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::BadN => write!( f, "the top zero levels has no answer" ),
+    }
+  }
+}
+
+impl core::error::Error for DepthError {}
+
 /// The best `n` price levels on each side of `instrument`'s book.
 ///
 /// # Errors

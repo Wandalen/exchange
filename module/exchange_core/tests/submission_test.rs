@@ -8,7 +8,7 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
+  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, EscrowError, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
   InstrumentId, Money, Obligation, Order, OrderId, Price, Producer, Quantity, Receipt, RejectReason, Resting,
   SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
 };
@@ -1308,6 +1308,33 @@ fn a_halted_instrument_refuses_placement_and_resuming_allows_it_again()
   exchange.halt_clear( INSTRUMENT ).unwrap();
   let resumed = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), qty( 4 ) ).unwrap();
   assert_eq!( resumed.resting, qty( 4 ), "the identical order must now be accepted and rest" );
+}
+
+/// A refused halt chains its `HaltError` as the source and reads it into its
+/// own message, the way every other wrapped error in `ExchangeError` does.
+#[ test ]
+fn a_refused_halt_chains_its_halt_error()
+{
+  let mut exchange = market();
+  exchange.halt_set( INSTRUMENT ).unwrap();
+
+  let refused = exchange.halt_set( INSTRUMENT ).unwrap_err();
+  let source = core::error::Error::source( &refused ).expect( "a refused halt names its cause" );
+  assert_eq!( source.downcast_ref::< HaltError >(), Some( &HaltError::Already ) );
+  assert_eq!( refused.to_string(), format!( "halt refused: {}", HaltError::Already ) );
+}
+
+/// A refused depth query chains its `DepthError` as the source, the same as
+/// a refused halt.
+#[ test ]
+fn a_refused_depth_chains_its_depth_error()
+{
+  let exchange = market();
+
+  let refused = exchange.depth_get( INSTRUMENT, 0 ).unwrap_err();
+  let source = core::error::Error::source( &refused ).expect( "a refused depth names its cause" );
+  assert_eq!( source.downcast_ref::< DepthError >(), Some( &DepthError::BadN ) );
+  assert_eq!( refused.to_string(), format!( "depth refused: {}", DepthError::BadN ) );
 }
 
 /// An order off its instrument's tick or lot grid is rejected on record and

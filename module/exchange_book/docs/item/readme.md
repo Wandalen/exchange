@@ -17,7 +17,7 @@ per-declaration split is deferred).
 | Item | Kind | Signature |
 |------|------|-----------|
 | `Resting` | type alias | `= exchange_level::LevelNode` |
-| `Book` | struct | `{ per_instrument: Vec<(InstrumentId, InstrumentBook)> }` — field private; `InstrumentBook` is a private helper struct, not part of the public surface |
+| `Book` | struct | `{ per_instrument: Vec<(InstrumentId, InstrumentBook)>, id_high: Option<OrderId> }` — fields private, equality compares `per_instrument` only; `InstrumentBook` is a private helper struct, not part of the public surface |
 | `Book::new` | fn | `() -> Self` |
 | `Book::insert` | fn | `(&mut self, resting: Resting) -> bool` |
 | `Book::cancel` | fn | `(&mut self, instrument: InstrumentId, id: OrderId) -> Option<Resting>` |

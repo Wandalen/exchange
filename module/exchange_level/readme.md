@@ -34,9 +34,12 @@ place through the public `nodes` field.
 ## Not the proposal's intrusive list
 
 The source design specifies `Level { price, head, len }` /
-`LevelNode { order, next }`. Safe Rust has no self-referential node chain
-without `Box` or `Rc`, so the nodes live in a `VecDeque` — O(1) at the
-front, so sweeping a level is linear in its length. `LevelError { Full,
+`LevelNode { order, next }`, a singly linked list. For push-back and
+pop-front, all a sweep needs, no safe node chain — `LinkedList`, `Box` or `Rc`
+nodes, an arena linked by index — beats a `VecDeque`: O(1) at the front, so
+sweeping a level is linear in its length. O(1) removal mid-queue would take a
+doubly linked list plus an id-to-node index; without both, `level_remove`
+stays a linear scan. `LevelError { Full,
 Missing }` is not built: a resting-order ceiling is
 [`exchange_cap`](../exchange_cap/readme.md)'s, checked before a node reaches a
 level, and a missing id is `None`, as in `exchange_book::Book::cancel` — see

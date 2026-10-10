@@ -1,6 +1,6 @@
 //! `Level`'s whole contract: one price, FIFO arrival order, nothing else.
 
-use exact_arith::{ Price, Quantity };
+use exact_arith::{ KindError, Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_level::
 {
@@ -108,8 +108,8 @@ fn qty_sum_of_an_empty_level_is_zero()
   assert_eq!( level_qty_sum( &level ), Ok( Quantity::ZERO ) );
 }
 
-/// Two orders each at the quantity ceiling sum past it — reported, not a
-/// panic.
+/// Two orders each at the quantity ceiling sum past it — reported as the
+/// ceiling breach it is, not a panic.
 #[ test ]
 fn qty_sum_past_the_ceiling_is_an_error()
 {
@@ -117,7 +117,7 @@ fn qty_sum_past_the_ceiling_is_an_error()
   level_push( &mut level, LevelNode { remaining : Quantity::MAX, ..node( 1, 1, 1 ) } );
   level_push( &mut level, LevelNode { remaining : Quantity::MAX, ..node( 2, 1, 2 ) } );
 
-  assert!( level_qty_sum( &level ).is_err() );
+  assert!( matches!( level_qty_sum( &level ), Err( KindError::ExceedsCeiling { .. } ) ) );
 }
 
 #[ test ]

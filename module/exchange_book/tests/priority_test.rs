@@ -142,6 +142,49 @@ fn t04_cancelling_an_absent_order_reports_rather_than_panics()
   assert_eq!( book.len(), 1, "and nothing else moved" );
 }
 
+/// Cancelling either side's best order removes it, and the level it emptied,
+/// leaving the rest of the book as it was.
+#[ test ]
+fn cancelling_the_best_order_on_either_side()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 2, Side::Buy, "1.00", 5, 20 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 4, Side::Sell, "3.00", 5, 40 ) ), "fresh id in this test, must not already rest" );
+
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 3 ) ), Some( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "the best ask" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 1 ) ), Some( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "the best bid" );
+
+  assert_eq!( ids( &book, Side::Sell ), vec![ 4 ], "the ask level keeps its next arrival" );
+  assert_eq!( ids( &book, Side::Buy ), vec![ 2 ], "the emptied bid level is gone" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Buy ), 1 );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ), 1 );
+}
+
+/// Cancelling an order that is not its side's best removes it, and the level
+/// it emptied, on either side — the check of each side's best order must not
+/// stand in the way of anything behind it.
+#[ test ]
+fn cancelling_behind_the_best_order_on_either_side()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 2, Side::Buy, "2.00", 5, 20 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 3, Side::Buy, "1.00", 5, 30 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 4, Side::Sell, "3.00", 5, 40 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 5, Side::Sell, "3.10", 5, 50 ) ), "fresh id in this test, must not already rest" );
+
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 2 ) ), Some( rest( 2, Side::Buy, "2.00", 5, 20 ) ), "second at the best bid" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 5 ) ), Some( rest( 5, Side::Sell, "3.10", 5, 50 ) ), "alone at a worse ask" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 3 ) ), Some( rest( 3, Side::Buy, "1.00", 5, 30 ) ), "alone at a worse bid" );
+
+  assert_eq!( ids( &book, Side::Buy ), vec![ 1 ] );
+  assert_eq!( ids( &book, Side::Sell ), vec![ 4 ] );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Buy ), 1, "the emptied worse bid level is gone" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ), 1, "the emptied worse ask level is gone" );
+}
+
 /// Cancel finds an order on either side without being told which.
 #[ test ]
 fn cancel_searches_both_sides()
@@ -173,6 +216,36 @@ fn insert_refuses_a_duplicate_order_id()
   assert_eq!( book.len(), 1, "the rejected insert left no trace" );
   assert_eq!( ids( &book, Side::Buy ), vec![ 1 ], "the original resting order is untouched" );
   assert_eq!( ids( &book, Side::Sell ), Vec::< u64 >::new(), "the rejected order never landed" );
+}
+
+/// Ids need not arrive in increasing order: one below the highest seated so
+/// far is still checked against what rests, and one that left may rest again.
+#[ test ]
+fn insert_refuses_a_duplicate_id_in_any_arrival_order()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 5, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 3, Side::Buy, "2.50", 5, 20 ) ), "a lower fresh id" );
+  assert!( !book.insert( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "id 3 rests, below the highest id seen" );
+
+  assert!( book.cancel( INSTRUMENT, OrderId( 5 ) ).is_some() );
+  assert!( book.insert( rest( 5, Side::Buy, "2.50", 5, 40 ) ), "id 5 left the book" );
+}
+
+/// Two books holding the same orders are equal, whatever ids came and went
+/// before.
+#[ test ]
+fn books_with_the_same_orders_are_equal_whatever_their_history()
+{
+  let mut churned = Book::new();
+  assert!( churned.insert( rest( 9, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( churned.insert( rest( 1, Side::Sell, "3.00", 5, 20 ) ) );
+  assert!( churned.cancel( INSTRUMENT, OrderId( 9 ) ).is_some() );
+
+  let mut fresh = Book::new();
+  assert!( fresh.insert( rest( 1, Side::Sell, "3.00", 5, 20 ) ) );
+
+  assert_eq!( churned, fresh );
 }
 
 /// Root Cause: `Book::insert` placed every `Resting` handed to it with no
@@ -236,6 +309,37 @@ fn a_fully_consumed_order_leaves_the_book()
   assert!( book.consume_best( INSTRUMENT, Side::Sell, Quantity::from_int( 10 ).unwrap() ) );
 
   assert_eq!( ids( &book, Side::Sell ), vec![ 2 ], "an emptied order is removed, not kept at zero" );
+}
+
+/// Takes `side`'s best order whole until the side is empty; the ids in the
+/// order they left.
+fn drain( book : &mut Book, side : Side ) -> Vec< u64 >
+{
+  let mut left = Vec::new();
+  while let Some( &best ) = book.best( INSTRUMENT, side )
+  {
+    assert!( book.consume_best( INSTRUMENT, side, best.remaining ) );
+    left.push( best.order.id.0 );
+  }
+  left
+}
+
+/// Emptying the best level hands the front to the next-best one, level after
+/// level, on both sides — the walk a large taker makes across prices.
+#[ test ]
+fn emptied_levels_hand_the_front_to_the_next_best()
+{
+  let mut book = Book::new();
+  for ( id, price ) in [ ( 1, "2.00" ), ( 2, "1.00" ), ( 3, "3.00" ) ]
+  {
+    assert!( book.insert( rest( id, Side::Sell, price, 1, id ) ) );
+    assert!( book.insert( rest( id + 10, Side::Buy, price, 1, id + 10 ) ) );
+  }
+
+  assert_eq!( drain( &mut book, Side::Sell ), vec![ 2, 1, 3 ], "asks leave lowest price first" );
+  assert_eq!( drain( &mut book, Side::Buy ), vec![ 13, 11, 12 ], "bids leave highest price first" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ) + book.level_count( INSTRUMENT, Side::Buy ), 0, "no emptied level stays behind" );
+  assert!( book.is_empty() );
 }
 
 /// Consuming more than rests is refused rather than silently clamped.

@@ -54,6 +54,15 @@ fn zero_n_is_refused()
   assert_eq!( depth_top( &book, INSTRUMENT,0 ), Err( DepthError::BadN ) );
 }
 
+/// `DepthError` reads as a sentence and works as an error source, like every
+/// other error type in the family.
+#[ test ]
+fn depth_error_displays_and_is_an_error()
+{
+  assert_eq!( DepthError::BadN.to_string(), "the top zero levels has no answer" );
+  let _ : &dyn core::error::Error = &DepthError::BadN;
+}
+
 /// T01 — orders resting at the same price aggregate into one level.
 #[ test ]
 fn same_price_orders_aggregate_into_one_level()
