@@ -155,6 +155,87 @@ fn t12_cancel_both_withdraws_both_sides()
   assert!( book.is_empty(), "the resting side is gone too" );
 }
 
+/// Cancel-resting for a buy taker whose own side is populated: its own asks,
+/// across two price levels, are withdrawn in priority order with what was
+/// left of each, the loop resumes into another account's ask behind them, and
+/// every resting bid stays where it was.
+///
+/// T10 (`t10_cancel_resting_withdraws_the_resting_side_and_the_loop_resumes`)
+/// and T12 (`t12_cancel_both_withdraws_both_sides`) leave the bid side empty,
+/// so a withdrawal that disturbed the taker's own side would pass both.
+#[ test ]
+fn cancel_resting_for_a_buy_taker_leaves_the_bids_untouched()
+{
+  let mut book = Book::new();
+  rest( &mut book, 1, 8, Side::Buy, "2.00", 5, 10 );
+  rest( &mut book, 2, 8, Side::Buy, "1.90", 5, 20 );
+  rest( &mut book, 3, 8, Side::Buy, "2.00", 5, 30 );
+  rest( &mut book, 4, 9, Side::Sell, "2.50", 3, 40 );
+  rest( &mut book, 5, 9, Side::Sell, "2.50", 2, 50 );
+  rest( &mut book, 6, 9, Side::Sell, "2.60", 4, 60 );
+  rest( &mut book, 7, 7, Side::Sell, "2.60", 5, 70 );
+
+  // Another account takes 1 of order 4 first, so its withdrawal must report
+  // what was left of it rather than what it was submitted with.
+  let partial = cross( &mut book, &order( 8, 8, Side::Buy, "2.50", 1 ), SelfMatchPolicy::CancelResting ).unwrap();
+  assert_eq!( partial.trades.len(), 1 );
+
+  let crossing = cross( &mut book, &order( 9, 9, Side::Buy, "2.60", 5 ), SelfMatchPolicy::CancelResting ).unwrap();
+
+  assert_eq!
+  (
+    crossing.cancelled,
+    vec!
+    [
+      SelfMatchCancellation { order : OrderId( 4 ), account : AccountId( 9 ), quantity : qty( 2 ) },
+      SelfMatchCancellation { order : OrderId( 5 ), account : AccountId( 9 ), quantity : qty( 2 ) },
+      SelfMatchCancellation { order : OrderId( 6 ), account : AccountId( 9 ), quantity : qty( 4 ) },
+    ],
+  );
+  assert_eq!( crossing.trades.len(), 1, "the loop resumed and filled against the other account's ask" );
+  assert_eq!( crossing.trades[ 0 ].maker, OrderId( 7 ) );
+  assert_eq!( crossing.trades[ 0 ].quantity, qty( 5 ) );
+  assert!( crossing.is_complete() );
+
+  let bids : Vec< ( OrderId, Quantity ) > = book.side( InstrumentId( 1 ), Side::Buy ).map( | resting | ( resting.order.id, resting.remaining ) ).collect();
+  assert_eq!
+  (
+    bids,
+    vec![ ( OrderId( 1 ), qty( 5 ) ), ( OrderId( 3 ), qty( 5 ) ), ( OrderId( 2 ), qty( 5 ) ) ],
+    "every bid still rests, untouched and in the same order",
+  );
+  assert_eq!( book.side( InstrumentId( 1 ), Side::Sell ).count(), 0, "every ask is gone" );
+}
+
+/// Cancel-both for a buy taker whose own side is populated: the own ask and
+/// the incoming remainder are withdrawn, and every resting bid stays where it
+/// was.
+#[ test ]
+fn cancel_both_for_a_buy_taker_leaves_the_bids_untouched()
+{
+  let mut book = Book::new();
+  rest( &mut book, 1, 8, Side::Buy, "2.00", 5, 10 );
+  rest( &mut book, 2, 8, Side::Buy, "1.90", 5, 20 );
+  rest( &mut book, 3, 9, Side::Sell, "2.50", 4, 30 );
+  rest( &mut book, 4, 7, Side::Sell, "2.50", 5, 40 );
+
+  let crossing = cross( &mut book, &order( 5, 9, Side::Buy, "2.50", 4 ), SelfMatchPolicy::CancelBoth ).unwrap();
+
+  assert!( crossing.trades.is_empty() );
+  assert_eq!
+  (
+    crossing.cancelled,
+    vec!
+    [
+      SelfMatchCancellation { order : OrderId( 3 ), account : AccountId( 9 ), quantity : qty( 4 ) },
+      SelfMatchCancellation { order : OrderId( 5 ), account : AccountId( 9 ), quantity : qty( 4 ) },
+    ],
+  );
+  let ids = | side | book.side( InstrumentId( 1 ), side ).map( | resting | resting.order.id ).collect::< Vec< _ > >();
+  assert_eq!( ids( Side::Buy ), vec![ OrderId( 1 ), OrderId( 2 ) ], "every bid still rests, in the same order" );
+  assert_eq!( ids( Side::Sell ), vec![ OrderId( 4 ) ], "the other account's ask is untouched" );
+}
+
 /// C4 — the self-match key comparison runs before a candidate fill is
 /// committed, not after. Proven by the case where the incoming order is
 /// larger than the self-matching resting quantity: a comparison applied only
