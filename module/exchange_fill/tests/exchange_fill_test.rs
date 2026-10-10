@@ -1,8 +1,4 @@
 //! Test Matrix T01 — the executed-price rule, and `Trade`'s own shape.
-//!
-//! Migrated from `exchange_types/tests/order_types_test.rs` along with
-//! `Trade` itself — see that file's own module doc for the full migration
-//! note.
 
 use exact_arith::{ Price, Quantity };
 use exchange_fill::{ EventKind, RejectReason, Trade };

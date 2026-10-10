@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_fill`'s own
 `RejectReason`) and now lives at
-[`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md)'s
-"Closes hard problem 21, and features 12 and 13" section.
+[`../../module/exchange_fill/readme.md`](../../module/exchange_fill/readme.md).
 
 ### Sources
 
