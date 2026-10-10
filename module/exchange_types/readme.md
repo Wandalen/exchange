@@ -28,6 +28,12 @@ asset, a buy owes cash at its own limit — the most it can be asked to pay.
 `exchange_escrow` reserves exactly this and returns any price improvement on
 settlement.
 
+## Not built: a market order's obligation
+
+`obligation` reserves a buy at its limit. A market buy has none, so it would
+need a protective price cap or a quote-amount order — and there are no market
+orders (see [`exchange_order`](../exchange_order/readme.md)).
+
 ## Two prohibitions
 
 No ECS type and no floating point, anywhere in the family.

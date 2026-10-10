@@ -42,6 +42,13 @@ Missing }` is not built: a resting-order ceiling is
 level, and a missing id is `None`, as in `exchange_book::Book::cancel` — see
 [`docs/decisions/001_no_level_error.md`](docs/decisions/001_no_level_error.md).
 
+## Not built: pro-rata allocation
+
+Some venues split a fill across a level in proportion to each order's size
+rather than by arrival. Proportional shares need rounding to the lot, and the
+remainder has to go somewhere — the dust `exact_arith` refuses to create
+silently. Allocation is also `exchange_match`'s decision, not the level's.
+
 ## Responsibility Table
 
 | File | Responsibility |

@@ -28,6 +28,20 @@ and `EventKind::OrderCancelled`; the order and account travel on the
 enclosing `Event`. Every `EventKind` consumer in the family names its variant
 — none has a wildcard arm a new kind could fall into (manual plan M2).
 
+## Not built: the instrument on the event stream
+
+Neither `Trade` nor `EventKind::OrderAccepted` names an instrument, so once
+two instruments trade, a consumer of the stream cannot tell which market a
+trade settled on. The field is one line here, but `exchange_match` builds
+every `Trade` and `exchange_core` every `OrderAccepted`; both have to fill it
+in the same change.
+
+## Not built: fees
+
+A trade carries no fee. Where one is assessed is decided
+(`exchange_core/docs/algorithm/004_fee_assessment_point.md`); the schedule is
+not.
+
 ## Responsibility Table
 
 | File | Responsibility |

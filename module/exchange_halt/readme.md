@@ -28,6 +28,14 @@ check. A second halt, or a resume of a running instrument, is refused with
 The source design names one; nothing here reads a book — see
 [`docs/decisions/001_no_exchange_book_dependency.md`](docs/decisions/001_no_exchange_book_dependency.md).
 
+## Not built: auction reopen, scheduled resume
+
+Venues usually reopen a halted market with an auction — collect orders
+without matching, then cross them at one price. That needs an uncrossing step
+`exchange_match` does not have, and a halted instrument here refuses new
+orders rather than collecting them. A scheduled resume needs a clock, and the
+family reads none.
+
 ## Responsibility Table
 
 | File | Responsibility |
