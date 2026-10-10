@@ -142,6 +142,49 @@ fn t04_cancelling_an_absent_order_reports_rather_than_panics()
   assert_eq!( book.len(), 1, "and nothing else moved" );
 }
 
+/// Cancelling either side's best order removes it, and the level it emptied,
+/// leaving the rest of the book as it was.
+#[ test ]
+fn cancelling_the_best_order_on_either_side()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 2, Side::Buy, "1.00", 5, 20 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 4, Side::Sell, "3.00", 5, 40 ) ), "fresh id in this test, must not already rest" );
+
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 3 ) ), Some( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "the best ask" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 1 ) ), Some( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "the best bid" );
+
+  assert_eq!( ids( &book, Side::Sell ), vec![ 4 ], "the ask level keeps its next arrival" );
+  assert_eq!( ids( &book, Side::Buy ), vec![ 2 ], "the emptied bid level is gone" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Buy ), 1 );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ), 1 );
+}
+
+/// Cancelling an order that is not its side's best removes it, and the level
+/// it emptied, on either side — the check of each side's best order must not
+/// stand in the way of anything behind it.
+#[ test ]
+fn cancelling_behind_the_best_order_on_either_side()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 2, Side::Buy, "2.00", 5, 20 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 3, Side::Buy, "1.00", 5, 30 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 4, Side::Sell, "3.00", 5, 40 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 5, Side::Sell, "3.10", 5, 50 ) ), "fresh id in this test, must not already rest" );
+
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 2 ) ), Some( rest( 2, Side::Buy, "2.00", 5, 20 ) ), "second at the best bid" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 5 ) ), Some( rest( 5, Side::Sell, "3.10", 5, 50 ) ), "alone at a worse ask" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 3 ) ), Some( rest( 3, Side::Buy, "1.00", 5, 30 ) ), "alone at a worse bid" );
+
+  assert_eq!( ids( &book, Side::Buy ), vec![ 1 ] );
+  assert_eq!( ids( &book, Side::Sell ), vec![ 4 ] );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Buy ), 1, "the emptied worse bid level is gone" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ), 1, "the emptied worse ask level is gone" );
+}
+
 /// Cancel finds an order on either side without being told which.
 #[ test ]
 fn cancel_searches_both_sides()
