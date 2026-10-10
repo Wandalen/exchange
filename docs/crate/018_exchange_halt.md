@@ -7,7 +7,7 @@
 - **In Scope**: The halt flag itself.
 - **Out of Scope**: Removing orders — halt never does that.
 
-**Design status**: Built, in its own `exchange_halt` crate — matches the proposal's functions and error shape exactly; the one real divergence is a dropped `exchange_book` dependency. Verified built-vs-proposed comparison: [`../../module/exchange_halt/docs/item/readme.md`](../../module/exchange_halt/docs/item/readme.md).
+**Design status**: Built as proposed, without the `exchange_book` dependency; `exchange_core` refuses new orders on a halted instrument. Built-vs-proposed comparison: [`../../module/exchange_halt/docs/item/readme.md`](../../module/exchange_halt/docs/item/readme.md).
 
 ### Statement
 

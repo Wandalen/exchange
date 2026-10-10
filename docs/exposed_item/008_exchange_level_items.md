@@ -5,11 +5,11 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_level`.
 - **Responsibility**: One price, FIFO rest — the queue a book keeps at a single price point.
 
-**Design status**: Built, in its own `exchange_level` crate — this summary predates that extraction. All seven functions (`level_new`/`level_push`/`level_pop_front`/`level_remove`/`level_len`/`level_qty_sum`/`level_empty_is`) exist; only `LevelError` is declined. Verified built-vs-proposed comparison, checked directly against the primary source rather than this summary: [`../../module/exchange_level/docs/item/readme.md`](../../module/exchange_level/docs/item/readme.md).
+**Design status**: Built — all seven `level_*` functions; `LevelError` declined, nodes in a `VecDeque` rather than an intrusive list. Built-vs-proposed comparison: [`../../module/exchange_level/docs/item/readme.md`](../../module/exchange_level/docs/item/readme.md).
 
 ### Statement
 
-Prompt 3 specifies a `Level`/`LevelNode` pair implementing one price's FIFO queue, with seven functions and a `LevelError`. See the per-crate doc linked above for the current, verified comparison.
+Prompt 3 specifies a `Level`/`LevelNode` pair implementing one price's FIFO queue, with seven functions and a `LevelError`.
 
 ### Sources
 
