@@ -901,3 +901,40 @@ fn a_negative_first_deposit_is_refused()
   assert_eq!( escrow.open( AccountId( 7 ), money( "-1" ), qty( 0 ) ), Err( EscrowError::NegativeAmount ) );
   assert!( escrow.account( AccountId( 7 ) ).is_none(), "no account was created" );
 }
+
+/// A buy at price zero holds `Cash( 0 )` from the start, so its reservation
+/// must outlive a partial fill on its quantity, not its amount: the
+/// remainder still rests, and has to stay cancellable and settleable.
+#[ test ]
+fn a_zero_price_buy_keeps_its_reservation_until_its_quantity_is_filled()
+{
+  let mut escrow = two_sided();
+  let buyer = order( 1, 2, Side::Buy, "0", 2 );
+  let first = order( 2, 1, Side::Sell, "0", 1 );
+  let second = order( 3, 1, Side::Sell, "0", 1 );
+  escrow.reserve( &buyer ).unwrap();
+  escrow.reserve( &first ).unwrap();
+  escrow.reserve( &second ).unwrap();
+
+  let fill = | taker : &Order, maker : &Order | Trade
+  {
+    taker : taker.id,
+    taker_account : taker.account,
+    taker_side : taker.side,
+    maker : maker.id,
+    maker_account : maker.account,
+    price : price( "0" ),
+    quantity : qty( 1 ),
+  };
+
+  escrow.settle( &fill( &buyer, &first ), Side::Buy, buyer.price ).unwrap();
+  assert_eq!( escrow.reserved_for( buyer.id ), Some( Obligation::Cash( Money::ZERO ) ), "one unit is still unfilled" );
+
+  let mut cancelled = escrow.clone();
+  assert_eq!( cancelled.release( AccountId( 2 ), buyer.id ), Ok( Obligation::Cash( Money::ZERO ) ), "the remainder can be cancelled" );
+
+  escrow.settle( &fill( &second, &buyer ), Side::Sell, second.price ).unwrap();
+  assert_eq!( escrow.reserved_for( buyer.id ), None, "fully filled, fully discharged" );
+  assert_eq!( escrow.reservation_count(), 0 );
+  assert_eq!( escrow.account( AccountId( 2 ) ).unwrap().asset.available(), qty( 102 ) );
+}
