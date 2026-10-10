@@ -1,16 +1,11 @@
-# item
-
-The exposed surface of `exchange_halt`, as built — a consolidated index
-rather than one file per declaration (the lighter-pass choice; see this
-family's own `docs/research/` for why a fuller `item_des.rulebook.md`
-per-declaration split is deferred).
+# Item Doc Definition
 
 ### Scope
 
-- **Purpose**: What this crate actually exports, and how it differs from the source design's own exposed-item list for it.
-- **Responsibility**: One table, every `pub` item, with a short note where the real shape diverges from the proposal.
-- **In Scope**: This crate's own public surface.
-- **Out of Scope**: Full `item_des.rulebook.md`-style per-declaration files (deferred, see above).
+- **Purpose**: The full exposed surface this crate declares, as built vs. as the source proposal specified it.
+- **Responsibility**: One consolidated table plus a comparison against `core_exchange.txt`.
+- **In Scope**: `HaltError`, `halt_set`, `halt_clear`, `halt_is`.
+- **Out of Scope**: Build status prose for the whole crate (→ [`../../readme.md`](../../readme.md)); the central summary (→ [`../../../../docs/crate/018_exchange_halt.md`](../../../../docs/crate/018_exchange_halt.md)).
 
 ### Overview Table
 
@@ -21,15 +16,21 @@ per-declaration split is deferred).
 | `halt_clear` | fn | `(&mut InstrumentSpec) -> Result<(), HaltError>` |
 | `halt_is` | fn | `(&InstrumentSpec) -> bool` |
 
-### Differs from the proposal
+### Matches the proposal, minus a dependency
 
-The source design's own exposed-item list
-(also catalogued centrally at
+The source design's exposed-item list (`core_exchange.txt:631-633`,
+catalogued at
 [`../../../../docs/exposed_item/018_exchange_halt_items.md`](../../../../docs/exposed_item/018_exchange_halt_items.md))
-names `halt_set`/`halt_clear`/`halt_is`/`HaltError { Already }` — every
-function and the error shape here match exactly. The one divergence is the
-dropped `exchange_book` dependency the source design's crate entry names;
-see [`../decisions/001_no_exchange_book_dependency.md`](../decisions/001_no_exchange_book_dependency.md).
-`halt_set`/`halt_clear` operate on `exchange_spec::InstrumentSpec` directly
-(a `&mut` parameter) rather than some other handle, since that struct's own
-`halted` field is the only state either function touches.
+names `halt_set`/`halt_clear`/`halt_is` and `HaltError { Already }` — all
+built as named, on `&InstrumentSpec`/`&mut InstrumentSpec`, whose `halted`
+field is the only state they touch. The crate entry's second dependency,
+`exchange_book`, is not taken — see
+[`../decisions/001_no_exchange_book_dependency.md`](../decisions/001_no_exchange_book_dependency.md).
+
+### Sources
+
+| File | Relationship |
+|------|--------------|
+| `../../../../../../codename_space_sandbox/intake/core_exchange.txt:458-463` | Crate 18 in the source's Prompt 2 answer for workstream 002 |
+| `../../../../../../codename_space_sandbox/intake/core_exchange.txt:631-633` | Crate `exchange_halt`'s exposed-item list in the source's Prompt 3 answer |
+| [`../../src/lib.rs`](../../src/lib.rs) | The real, built shape this table describes |

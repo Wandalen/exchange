@@ -2,8 +2,8 @@
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_halt`'s
 own `halt_set`/`halt_clear`/`halt_is`) and now lives at
-[`../../module/exchange_halt/readme.md`](../../module/exchange_halt/readme.md)'s
-"## Genuinely new" section. (The central Design status this entry used to
+[`../../module/exchange_halt/readme.md`](../../module/exchange_halt/readme.md).
+(The central Design status this entry used to
 carry — "Not addressed... no `halt_set`/`halt_clear`/`halt_is`... exists" —
 is stale: `exchange_halt` now builds and tests exactly those three.
 `exchange_spec/readme.md` also lists this hard problem;
