@@ -7,7 +7,7 @@ two guards are load-bearing rather than redundant.
 ## M1 — `halt_set` actually refuses an already-halted instrument
 
 ```bash
-# In substrate/exchange/module/exchange_halt/src/lib.rs, in halt_set,
+# In module/exchange_halt/src/lib.rs, in halt_set,
 # replace  if spec.halted  with  if false
 cargo test -p exchange_halt --all-features 2>&1 | grep -E 'FAILED|test result'
 ```
