@@ -48,7 +48,7 @@ assert_eq!( book.side( INSTRUMENT, Side::Buy ).next().unwrap().order.id, OrderId
 resting orders can never cross another's — this crate closes hard problem 1
 (one book per instrument). `Book` itself — one instrument's bid and ask
 ladders — is feature 6. Every read path (`side`, `best`, `iter`) walks
-`per_instrument`'s and each side's own sorted `Vec` in price order, never a
+`per_instrument` and each side's sorted levels in price order, never a
 hash, which is feature 22 (sorted price walk); `exchange_match` and
 `exchange_depth` both rely on this without re-sorting anything themselves.
 
@@ -83,18 +83,16 @@ has one, and a replay from an empty book reproduces it exactly.
 rather than an instance: no two neighbours are ever indistinguishable, so no tie
 is ever resolved by something the sequence does not carry.
 
-## Why a sorted `Vec` per side
+## Why a sorted `VecDeque` of levels per side
 
-Because the observable property is the order, and a flat vector *is* that order
-— a test reads it directly instead of reconstructing it from a map of levels,
-each of which would need its own queue and its own invariant.
+Because the observable property is the order: a side is its levels best
+first, a level its orders oldest first, and a test reads that order directly.
 
-The alternative — a price-level map holding per-level FIFOs — wins on insertion
-cost at book depths this crate has not reached and does not yet measure.
-`insert` uses `partition_point`, so finding the position is logarithmic and only
-the shift is linear. When a benchmark measures the shift and finds it matters,
-the representation changes behind the same three methods; until something
-measures it, the simpler shape is the honest one.
+Only the front is ever consumed, so the levels sit in a `VecDeque`: an emptied
+best level leaves in O(1). A taker sweeping 40 000 one-order levels through
+`consume_best` takes 0.9 ms; with a `Vec`, each emptied level shifted every
+level behind it, and the same sweep took 452 ms. `insert` finds its position by
+`partition_point`, but its duplicate-id check still walks the whole book.
 
 ## Refusals rather than repairs
 

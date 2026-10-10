@@ -53,12 +53,12 @@
 //!
 //! # Representation
 //!
-//! One sorted [`Vec`] of `(`[`InstrumentId`]`,
-//! `[`Level`]`)` pairs per side, per instrument — best
-//! level at index 0 within each instrument's own side; within each level,
-//! [`exchange_level`] keeps arrival order. Instruments are sorted and found
-//! by [`partition_point`](slice::partition_point), the same way prices
-//! already are within a side — a second keyed dimension does not reopen the
+//! A [`Vec`] of `(`[`InstrumentId`]`, InstrumentBook)` pairs sorted by
+//! instrument; each instrument's side is a [`VecDeque`] of [`Level`]s sorted
+//! best first, so an emptied best level leaves in O(1) and a taker sweeping
+//! many prices pays linear, not quadratic, cost. Within each level,
+//! [`exchange_level`] keeps arrival order. Instruments and prices are both
+//! found by `partition_point` — a second keyed dimension does not reopen the
 //! "no hash iteration anywhere" clause above.
 //!
 //! This used to be a single flat `Vec<Resting>` per side, with same-price
@@ -73,6 +73,8 @@
 //! a second, identically-shaped struct, so every existing caller's
 //! `Resting { order, remaining, arrival }` literal and field access is
 //! unaffected by either that change or the instrument-keying one above it.
+
+use std::collections::VecDeque;
 
 use exact_arith::{ Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -90,9 +92,9 @@ pub type Resting = exchange_level::LevelNode;
 struct InstrumentBook
 {
   /// Buy levels, highest price first; FIFO arrival within each.
-  bids : Vec< Level >,
+  bids : VecDeque< Level >,
   /// Sell levels, lowest price first; FIFO arrival within each.
-  asks : Vec< Level >,
+  asks : VecDeque< Level >,
 }
 
 /// Every instrument's resting orders, kept apart — see the module doc's
@@ -240,7 +242,7 @@ impl Book
   #[ must_use ]
   pub fn best( &self, instrument : InstrumentId, side : Side ) -> Option< &Resting >
   {
-    self.levels( instrument, side ).first()?.nodes.front()
+    self.levels( instrument, side ).front()?.nodes.front()
   }
 
   /// Reduce the best order on `instrument`'s `side` by `taken`, removing it
@@ -257,7 +259,7 @@ impl Book
       return false;
     };
     let levels = Self::side_mut( book, side );
-    let Some( level ) = levels.first_mut()
+    let Some( level ) = levels.front_mut()
     else
     {
       return false;
@@ -277,7 +279,7 @@ impl Book
       level_pop_front( level );
       if level_empty_is( level )
       {
-        levels.remove( 0 );
+        levels.pop_front();
       }
     }
     else
@@ -344,14 +346,15 @@ impl Book
       .count()
   }
 
-  /// `instrument`'s own levels on `side`, or an empty slice if nothing has
-  /// ever rested on that instrument.
-  fn levels( &self, instrument : InstrumentId, side : Side ) -> &[ Level ]
+  /// `instrument`'s own levels on `side`, or no levels if nothing has ever
+  /// rested on that instrument.
+  fn levels( &self, instrument : InstrumentId, side : Side ) -> &VecDeque< Level >
   {
+    static NO_LEVELS : VecDeque< Level > = VecDeque::new();
     let Some( book ) = Self::find( &self.per_instrument, instrument )
     else
     {
-      return &[];
+      return &NO_LEVELS;
     };
     match side
     {
@@ -361,7 +364,7 @@ impl Book
   }
 
   /// `book`'s own levels on `side`.
-  fn side_mut( book : &mut InstrumentBook, side : Side ) -> &mut Vec< Level >
+  fn side_mut( book : &mut InstrumentBook, side : Side ) -> &mut VecDeque< Level >
   {
     match side
     {

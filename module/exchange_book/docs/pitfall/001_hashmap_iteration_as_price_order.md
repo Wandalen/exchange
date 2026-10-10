@@ -16,12 +16,13 @@ corrupting the one guarantee a matching engine cannot do without.
 ### How this crate avoids it
 
 `grep -n "HashMap" module/exchange_book/src/lib.rs` returns zero hits. Each
-instrument's own `InstrumentBook` holds `bids`/`asks` as plain `Vec<Level>`
+instrument's own `InstrumentBook` holds `bids`/`asks` as a sorted `VecDeque<Level>`
 ([`src/lib.rs`](../../src/lib.rs)) — highest price first for bids, lowest
-first for asks — never a hash-keyed container; price ranking is the Vec's own
+first for asks — never a hash-keyed container; price ranking is the deque's own
 sort order, not an incidental side effect of iterating anything. (The type
-narrowed from an earlier `Vec<Resting>` to today's `Vec<Level>` when
-per-price-level storage moved out to `exchange_level`; the "no hash
+narrowed from an earlier `Vec<Resting>` to a `Vec<Level>` when
+per-price-level storage moved out to `exchange_level`, then to a
+`VecDeque<Level>` so an emptied best level leaves in O(1); the "no hash
 iteration" guarantee this pitfall is about held before that move and holds
 unchanged after it.) Verified directly:
 [`tests/priority_test.rs`](../../tests/priority_test.rs)'s

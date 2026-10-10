@@ -238,6 +238,37 @@ fn a_fully_consumed_order_leaves_the_book()
   assert_eq!( ids( &book, Side::Sell ), vec![ 2 ], "an emptied order is removed, not kept at zero" );
 }
 
+/// Takes `side`'s best order whole until the side is empty; the ids in the
+/// order they left.
+fn drain( book : &mut Book, side : Side ) -> Vec< u64 >
+{
+  let mut left = Vec::new();
+  while let Some( &best ) = book.best( INSTRUMENT, side )
+  {
+    assert!( book.consume_best( INSTRUMENT, side, best.remaining ) );
+    left.push( best.order.id.0 );
+  }
+  left
+}
+
+/// Emptying the best level hands the front to the next-best one, level after
+/// level, on both sides — the walk a large taker makes across prices.
+#[ test ]
+fn emptied_levels_hand_the_front_to_the_next_best()
+{
+  let mut book = Book::new();
+  for ( id, price ) in [ ( 1, "2.00" ), ( 2, "1.00" ), ( 3, "3.00" ) ]
+  {
+    assert!( book.insert( rest( id, Side::Sell, price, 1, id ) ) );
+    assert!( book.insert( rest( id + 10, Side::Buy, price, 1, id + 10 ) ) );
+  }
+
+  assert_eq!( drain( &mut book, Side::Sell ), vec![ 2, 1, 3 ], "asks leave lowest price first" );
+  assert_eq!( drain( &mut book, Side::Buy ), vec![ 13, 11, 12 ], "bids leave highest price first" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ) + book.level_count( INSTRUMENT, Side::Buy ), 0, "no emptied level stays behind" );
+  assert!( book.is_empty() );
+}
+
 /// Consuming more than rests is refused rather than silently clamped.
 ///
 /// A clamp would leave the book and its caller disagreeing about how much
