@@ -18,16 +18,16 @@ execution than the book actually offered.
 This is foreclosed by this crate's own API shape rather than left to a
 caller's discipline. `Book::best(instrument, side)` and
 `Book::consume_best(instrument, side, taken)` ([`src/lib.rs`](../../src/lib.rs))
-only ever read or mutate `levels.first()`/`levels.first_mut()` — index `0`
-of the price-sorted `Vec<Level>` — and `consume_best` removes that index
+only ever read or mutate `levels.front()`/`levels.front_mut()` — the front
+of the price-sorted `VecDeque<Level>` — and `consume_best` removes that level
 only once its own `remaining` reaches zero
-(`level_pop_front`/`levels.remove(0)`), never before. There is no method on
+(`level_pop_front`/`levels.pop_front()`), never before. There is no method on
 `Book` that takes a level index or otherwise exposes any level but the
 current front one; a caller cannot reach the second-best level until
 `consume_best` has driven the best one to empty, because nothing in this
 crate's surface lets it name the second-best level at all.
-`grep -n "first(\|first_mut(\|\.remove( 0 )" module/exchange_book/src/lib.rs`
-shows every selection and removal point in the crate going through index 0
+`grep -n "front(\|front_mut(\|pop_front(" module/exchange_book/src/lib.rs`
+shows every selection and removal point in the crate going through the front
 only. Verified directly:
 [`tests/priority_test.rs`](../../tests/priority_test.rs)'s
 `a_partly_consumed_order_keeps_its_place` (a level reduced but not drained
