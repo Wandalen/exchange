@@ -8,8 +8,8 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, EscrowError, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
-  InstrumentId, Money, Obligation, Order, OrderId, Price, Producer, Quantity, Receipt, RejectReason, Resting,
+  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, Entry, EscrowError, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
+  InstrumentId, Money, Obligation, Order, OrderId, PostingAsset, Price, Producer, Quantity, Receipt, RejectReason, Resting,
   SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
 };
 
@@ -372,11 +372,39 @@ fn the_posting_log_balances_under_the_conservation_auditor()
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3.00" ), qty( 8 ) ).unwrap();
 
   let postings = exchange.postings().unwrap();
-  assert_eq!( postings.len(), 4, "two trades, two postings each" );
+  assert_eq!( postings.len(), 8, "two trades, a cash pair and an asset pair each" );
 
   let report = verify( &postings ).unwrap();
   assert!( report.is_balanced(), "{report}" );
-  assert_eq!( report.discrepancy_minor(), 0 );
+  assert_eq!( report.discrepancy_minor( &PostingAsset::Cash ), Some( 0 ) );
+  assert_eq!( report.discrepancy_minor( &PostingAsset::Asset ), Some( 0 ), "the asset side is audited, not absent" );
+}
+
+/// A trade moves cash from buyer to seller and the asset the other way.
+///
+/// The audit above cannot see either direction: a pair posted the wrong way
+/// round, or both its legs posted to one account, still nets to zero.
+#[ test ]
+fn a_trade_posts_cash_to_the_seller_and_quantity_to_the_buyer()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
+
+  let ten = Money::parse( "10" ).unwrap().minor();
+  let four = qty( 4 ).minor();
+
+  assert_eq!( exchange.postings().unwrap(),
+  [
+    Entry::new( AccountId( 2 ), PostingAsset::Cash, -ten ),
+    Entry::new( AccountId( 1 ), PostingAsset::Cash, ten ),
+    Entry::new( AccountId( 2 ), PostingAsset::Asset, four ),
+    Entry::new( AccountId( 1 ), PostingAsset::Asset, -four ),
+  ] );
 }
 
 /// A sweep across two price levels pays each its own price.

@@ -45,11 +45,12 @@
 //!
 //! # Relationship to `exchange_core::postings`
 //!
-//! `exchange_core::postings` builds the same debit-buyer/credit-seller pair
-//! per trade, across the exchange's *entire* event log, for
+//! `exchange_core::postings` builds the same debit-buyer/credit-seller cash
+//! pair per trade, plus the asset pair moving the other way, across the
+//! exchange's *entire* event log, for
 //! [`exact_arith::verify`] to grade with machinery the exchange did not
 //! write (see that function's own doc comment). This crate's
-//! [`conserve_assert`] is the same shape at a narrower, pre-ledger grain — one
+//! [`conserve_assert`] is its cash half at a narrower, pre-ledger grain — one
 //! batch, straight off `Trade` data, with no event log or account lookup
 //! involved — callable the instant `cross` produces a batch, before escrow or
 //! the event stream see it at all.

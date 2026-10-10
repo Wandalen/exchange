@@ -388,6 +388,34 @@ pub enum StepOutcome
   ReplaceNotWired,
 }
 
+/// Which of an account's two holdings a posting moves — the asset key
+/// [`verify`] nets separately.
+///
+/// Escrow's own partition, not an instrument's [`AssetId`]s: escrow keeps one
+/// cash and one asset holding per account for every instrument, so two
+/// instruments' base assets are one balance there, and a posting keyed finer
+/// than the balance it moves would audit a separation that does not exist.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord ) ]
+pub enum PostingAsset
+{
+  /// The currency side, moved by a trade's notional.
+  Cash,
+  /// The asset side, moved by a trade's quantity.
+  Asset,
+}
+
+impl core::fmt::Display for PostingAsset
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::Cash => write!( f, "cash" ),
+      Self::Asset => write!( f, "asset" ),
+    }
+  }
+}
+
 /// One market: a book, the balances behind it, the record of everything that
 /// happened, every instrument's own grid, and the running counters
 /// [`Exchange::exchange_step`] keeps.
@@ -1028,8 +1056,9 @@ impl< E : EscrowPort > Exchange< E >
     &self.escrow
   }
 
-  /// Every trade as a pair of currency postings — the buyer debited, the
-  /// seller credited — ready for [`verify`].
+  /// Every trade as two pairs of postings — the buyer debited the notional
+  /// and credited the quantity, the seller the reverse — ready for [`verify`],
+  /// which nets each [`PostingAsset`] separately.
   ///
   /// This is the bridge to `exact_arith`'s conservation auditor, and it is
   /// worth having for one reason: the auditor was built to grade a transaction
@@ -1042,7 +1071,7 @@ impl< E : EscrowPort > Exchange< E >
   /// [`ExchangeError::Rejected`] carrying
   /// [`RejectReason::ObligationUnrepresentable`] if a trade's own notional
   /// cannot be expressed, which would mean it should never have executed.
-  pub fn postings( &self ) -> Result< Vec< Entry >, ExchangeError >
+  pub fn postings( &self ) -> Result< Vec< Entry< AccountId, PostingAsset > >, ExchangeError >
   {
     let mut entries = Vec::new();
 
@@ -1058,8 +1087,10 @@ impl< E : EscrowPort > Exchange< E >
       .map_err( | _ | ExchangeError::Rejected( RejectReason::ObligationUnrepresentable ) )?;
 
       let ( buyer, seller ) = self.parties( &trade );
-      entries.push( Entry::new( format!( "account:{}", buyer.0 ), -paid.minor() ) );
-      entries.push( Entry::new( format!( "account:{}", seller.0 ), paid.minor() ) );
+      entries.push( Entry::new( buyer, PostingAsset::Cash, -paid.minor() ) );
+      entries.push( Entry::new( seller, PostingAsset::Cash, paid.minor() ) );
+      entries.push( Entry::new( buyer, PostingAsset::Asset, trade.quantity.minor() ) );
+      entries.push( Entry::new( seller, PostingAsset::Asset, -trade.quantity.minor() ) );
     }
 
     Ok( entries )
