@@ -10,7 +10,7 @@ publish = false
 exchange_id = { path = "../exchange_id" }
 exchange_side = { path = "../exchange_side" }
 exchange_tif = { path = "../exchange_tif" }
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 
 [lints]
 workspace = true

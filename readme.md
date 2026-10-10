@@ -129,7 +129,7 @@ The same three commands CI runs on every push and pull request — see
 
 Extracted from the `codename_space_sandbox` monorepo into its own repository —
 same pattern as [`../exact`](../exact/readme.md) and [`../ring`](../ring/readme.md) —
-and depends on `exact_arith` (`../exact/module/exact_arith`) for every price,
+and depends on `exact_arith` (from `Wandalen/exact`, pinned in [`Cargo.toml`](Cargo.toml)) for every price,
 quantity, and balance type it uses. The workstream's own instance doc,
 `codename_space_sandbox/docs/workstream/002_exchange_core/readme.md`, stayed
 behind in the monorepo and has no relative path that reaches it from here

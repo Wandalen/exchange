@@ -13,12 +13,12 @@ exchange_idem = { path = "../exchange_idem" }
 exchange_match = { path = "../exchange_match" }
 exchange_rest = { path = "../exchange_rest" }
 exchange_tif = { path = "../exchange_tif" }
-ring_factory = { path = "../../../ring/ring_factory" }
-ring_handle = { path = "../../../ring/ring_handle" }
-ring_types = { path = "../../../ring/ring_types" }
+ring_factory = { workspace = true }
+ring_handle = { workspace = true }
+ring_types = { workspace = true }
 
 [dev-dependencies]
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 exchange_order = { path = "../exchange_order" }
 exchange_seq = { path = "../exchange_seq" }
 exchange_side = { path = "../exchange_side" }

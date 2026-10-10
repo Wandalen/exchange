@@ -7,7 +7,7 @@ description = "The available/reserved balance partition, so an order cannot comm
 publish = false
 
 [dependencies]
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 exchange_fill = { path = "../exchange_fill" }
 exchange_id = { path = "../exchange_id" }
 exchange_order = { path = "../exchange_order" }

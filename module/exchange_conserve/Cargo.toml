@@ -7,7 +7,7 @@ description = "A batch of fills nets to zero across its signed legs, or is refus
 publish = false
 
 [dependencies]
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 exchange_fill = { path = "../exchange_fill" }
 exchange_side = { path = "../exchange_side" }
 exchange_types = { path = "../exchange_types" }

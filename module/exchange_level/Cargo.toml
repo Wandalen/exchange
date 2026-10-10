@@ -10,7 +10,7 @@ publish = false
 exchange_id = { path = "../exchange_id" }
 exchange_order = { path = "../exchange_order" }
 exchange_seq = { path = "../exchange_seq" }
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 
 [dev-dependencies]
 # The test helper's `node()` fixture needs `Side`/`Tif` values for the

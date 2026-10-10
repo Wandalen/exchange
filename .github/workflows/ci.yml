@@ -19,10 +19,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Manifests path-depend on `../exact` and `../ring`; pinned so a change there
-  # breaks CI only when the pin moves.
-  EXACT_REV: ca9682a481a2d6ee434963c0a0dde0130f3bc7d5
-  RING_REV: 95988754d34458f0c6c3a5b3ae893b72aeac1505
 
 jobs:
   test:
@@ -31,7 +27,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-siblings
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
@@ -46,7 +41,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-siblings
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: clippy
@@ -60,7 +54,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/checkout-siblings
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
       - name: rustdoc, warnings denied

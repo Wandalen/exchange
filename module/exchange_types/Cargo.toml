@@ -7,7 +7,7 @@ description = "Order, trade and event types for the exchange, with no ECS type a
 publish = false
 
 [dependencies]
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 exchange_order = { path = "../exchange_order" }
 exchange_side = { path = "../exchange_side" }
 

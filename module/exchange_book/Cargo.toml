@@ -10,7 +10,7 @@ publish = false
 exchange_level = { path = "../exchange_level" }
 exchange_id = { path = "../exchange_id" }
 exchange_side = { path = "../exchange_side" }
-exact_arith = { path = "../../../exact/module/exact_arith" }
+exact_arith = { workspace = true }
 
 [dev-dependencies]
 # The test helper's `rest()`/`rest_on()` fixtures build a whole `Order` and
