@@ -1,7 +1,7 @@
 # exchange_conserve — manual testing plan
 
-`fill_legs_sum`'s own arithmetic is a direct `try_fold` over `Money::checked_add`,
-already exhaustively covered by exact unit values.
+Summing the legs is `exact_arith::money_sum_assert_zero`'s job, tested in
+`exact`; this crate only builds the legs.
 
 ## M0 — which side pushes which leg first is a documented non-finding
 
@@ -11,22 +11,23 @@ all; this is its replacement, same underlying lesson. Swapping which arm
 pushes `(debit, notional)` vs `(notional, debit)` — i.e. `Side::Buy` and
 `Side::Sell` trading push orders — was tried first and found to be
 **unobservable**, not caught, for an even more direct reason than the first
-design's: `legs` is summed by [`fill_legs_sum`], and addition does not care
+design's: `legs` is summed as one batch, and addition does not care
 what order its terms were pushed in. Both arms push the exact same two
 values (`debit` and `notional`) regardless of which label they're under; only
 their *order* in the `Vec` differs, and sum is order-independent. No test,
 however constructed, could ever distinguish them. Confirmed by actually
-running it (every test returns the same Ok/Err either way):
+running it (every test returns the same Ok/Err either way).
+
+**Observed 2026-10-10**, rerun after the two `fill_legs_sum` tests were
+removed:
 
 ```
-test a_balanced_leg_set_sums_to_zero ... ok
-test a_trade_with_an_inexact_notional_is_refused ... ok
-test an_empty_batch_conserves_trivially ... ok
-test an_unbalanced_leg_set_sums_to_its_true_imbalance ... ok
 test p17_conserve_assert_distinguishes_ok_from_inexact ... ok
+test an_empty_batch_conserves_trivially ... ok
 test a_mixed_batch_of_different_magnitudes_still_conserves ... ok
+test a_trade_with_an_inexact_notional_is_refused ... ok
 test a_single_trade_conserves ... ok
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
 
 The `match` on `taker_side` is kept anyway, purely to label which amount is
@@ -35,6 +36,10 @@ catches" and the module doc's closing paragraph on `postings()` — not because
 swapping it changes any observable behavior today.
 
 ## M1 — the terminal balance check is load-bearing
+
+**Retired.** The zero check below now lives in
+`exact_arith::money_sum_assert_zero`, so the mutated line no longer exists
+here. Kept as the record of what was shown while it did.
 
 ```bash
 # In substrate/exchange/module/exchange_conserve/src/lib.rs, in conserve_assert,
@@ -76,3 +81,5 @@ Reverted; a second run confirmed 7/7 tests (plus both doctests) pass again.
 | 2026-10-03 | Redesign | `conserve_assert` changed from one signed leg per trade to both legs (debit + credit) per trade, after discovering the first design could never be called correctly from `exchange_match::cross` — every trade in one real batch shares the same `taker_side`, so same-signed legs can never sum to zero. See `src/lib.rs`'s "Revision" section. `ConserveError::Unbalanced` is unreachable through `conserve_assert` under the new design; P17's demo and this suite's tests moved from a magnitude-mismatch example to an inexact-notional one. |
 | 2026-10-03 | M0 (redesign) | Ran-and-disproved against the new design: which arm pushes which leg first is not load-bearing — sum is order-independent. |
 | 2026-10-03 | M1 (redesign) | Disproved-by-mutation that the terminal zero check is redundant — inverting it breaks every test whose batch reaches that line, and none of the ones that don't. |
+| 2026-10-10 | M1 retired | `fill_legs_sum` and the terminal zero check replaced by `exact_arith::money_sum_assert_zero`; the two `fill_legs_sum`-only tests removed with it. |
+| 2026-10-10 | M0 (rerun) | Still unobservable after the move to `money_sum_assert_zero`: all five remaining tests pass with the push order swapped. |

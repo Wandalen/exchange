@@ -39,9 +39,10 @@
 //! # What this still catches
 //!
 //! [`ConserveError::Notional`] if any trade's own `price`/`quantity` cannot be
-//! expressed exactly, and [`ConserveError::Overflow`] if the running sum
-//! leaves the representable range — both real, reachable failures, demoed by
-//! [`conserve_assert`]'s own doctest and `demo_p17_cons`.
+//! expressed exactly — a real, reachable failure, demoed by `demo_p17_cons`.
+//! [`ConserveError::Overflow`] is not reachable from valid `Trade` data: a
+//! notional negates within `Money`'s symmetric range, and the sum runs in
+//! `i128`, which one batch cannot fill.
 //!
 //! # Relationship to `exchange_core::postings`
 //!
@@ -55,7 +56,7 @@
 //! involved — callable the instant `cross` produces a batch, before escrow or
 //! the event stream see it at all.
 
-use exact_arith::Money;
+use exact_arith::{ ConservationError, Money, money_sum_assert_zero };
 use exchange_fill::Trade;
 use exchange_side::Side;
 use exchange_types::TypeError;
@@ -66,7 +67,7 @@ pub enum ConserveError
 {
   /// One trade's own `price`/`quantity` could not be expressed as a notional.
   Notional( TypeError ),
-  /// A running sum left the representable range.
+  /// A debit or the batch's sum left the representable range.
   Overflow,
   /// Every leg was expressible and summed without overflow, but the total
   /// was not zero.
@@ -80,7 +81,7 @@ impl core::fmt::Display for ConserveError
     match self
     {
       Self::Notional( error ) => write!( f, "a trade's notional is not expressible: {error}" ),
-      Self::Overflow => write!( f, "the batch's running total left the representable range" ),
+      Self::Overflow => write!( f, "a debit or the batch's total left the representable range" ),
       Self::Unbalanced => write!( f, "the batch's signed legs did not sum to zero" ),
     }
   }
@@ -98,31 +99,6 @@ impl core::error::Error for ConserveError
   }
 }
 
-/// Sum a set of already-signed legs — positive where cash arrived, negative
-/// where it left.
-///
-/// The primitive [`conserve_assert`] builds on. Classifying a batch of
-/// `Trade`s into signed legs is the only part that needs `taker_side`;
-/// summing a leg set to see whether it nets to zero does not, so that half is
-/// kept separate and directly testable against plain values.
-///
-/// # Errors
-///
-/// [`ConserveError::Overflow`] if the running sum leaves the representable
-/// range.
-///
-/// ```rust
-/// use exact_arith::Money;
-/// use exchange_conserve::fill_legs_sum;
-///
-/// let legs = [ Money::from_int( 10 ).unwrap(), Money::from_int( -10 ).unwrap() ];
-/// assert_eq!( fill_legs_sum( &legs ).unwrap(), Money::ZERO );
-/// ```
-pub fn fill_legs_sum( legs : &[ Money ] ) -> Result< Money, ConserveError >
-{
-  legs.iter().try_fold( Money::ZERO, | sum, &leg | sum.checked_add( leg ).map_err( | _ | ConserveError::Overflow ) )
-}
-
 /// Confirm `fills`, taken as one batch, nets to zero: every trade's own
 /// notional is expressible, and the running sum fits.
 ///
@@ -137,7 +113,7 @@ pub fn fill_legs_sum( legs : &[ Money ] ) -> Result< Money, ConserveError >
 /// # Errors
 ///
 /// [`ConserveError::Notional`] if a trade's own `price`/`quantity` cannot be
-/// expressed, [`ConserveError::Overflow`] if the running sum does not fit,
+/// expressed, [`ConserveError::Overflow`] if a debit or the sum does not fit,
 /// [`ConserveError::Unbalanced`] if the batch's legs somehow still sum to
 /// anything but zero.
 ///
@@ -172,14 +148,9 @@ pub fn conserve_assert( fills : &[ Trade ] ) -> Result< (), ConserveError >
     }
   }
 
-  let net = fill_legs_sum( &legs )?;
-
-  if net == Money::ZERO
+  money_sum_assert_zero( &legs ).map_err( | error | match error
   {
-    Ok( () )
-  }
-  else
-  {
-    Err( ConserveError::Unbalanced )
-  }
+    ConservationError::NotZero { .. } => ConserveError::Unbalanced,
+    ConservationError::Overflow => ConserveError::Overflow,
+  } )
 }

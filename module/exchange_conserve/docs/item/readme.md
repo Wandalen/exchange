@@ -17,7 +17,6 @@ per-declaration split is deferred).
 | Item | Kind | Signature |
 |------|------|-----------|
 | `ConserveError` | enum | `{ Notional(TypeError), Overflow, Unbalanced }` |
-| `fill_legs_sum` | fn | `(&[Money]) -> Result<Money, ConserveError>` |
 | `conserve_assert` | fn | `(&[Trade]) -> Result<(), ConserveError>` |
 
 ### Differs from the proposal
@@ -28,8 +27,10 @@ also catalogued centrally at
 [`../../../../docs/exposed_item/014_exchange_conserve_items.md`](../../../../docs/exposed_item/014_exchange_conserve_items.md) —
 whose own "Folded into `exchange_escrow`" Design status is now stale, see
 below) proposes `fill_legs_sum`, `conserve_assert`, and
-`ConserveError{NotZero,Overflow}`. The real build matches the two function
-names exactly; `ConserveError` has 3 variants rather than 2 — `Notional`
+`ConserveError{NotZero,Overflow}`. The real build keeps `conserve_assert`
+and drops `fill_legs_sum`: summing signed money legs to zero is
+`exact_arith::money_sum_assert_zero`'s job, so a second copy here would only
+drift from it. `ConserveError` has 3 variants rather than 2 — `Notional`
 (a trade's own price/quantity isn't expressible) and `Unbalanced` (the
 proposal's `NotZero`, renamed) are both present, plus `Overflow`. Beyond
 naming, this crate's own module doc records a real design revision: the

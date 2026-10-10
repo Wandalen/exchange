@@ -1,12 +1,13 @@
-//! Test Matrix T01 — leg summation, and the batch-level assertion built on it.
+//! Test Matrix T01 — the batch-level assertion. Summing the legs is
+//! `exact_arith::money_sum_assert_zero`'s job, tested in `exact`.
 //!
 //! `conserve_assert`'s own tests moved from demonstrating a magnitude
 //! mismatch to demonstrating an inexact notional — see `src/lib.rs`'s
 //! "Revision" section for why a magnitude mismatch is no longer constructible
 //! through `Trade` data at all once both of a trade's legs go in together.
 
-use exact_arith::{ Money, Price, Quantity };
-use exchange_conserve::{ ConserveError, conserve_assert, fill_legs_sum };
+use exact_arith::{ Price, Quantity };
+use exchange_conserve::{ ConserveError, conserve_assert };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_side::Side;
@@ -43,24 +44,6 @@ fn dust_trade( taker_side : Side ) -> Trade
     price : Price::from_minor( 1 ).unwrap(),
     quantity : Quantity::EPSILON,
   }
-}
-
-/// T01 — a balanced leg set sums to exactly zero.
-#[ test ]
-fn a_balanced_leg_set_sums_to_zero()
-{
-  let legs = [ Money::from_int( 10 ).unwrap(), Money::from_int( -10 ).unwrap() ];
-  assert_eq!( fill_legs_sum( &legs ).unwrap(), Money::ZERO );
-}
-
-/// An unbalanced leg set sums to something other than zero — `fill_legs_sum`
-/// itself does not judge this, it just adds; judging is `conserve_assert`'s
-/// job.
-#[ test ]
-fn an_unbalanced_leg_set_sums_to_its_true_imbalance()
-{
-  let legs = [ Money::from_int( 10 ).unwrap(), Money::from_int( -9 ).unwrap() ];
-  assert_eq!( fill_legs_sum( &legs ).unwrap(), Money::from_int( 1 ).unwrap() );
 }
 
 /// A single trade conserves on its own — its own debit and credit are the
