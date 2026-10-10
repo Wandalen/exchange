@@ -1,9 +1,8 @@
 # Fast verification — master pushes and PRs.
 #
 # Mirrors `Wandalen/exact`'s own CI structure (itself mirroring `Wandalen/ring`)
-# and this project's CLAUDE.md Level 1-3 verification commands (nextest, doctests,
-# clippy). Deliberately has no fmt job: CLAUDE.md forbids `cargo fmt` for this
-# project's custom codestyle.
+# and `verb/test` levels 1-3 (nextest, doctests, clippy) plus `verb/doc`. Deliberately
+# has no fmt job: CLAUDE.md forbids `cargo fmt` for this project's custom codestyle.
 
 name: CI
 
@@ -35,9 +34,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
-      - name: nextest
+      - name: nextest (verb/test level 1)
         run: cargo nextest run --workspace --all-features
-      - name: doctests
+      - name: doctests (verb/test level 2)
         run: RUSTDOCFLAGS="-D warnings" cargo test --doc --workspace --all-features
 
   clippy:
@@ -51,7 +50,7 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: clippy
+      - name: clippy (verb/lint)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
   doc:
@@ -63,5 +62,5 @@ jobs:
       - uses: ./.github/actions/checkout-siblings
       - uses: dtolnay/rust-toolchain@1.98.0
       - uses: Swatinem/rust-cache@v2
-      - name: rustdoc, warnings denied
+      - name: rustdoc, warnings denied (verb/doc)
         run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace --all-features
