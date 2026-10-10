@@ -17,7 +17,8 @@ pub enum Tif
   Gtc,
   /// Immediate-or-cancel. Whatever does not fill immediately is withdrawn.
   Ioc,
-  /// Fill-or-kill. Fills completely, or is rejected with the book unchanged.
+  /// Fill-or-kill. Fills completely, or is killed whole with the book
+  /// unchanged.
   Fok,
   /// Post-only. Rests like [`Tif::Gtc`], but is refused whole if it would
   /// take liquidity on arrival — it only ever trades as the maker.
