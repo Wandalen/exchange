@@ -1,6 +1,7 @@
 # exchange_level
 
 One price, FIFO rest — the queue a book keeps at a single price point.
+Depends on `exchange_id`, `exchange_order`, `exchange_seq` and `exact_arith`.
 
 ```rust
 use exact_arith::{ Price, Quantity };
@@ -23,32 +24,22 @@ level_push( &mut level, LevelNode { order, remaining : order.quantity, arrival :
 assert_eq!( level_pop_front( &mut level ).unwrap().order.id, OrderId( 1 ) );
 ```
 
-## Why this exists
+## Where it sits
 
-`exchange_book`'s priority rule is "price first, then arrival." Before this
-crate, arrival order within one price was implicit — same-price orders just
-happened to sit next to each other in a flat sorted `Vec`. `Level` gives that
-implicit ordering an explicit home: one price, one FIFO queue, in its own
-crate with its own tests.
+`exchange_book` keeps one `Level` per price per side, best price first; the
+level keeps arrival order inside its price. `exchange_book::Resting` is an
+alias of `LevelNode`. A partial fill reduces the front node's `remaining` in
+place through the public `nodes` field.
 
-## Divergence from the source proposal
+## Not the proposal's intrusive list
 
-The proposal specifies `Level { price, head, len }` / `LevelNode { order, next }`
-— an intrusive singly-linked list. Rust has no safe way to express a
-self-referential node chain without `unsafe`, `Box`, or `Rc<RefCell<_>>`, and
-nothing in this family uses any of the three. This crate uses `Vec<LevelNode>`
-instead — `level_push` appends at the back, `level_pop_front` removes index
-`0` — which costs no more than `exchange_book`'s own pre-retrofit code already
-paid doing the same removal one layer up.
-
-`LevelError { Full, Missing }` is not built. `Full` belongs to
-[`exchange_cap`](../exchange_cap/readme.md) (a resting-order ceiling, checked
-before a node ever reaches a level); `Missing` is handled as `Option`,
-matching `exchange_book::Book::cancel`'s own precedent for "not found by id."
-Full reasoning: [`docs/decisions/001_no_level_error.md`](docs/decisions/001_no_level_error.md).
-
-See `src/lib.rs`'s module doc for the full reasoning, including why
-[`Level::nodes`] stays a public field.
+The source design specifies `Level { price, head, len }` /
+`LevelNode { order, next }`. Safe Rust has no self-referential node chain
+without `Box` or `Rc`, so the nodes live in a `Vec`. `LevelError { Full,
+Missing }` is not built: a resting-order ceiling is
+[`exchange_cap`](../exchange_cap/readme.md)'s, checked before a node reaches a
+level, and a missing id is `None`, as in `exchange_book::Book::cancel` — see
+[`docs/decisions/001_no_level_error.md`](docs/decisions/001_no_level_error.md).
 
 ## Responsibility Table
 
@@ -61,10 +52,11 @@ See `src/lib.rs`'s module doc for the full reasoning, including why
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
 | [`tests/exchange_level_test.rs`](tests/exchange_level_test.rs) | FIFO order, id removal, qty sum, emptiness |
-| [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan — the one same-typed-field mutation risk |
+| [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan — FIFO silently becoming LIFO |
 
 ## Related
 
-- [`exchange_book/`](../exchange_book/readme.md) — retrofit to hold `Vec<Level>` per side instead of a flat `Vec<Resting>`
+- [`exchange_book/`](../exchange_book/readme.md) — keeps one `Level` per price per side
 - [`exchange_order/`](../exchange_order/readme.md) — `Order`, the type every `LevelNode` wraps
 - [`exchange_cap/`](../exchange_cap/readme.md) — the resting-order ceiling this crate does not enforce
+- [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p09_fifo`
