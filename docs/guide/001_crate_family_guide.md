@@ -37,7 +37,7 @@
 | 1 | [`exchange_order`](../../module/exchange_order/readme.md) | One order record — instrument, account, side, tif included |
 | 1 | [`exchange_spec`](../../module/exchange_spec/readme.md) | Tick, lot, the asset pair, and the halt flag on one instrument |
 | 2 | [`exchange_fill`](../../module/exchange_fill/readme.md) | `Trade`, `Event`, `EventKind`, `RejectReason`, `CancelCause` |
-| 2 | [`exchange_halt`](../../module/exchange_halt/readme.md) | An on/off switch for matching alone |
+| 2 | [`exchange_halt`](../../module/exchange_halt/readme.md) | Halt and resume new orders on one instrument |
 | 2 | [`exchange_level`](../../module/exchange_level/readme.md) | One price, FIFO rest |
 | 2 | [`exchange_types`](../../module/exchange_types/readme.md) | `TypeError`, plus `notional`/`obligation` |
 | 3 | [`exchange_book`](../../module/exchange_book/readme.md) | The resting order book, one per instrument, in price-time priority |
@@ -137,7 +137,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   let maker = Price::parse( "2.50" ).unwrap();
   assert_eq!( Trade::executed_price( maker, Price::parse( "3.00" ).unwrap() ), maker );
   ```
-- **`exchange_halt`** (→ `exchange_spec`) — `halt_set`/`halt_clear`/`halt_is` on an `InstrumentSpec`'s own flag. Wired since Stage 9: `Exchange::halt_set`/`halt_clear`/`halt_is` call straight through, one-to-one by name.
+- **`exchange_halt`** (→ `exchange_spec`) — `halt_set`/`halt_clear`/`halt_is` on an `InstrumentSpec`'s own flag. Wired since Stage 9: `Exchange::halt_set`/`halt_clear`/`halt_is` call straight through, one-to-one by name, and `step_place` refuses a new order on a halted instrument (`RejectReason::Halted`).
   ```rust
   use exact_arith::{ Price, Quantity };
   use exchange_halt::{ halt_is, halt_set };
@@ -147,7 +147,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   halt_set( &mut spec ).unwrap();
   assert!( halt_is( &spec ) );
   ```
-  The proposal names `exchange_book` as a second dependency too; dropped here since nothing in the real match loop checks halt yet, so there is no real behavior a book dependency would support (own `docs/decisions/` entry).
+  The proposal names `exchange_book` as a second dependency too; not taken, since nothing here reads a book (own `docs/decisions/` entry).
 - **`exchange_level`** (→ `exchange_id`, `exchange_order`, `exchange_seq`) — `Level`/`LevelNode`, the explicit FIFO queue at one price: `level_new`, `level_push`, `level_pop_front`.
   ```rust
   use exchange_level::{ level_new, level_pop_front };
@@ -155,7 +155,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   let mut level = level_new( Price::parse( "2.50" ).unwrap() );
   assert!( level_pop_front( &mut level ).is_none() );
   ```
-  Genuinely new, not yet exercised: `exchange_book` takes this as a Cargo.toml dependency, but per `exchange_book`'s own readme its real storage today is still one flat sorted `Vec<Resting>` per side — the per-price `Vec<Level>` retrofit `exchange_level`'s own readme describes under "Related" is a stated intent, not yet a landed change. A dependency edge in `Cargo.toml` is not proof a type is actually used — the two were cross-checked against each other here, not assumed from either readme alone.
+  `exchange_book` keeps one `Level` per price per side, and `Resting` is an alias of `LevelNode`. The nodes sit in a `VecDeque`, so taking the front of a level is O(1).
 - **`exchange_types`** (→ `exchange_order`, `exchange_side`) — narrowed down to what was always genuinely its own: `TypeError` and `notional`/`obligation`. See Introduction, point 1 — the eleven re-exports this crate used to carry are gone as of 2026-10-05, which is also why it moved from Tier 3 to Tier 2 here.
   ```rust
   use exchange_types::notional;
@@ -165,7 +165,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
 
 ## Tier 3
 
-- **`exchange_book`** (→ `exchange_id`, `exchange_level`, `exchange_side`) — the resting order book, keyed by `InstrumentId`, one sorted `Vec<Resting>` per side, best at the front (better price first, earlier arrival breaks a tie — never wall-clock time, only a caller-supplied `Sequence`).
+- **`exchange_book`** (→ `exchange_id`, `exchange_level`, `exchange_side`) — the resting order book, keyed by `InstrumentId`, one sorted `Vec<Level>` per side, best at the front (better price first, earlier arrival breaks a tie — never wall-clock time, only a caller-supplied `Sequence`).
   ```rust
   use exchange_book::Book;
   use exchange_id::{ InstrumentId, OrderId };
