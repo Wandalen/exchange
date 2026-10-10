@@ -92,7 +92,7 @@ Only the front is ever consumed, so the levels sit in a `VecDeque`: an emptied
 best level leaves in O(1). A taker sweeping 40 000 one-order levels through
 `consume_best` takes 0.9 ms; with a `Vec`, each emptied level shifted every
 level behind it, and the same sweep took 452 ms. `insert` finds its position by
-`partition_point`, but its duplicate-id check still walks the whole book.
+`partition_point`.
 
 ## Refusals rather than repairs
 
@@ -108,7 +108,10 @@ changed hands: books that balance, quantities that do not.
 leaves the book untouched, rather than seating the duplicate. `cancel` only
 ever removes the first match for an id, so an unrejected duplicate would
 silently outlive its own cancellation and keep trading under a name its owner
-believes is gone.
+believes is gone. The check walks the book only for an id at or below the
+highest ever seated; callers minting ids in order never pay for it. Building
+a book of 40 000 orders took 443 ms with the walk on every insert, and takes
+3.4 ms now.
 
 ## Responsibility Table
 

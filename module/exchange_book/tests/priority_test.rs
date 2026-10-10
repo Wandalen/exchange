@@ -175,6 +175,36 @@ fn insert_refuses_a_duplicate_order_id()
   assert_eq!( ids( &book, Side::Sell ), Vec::< u64 >::new(), "the rejected order never landed" );
 }
 
+/// Ids need not arrive in increasing order: one below the highest seated so
+/// far is still checked against what rests, and one that left may rest again.
+#[ test ]
+fn insert_refuses_a_duplicate_id_in_any_arrival_order()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 5, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 3, Side::Buy, "2.50", 5, 20 ) ), "a lower fresh id" );
+  assert!( !book.insert( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "id 3 rests, below the highest id seen" );
+
+  assert!( book.cancel( INSTRUMENT, OrderId( 5 ) ).is_some() );
+  assert!( book.insert( rest( 5, Side::Buy, "2.50", 5, 40 ) ), "id 5 left the book" );
+}
+
+/// Two books holding the same orders are equal, whatever ids came and went
+/// before.
+#[ test ]
+fn books_with_the_same_orders_are_equal_whatever_their_history()
+{
+  let mut churned = Book::new();
+  assert!( churned.insert( rest( 9, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( churned.insert( rest( 1, Side::Sell, "3.00", 5, 20 ) ) );
+  assert!( churned.cancel( INSTRUMENT, OrderId( 9 ) ).is_some() );
+
+  let mut fresh = Book::new();
+  assert!( fresh.insert( rest( 1, Side::Sell, "3.00", 5, 20 ) ) );
+
+  assert_eq!( churned, fresh );
+}
+
 /// Root Cause: `Book::insert` placed every `Resting` handed to it with no
 /// check that `remaining` was above zero, even though `Resting::remaining`'s
 /// own doc comment states the invariant "always greater than zero — a
