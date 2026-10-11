@@ -14,9 +14,8 @@ use exchange_seq::Sequence;
 use exchange_side::Side;
 use exchange_tif::Tif;
 
-/// The one instrument every test in this file threads through `Book`'s now
-/// instrument-scoped methods — T05's own leakage test is the one place a
-/// second id is deliberately used instead.
+/// The instrument every test uses;
+/// `orders_on_one_instrument_never_leak_into_another` adds a second.
 const INSTRUMENT : InstrumentId = InstrumentId( 1 );
 
 fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) -> Resting

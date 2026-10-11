@@ -1,6 +1,9 @@
 # exchange_book
 
-The resting order book — two sides, each in published order, best at the front.
+The resting order book — per instrument, two sides, each in published order,
+best at the front. Depends on `exchange_id`, `exchange_level`, `exchange_side`
+and `exact_arith`. Closes hard problem 1 (one book per instrument) and
+features 6 (book) and 22 (sorted price walk).
 
 ```rust
 use exact_arith::{ Price, Quantity };
@@ -41,16 +44,6 @@ book.insert( bid( 1, 10 ) );
 // … and the earlier arrival is still at the front.
 assert_eq!( book.side( INSTRUMENT, Side::Buy ).next().unwrap().order.id, OrderId( 1 ) );
 ```
-
-## Closes hard problem 1, and features 6 and 22
-
-`per_instrument` keys every side by `InstrumentId`, so one instrument's
-resting orders can never cross another's — this crate closes hard problem 1
-(one book per instrument). `Book` itself — one instrument's bid and ask
-ladders — is feature 6. Every read path (`side`, `best`, `iter`) walks
-`per_instrument` and each side's sorted levels in price order, never a
-hash, which is feature 22 (sorted price walk); `exchange_match` and
-`exchange_depth` both rely on this without re-sorting anything themselves.
 
 ## The contract is the order, not the storage
 
@@ -120,11 +113,14 @@ a book of 40 000 orders took 443 ms with the walk on every insert, and takes
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_id`, `exchange_level`, `exchange_side`, `exact_arith` |
 | [`src/lib.rs`](src/lib.rs) | `Book` (per instrument, a sorted `VecDeque` of levels per side) and `Resting` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
-| `docs/pitfall/` | The 2 "Book" pitfalls that are purely this crate's own storage choice and indexing |
+| `docs/pitfall/` | Hash order taken for price order; a worse level crossed first |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
-| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
+| `docs/item/` | Exposed surface, as built vs. proposed |
 | [`tests/priority_test.rs`](tests/priority_test.rs) | Test Matrix T02–T04 — priority from both sides, and cancel |
 
 ## Related
 
+- [`exchange_level/`](../exchange_level/readme.md) — one price's FIFO queue; `Resting` is its `LevelNode`
 - [`exchange_order/`](../exchange_order/readme.md) — the orders this book holds
+- [`exchange_match/`](../exchange_match/readme.md) — consumes the book from the front
+- [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p10_best`, `demo_p11_walk`
