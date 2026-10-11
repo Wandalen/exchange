@@ -823,6 +823,68 @@ fn a_settlement_naming_another_account_for_an_order_is_refused()
   assert_eq!( escrow.account( AccountId( 3 ) ).unwrap().asset.reserved(), qty( 4 ), "account 3's own order is untouched" );
 }
 
+/// A reservation stays releasable however close its account sits to the
+/// ceiling: what would carry a holding's total past it is refused where it
+/// arrives.
+///
+/// # Root Cause
+///
+/// `receive` checked `available + amount` alone. Proceeds or a top-up
+/// landing beside a reservation carried `available + reserved` past the
+/// ceiling; `release` then had no room to return the reservation, and
+/// `total` failed.
+///
+/// # Why Not Caught
+///
+/// The ceiling tests each moved one half of a holding; none held a
+/// reservation while the other half grew.
+///
+/// # Fix Applied
+///
+/// `receive` refuses an amount that would carry the holding's total past
+/// the ceiling. The other three edges never grow the total.
+///
+/// # Prevention
+///
+/// A bound on a sum is checked on the sum.
+///
+/// # Pitfall
+///
+/// Through `exchange_core` this was an order its owner could not cancel.
+#[ test ]
+fn a_reservation_stays_releasable_at_the_ceiling()
+{
+  let mut escrow = Escrow::new();
+  escrow.open( AccountId( 1 ), Money::MAX, qty( 10 ) ).unwrap();
+  escrow.open( AccountId( 2 ), money( "10" ), Quantity::ZERO ).unwrap();
+  let held = order( 1, 1, Side::Buy, "1", 1 );
+  let ask = order( 2, 1, Side::Sell, "1", 1 );
+  let bid = order( 3, 2, Side::Buy, "1", 1 );
+  escrow.reserve( &held ).unwrap();
+  escrow.reserve( &ask ).unwrap();
+  escrow.reserve( &bid ).unwrap();
+  let before = escrow.clone();
+
+  assert_eq!( escrow.open( AccountId( 1 ), money( "1" ), Quantity::ZERO ), Err( EscrowError::Arithmetic ), "a top-up" );
+  assert_eq!( escrow, before );
+
+  let trade = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert_eq!( escrow.settle( &trade, Side::Buy, bid.price ), Err( EscrowError::Arithmetic ), "the sale's proceeds" );
+  assert_eq!( escrow, before );
+
+  assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().cash.total(), Ok( Money::MAX ) );
+  assert_eq!( escrow.release( AccountId( 1 ), held.id ), Ok( Obligation::Cash( money( "1" ) ) ) );
+}
+
 /// A second `open` for an already-open account tops up `available` and
 /// leaves a live reservation exactly where it was — not zeroed out from
 /// under it.

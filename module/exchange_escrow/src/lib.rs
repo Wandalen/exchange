@@ -139,8 +139,9 @@ impl< T : Conserved > Holding< T >
   ///
   /// # Errors
   ///
-  /// [`EscrowError::Arithmetic`] if the sum does not fit, which can only
-  /// happen if the two sides were built by something other than this type.
+  /// [`EscrowError::Arithmetic`] if the sum does not fit, which no sequence
+  /// of edges reaches: `receive` keeps it within the ceiling, and the other
+  /// three never grow it.
   pub fn total( &self ) -> Result< T, EscrowError >
   {
     self.available.checked_plus( self.reserved ).ok_or( EscrowError::Arithmetic )
@@ -209,10 +210,19 @@ impl< T : Conserved > Holding< T >
     Ok( () )
   }
 
-  /// Add `amount` to available — it arrived from a counterparty.
+  /// Add `amount` to available — it arrived from a counterparty or a
+  /// deposit. Refused if the holding's total would pass the ceiling.
+  ///
+  /// Fix(a_holding_past_the_ceiling_could_not_release_its_reservation):
+  /// Root cause: only `available + amount` was checked. Proceeds or a top-up
+  /// landing beside a reservation carried `available + reserved` past the
+  /// ceiling, and from then on `release` could not return the reservation —
+  /// a resting order nobody could cancel — and `total` failed.
+  /// Pitfall: each half fitting is not the sum fitting.
   fn receive( &mut self, amount : T ) -> Result< (), EscrowError >
   {
     Self::movement( amount )?;
+    self.total()?.checked_plus( amount ).ok_or( EscrowError::Arithmetic )?;
     self.available = self.available.checked_plus( amount ).ok_or( EscrowError::Arithmetic )?;
     Ok( () )
   }
@@ -368,8 +378,8 @@ impl Escrow
   ///
   /// # Errors
   ///
-  /// [`EscrowError::Arithmetic`] if adding to an existing balance overflows
-  /// either side. [`EscrowError::NegativeAmount`] if `cash` is negative.
+  /// [`EscrowError::Arithmetic`] if either holding's total would pass the
+  /// ceiling. [`EscrowError::NegativeAmount`] if `cash` is negative.
   ///
   /// Fix(open_wiped_reserved_out_from_under_a_live_reservation): Root cause:
   /// `open` always ran `self.accounts.insert(id, Account { cash :

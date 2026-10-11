@@ -998,11 +998,11 @@ impl< E : EscrowPort > Exchange< E >
   /// Fix(a_cancel_removed_the_order_before_the_release_could_fail):
   /// Root cause: `book.cancel` is infallible once an order is found — it
   /// removes and returns it unconditionally — while the `escrow.release`
-  /// that followed it could still fail, most reachably with
-  /// `EscrowError::Arithmetic` when the account's `available` balance sits
-  /// close enough to the declared ceiling that crediting the reservation
-  /// back would breach it. On that failure the function returned `Err`, but
-  /// the order was already gone from the book: not filled, not cancelled,
+  /// that followed it could still fail: with `EscrowError::Arithmetic`, back
+  /// when `Escrow` let an account's total pass the ceiling, and with
+  /// whatever another [`EscrowPort`] refuses. On that failure the function
+  /// returned `Err`, but the order was already gone from the book: not
+  /// filled, not cancelled,
   /// not resting, unreachable by any public API and permanently stuck with
   /// its reservation. The same commit-before-validate shape already fixed
   /// once in `Escrow::release` itself, one level up the call stack.
@@ -1133,9 +1133,9 @@ impl< E : EscrowPort > Exchange< E >
       EscrowError::UnknownAccount( _ ) => RejectReason::UnknownAccount,
       EscrowError::Obligation( _ ) => RejectReason::ObligationUnrepresentable,
       // The account's funds were genuinely sufficient; a fixed-point ceiling
-      // was not — whether at reservation time, or when a trade's own
-      // proceeds would themselves breach one during the dry-run `settle`
-      // this function's own doc comment describes.
+      // was not. With `exchange_escrow::Escrow` that is a trade's proceeds
+      // carrying an account past it in the dry-run `settle`: escrow keeps a
+      // holding's total within the ceiling, so `reserve` never refuses on it.
       EscrowError::Arithmetic => RejectReason::ReservationUnrepresentable,
       // `AlreadyReserved` and `Obligation` stay reserve-only regardless of
       // this function's now-wider callers: the order id is freshly claimed
