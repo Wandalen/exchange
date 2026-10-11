@@ -244,6 +244,8 @@ pub enum EscrowError
   /// This order already holds a reservation. Reserving twice for one order
   /// would leave the first one unreachable and therefore permanently locked.
   AlreadyReserved( OrderId ),
+  /// This order's reservation belongs to another account than the one named.
+  NotOwner( OrderId ),
   /// A reservation of the wrong shape for what is being settled — cash where
   /// the asset was expected, or the reverse.
   ObligationMismatch,
@@ -274,6 +276,7 @@ impl core::fmt::Display for EscrowError
       Self::NotReserved => write!( f, "the amount named is more than was reserved" ),
       Self::NoReservation( id ) => write!( f, "order {} holds no reservation", id.0 ),
       Self::AlreadyReserved( id ) => write!( f, "order {} already holds a reservation", id.0 ),
+      Self::NotOwner( id ) => write!( f, "order {} is reserved by another account", id.0 ),
       Self::ObligationMismatch => write!( f, "the reservation is not of the shape this settlement needs" ),
       Self::NegativeAmount => write!( f, "a negative amount is not something an account can move" ),
       Self::Arithmetic => write!( f, "a value step did not fit its type" ),
@@ -301,7 +304,8 @@ impl core::error::Error for EscrowError
     {
       Self::Obligation( error ) => Some( error ),
       Self::UnknownAccount( _ ) | Self::Insufficient | Self::NotReserved | Self::NoReservation( _ )
-      | Self::AlreadyReserved( _ ) | Self::ObligationMismatch | Self::NegativeAmount | Self::Arithmetic => None,
+      | Self::AlreadyReserved( _ ) | Self::NotOwner( _ ) | Self::ObligationMismatch | Self::NegativeAmount
+      | Self::Arithmetic => None,
     }
   }
 }
@@ -314,8 +318,8 @@ impl From< TypeError > for EscrowError
   }
 }
 
-/// One live reservation: what it still holds, and how much of its order is
-/// still unfilled.
+/// One live reservation: whose it is, what it still holds, and how much of its
+/// order is still unfilled.
 ///
 /// The entry lives until both reach zero. A buy at price zero holds
 /// `Cash( 0 )` from the start, so the amount alone cannot say when the order
@@ -323,6 +327,7 @@ impl From< TypeError > for EscrowError
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 struct Reservation
 {
+  account : AccountId,
   obligation : Obligation,
   unfilled : Quantity,
 }
@@ -479,7 +484,7 @@ impl Escrow
       Obligation::Asset( quantity ) => account.asset.reserve( quantity )?,
     }
 
-    self.reservations.insert( order.id, Reservation { obligation, unfilled : order.quantity } );
+    self.reservations.insert( order.id, Reservation { account : order.account, obligation, unfilled : order.quantity } );
     Ok( obligation )
   }
 
@@ -491,38 +496,38 @@ impl Escrow
   /// is economically a deletion and which nothing on the fill path can
   /// discover.
   ///
-  /// The ledger entry is removed only once the account-level move has already
-  /// succeeded — never before. `Escrow` is public and `owner` is supplied by
-  /// the caller rather than derived from `order` itself, so a caller error
-  /// naming the wrong account must fail without destroying the *correct*
-  /// account's reservation record on its way to failing.
+  /// `owner` must be the account that reserved `order`. The ledger entry is
+  /// removed only once the account-level move has succeeded.
+  ///
+  /// Fix(a_release_naming_another_account_drained_its_reserve):
+  /// Root cause: a reservation did not record its owner, so `release` moved
+  /// the amount out of whichever account was named. One holding enough
+  /// `reserved` of its own absorbed it: the true owner's funds stayed locked
+  /// with no entry left to release them, and the named account's own order
+  /// could no longer settle or cancel.
+  /// Pitfall: the fix below made a wrong account fail only when it held too
+  /// little to absorb the move.
   ///
   /// Fix(a_release_deleted_the_ledger_entry_before_the_account_move_could_fail):
-  /// Root cause: the ledger entry was removed via `self.reservations.remove`
-  /// as the first statement, unconditionally — a `BTreeMap::remove` mutates
-  /// on the `Some` path regardless of what the rest of the function goes on
-  /// to do. Every following step could still fail (`UnknownAccount`, or the
-  /// account-level `Holding::release` itself), and on any of those failures
-  /// the function returned `Err` with the entry already gone: the true
-  /// owner's reservation was orphaned — nothing else ever reads or re-derives
-  /// it — and if the wrongly-named account happened to exist with enough of
-  /// its *own*, unrelated `reserved` pool to absorb the move, that account's
-  /// partition was silently corrupted too, with no error at all.
-  ///
-  /// Pitfall: an early, unconditional mutation of a lookup structure — a
-  /// `remove` used where a `get` would do — is invisible in a diff and in a
-  /// short function; only tracing which of the following lines can still
-  /// return `Err` reveals that the removal already happened by then.
+  /// Root cause: the entry was removed first, so a release that then failed
+  /// returned `Err` with the reservation already orphaned.
+  /// Pitfall: a `remove` where a `get` would do mutates whether or not the
+  /// rest of the function succeeds.
   ///
   /// # Errors
   ///
   /// [`EscrowError::NoReservation`] if `order` holds none,
-  /// [`EscrowError::UnknownAccount`] if its owner is gone. On either error, or
-  /// on the account-level move itself failing, the reservation is left
-  /// exactly as it was.
+  /// [`EscrowError::NotOwner`] if `owner` did not reserve it,
+  /// [`EscrowError::UnknownAccount`] if its owner is gone. On any error the
+  /// reservation and every account are left exactly as they were.
   pub fn release( &mut self, owner : AccountId, order : OrderId ) -> Result< Obligation, EscrowError >
   {
-    let obligation = self.reservations.get( &order ).ok_or( EscrowError::NoReservation( order ) )?.obligation;
+    let reservation = self.reservations.get( &order ).ok_or( EscrowError::NoReservation( order ) )?;
+    if reservation.account != owner
+    {
+      return Err( EscrowError::NotOwner( order ) );
+    }
+    let obligation = reservation.obligation;
     let account = self.accounts.get_mut( &owner ).ok_or( EscrowError::UnknownAccount( owner ) )?;
 
     match obligation
@@ -555,8 +560,9 @@ impl Escrow
   ///
   /// # Errors
   ///
-  /// [`EscrowError`] if either party is unknown, holds no reservation, or
-  /// holds one of the wrong shape. On any error, neither account and neither
+  /// [`EscrowError`] if either party is unknown, holds no reservation, holds
+  /// one of the wrong shape, or is not the account that reserved it
+  /// ([`EscrowError::NotOwner`]). On any error, neither account and neither
   /// reservation is changed.
   pub fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >
   {
@@ -599,6 +605,7 @@ impl Escrow
     (
       self.reservations.get( &trade.taker ).copied(),
       trade.taker,
+      trade.taker_account,
       taker_side,
       reserved_for_this_fill,
       trade.quantity,
@@ -607,6 +614,7 @@ impl Escrow
     (
       self.reservations.get( &trade.maker ).copied(),
       trade.maker,
+      trade.maker_account,
       taker_side.opposite(),
       paid,
       trade.quantity,
@@ -681,6 +689,7 @@ impl Escrow
   /// # Errors
   ///
   /// [`EscrowError::NoReservation`] if `order` holds none,
+  /// [`EscrowError::NotOwner`] if `owner` did not reserve it,
   /// [`EscrowError::ObligationMismatch`] if the stored shape does not match
   /// `side`, [`EscrowError::NotReserved`] if the amount or quantity named
   /// exceeds what remains.
@@ -688,12 +697,17 @@ impl Escrow
   (
     current : Option< Reservation >,
     order : OrderId,
+    owner : AccountId,
     side : Side,
     cash_spent : Money,
     asset_delivered : Quantity,
   ) -> Result< Option< Reservation >, EscrowError >
   {
     let reservation = current.ok_or( EscrowError::NoReservation( order ) )?;
+    if reservation.account != owner
+    {
+      return Err( EscrowError::NotOwner( order ) );
+    }
 
     let ( obligation, drained ) = match ( side, reservation.obligation )
     {
@@ -711,7 +725,7 @@ impl Escrow
     };
     let unfilled = reservation.unfilled.checked_minus( asset_delivered ).ok_or( EscrowError::NotReserved )?;
 
-    Ok( if drained && unfilled == Quantity::ZERO { None } else { Some( Reservation { obligation, unfilled } ) } )
+    Ok( if drained && unfilled == Quantity::ZERO { None } else { Some( Reservation { obligation, unfilled, ..reservation } ) } )
   }
 
   /// Write a previously-computed reservation update, dropping the record

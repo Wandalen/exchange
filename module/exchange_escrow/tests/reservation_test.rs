@@ -664,8 +664,7 @@ fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
 
 /// A release naming the wrong account for an order fails without deleting
 /// that order's reservation record — even though the wrong-but-real account
-/// exists and its own lookup succeeds; only its own, unrelated balance turns
-/// out not to cover the amount.
+/// exists and its own lookup succeeds.
 ///
 /// # Root Cause
 ///
@@ -701,11 +700,11 @@ fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
 ///
 /// # Pitfall
 ///
-/// The account-level failure here is `NotReserved`, not `UnknownAccount` — the
-/// wrong account is perfectly real, just uninvolved with this order. A fix
-/// that only special-cased an unknown account would miss this path entirely,
-/// since `self.accounts.get_mut(&owner)` succeeds right up until the
-/// `Holding::release` call after it.
+/// The wrong account is perfectly real, just uninvolved with this order, so
+/// a fix that only special-cased an unknown account would miss this path.
+/// The failure was `NotReserved`, from the account-level move, until the
+/// reservation recorded its owner; it is `NotOwner` now, before anything
+/// moves — see `a_release_naming_another_account_that_holds_enough_is_refused`.
 #[ test ]
 fn a_release_naming_the_wrong_account_leaves_the_reservation_intact()
 {
@@ -715,12 +714,11 @@ fn a_release_naming_the_wrong_account_leaves_the_reservation_intact()
 
   let account_2_before = *escrow.account( AccountId( 2 ) ).unwrap();
 
-  // Account 2 is real, but holds no reservation of its own — the account
-  // lookup succeeds, and only the account-level `release` itself fails.
+  // Account 2 is real, but did not reserve order 1.
   assert_eq!
   (
     escrow.release( AccountId( 2 ), OrderId( 1 ) ),
-    Err( EscrowError::NotReserved ),
+    Err( EscrowError::NotOwner( OrderId( 1 ) ) ),
     "account 2 exists but never reserved anything for order 1",
   );
 
@@ -739,6 +737,90 @@ fn a_release_naming_the_wrong_account_leaves_the_reservation_intact()
   assert_eq!( released, Obligation::Cash( money( "25" ) ) );
   assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().cash.available(), money( "1000" ), "correctly released afterwards" );
   assert_eq!( escrow.reservation_count(), 0 );
+}
+
+/// A release naming another account is refused even when that account holds
+/// enough `reserved` of its own to absorb the move.
+///
+/// # Root Cause
+///
+/// A reservation did not record its owner, so `release` moved the amount out
+/// of whichever account was named. With account 2 holding 25 reserved for its
+/// own order, releasing account 1's order as account 2 succeeded: account 1's
+/// 25 stayed locked with no entry left to release it, and account 2's own
+/// order could no longer be released.
+///
+/// # Why Not Caught
+///
+/// The wrong-account test above named an account with nothing reserved, so
+/// the account-level move failed and hid the missing check.
+///
+/// # Fix Applied
+///
+/// `reserve` records the order's account; `release` and `settle` refuse any
+/// other with `EscrowError::NotOwner` before anything moves.
+///
+/// # Prevention
+///
+/// A ledger keyed by order must know whose order it is; a caller-supplied
+/// owner is a claim to check, not a fact.
+///
+/// # Pitfall
+///
+/// Both accounts' totals stayed right through the bad release; only the
+/// split between `available` and `reserved` went wrong.
+#[ test ]
+fn a_release_naming_another_account_that_holds_enough_is_refused()
+{
+  let mut escrow = two_sided();
+  escrow.reserve( &order( 1, 1, Side::Buy, "2.50", 10 ) ).unwrap();
+  escrow.reserve( &order( 2, 2, Side::Buy, "2.50", 10 ) ).unwrap();
+  let before = escrow.clone();
+
+  assert_eq!( escrow.release( AccountId( 2 ), OrderId( 1 ) ), Err( EscrowError::NotOwner( OrderId( 1 ) ) ) );
+  assert_eq!( escrow, before, "nothing moved" );
+
+  assert_eq!( escrow.release( AccountId( 1 ), OrderId( 1 ) ), Ok( Obligation::Cash( money( "25" ) ) ) );
+  assert_eq!( escrow.release( AccountId( 2 ), OrderId( 2 ) ), Ok( Obligation::Cash( money( "25" ) ) ) );
+  assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().cash.available(), money( "1000" ) );
+  assert_eq!( escrow.account( AccountId( 2 ) ).unwrap().cash.available(), money( "1000" ) );
+}
+
+/// A settlement whose trade names the wrong account for an order is refused,
+/// even when the named account holds enough to deliver.
+///
+/// Account 3 sells 4 of its own; the trade names account 3 as the maker of
+/// account 1's order. Without the owner check, account 3 delivered, account
+/// 1's reservation was discharged, and account 1's asset stayed locked.
+#[ test ]
+fn a_settlement_naming_another_account_for_an_order_is_refused()
+{
+  let mut escrow = two_sided();
+  escrow.open( AccountId( 3 ), money( "1000" ), qty( 100 ) ).unwrap();
+  let seller = order( 1, 1, Side::Sell, "2.50", 4 );
+  let buyer = order( 2, 2, Side::Buy, "2.50", 4 );
+  escrow.reserve( &seller ).unwrap();
+  escrow.reserve( &buyer ).unwrap();
+  escrow.reserve( &order( 3, 3, Side::Sell, "2.50", 4 ) ).unwrap();
+  let before = escrow.clone();
+
+  let trade = Trade
+  {
+    taker : buyer.id,
+    taker_account : buyer.account,
+    taker_side : Side::Buy,
+    maker : seller.id,
+    maker_account : AccountId( 3 ),
+    price : price( "2.50" ),
+    quantity : qty( 4 ),
+  };
+  assert_eq!( escrow.settle( &trade, Side::Buy, buyer.price ), Err( EscrowError::NotOwner( seller.id ) ) );
+  assert_eq!( escrow, before, "nothing moved" );
+
+  let trade = Trade { maker_account : seller.account, ..trade };
+  escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
+  assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().asset.reserved(), Quantity::ZERO );
+  assert_eq!( escrow.account( AccountId( 3 ) ).unwrap().asset.reserved(), qty( 4 ), "account 3's own order is untouched" );
 }
 
 /// A second `open` for an already-open account tops up `available` and

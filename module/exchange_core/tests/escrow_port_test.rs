@@ -155,6 +155,7 @@ fn every_reserve_failure_maps_to_its_reject_reason()
     ( EscrowError::NotReserved, RejectReason::InsufficientFunds ),
     ( EscrowError::NoReservation( OrderId( 0 ) ), RejectReason::InsufficientFunds ),
     ( EscrowError::AlreadyReserved( OrderId( 0 ) ), RejectReason::InsufficientFunds ),
+    ( EscrowError::NotOwner( OrderId( 0 ) ), RejectReason::InsufficientFunds ),
     ( EscrowError::ObligationMismatch, RejectReason::InsufficientFunds ),
     ( EscrowError::NegativeAmount, RejectReason::InsufficientFunds ),
   ];

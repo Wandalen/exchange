@@ -1153,6 +1153,8 @@ impl< E : EscrowPort > Exchange< E >
       // next trade or cancellation for that same order is ever considered,
       // so a later self-match release always finds a still-live,
       // correctly-shaped reservation for whatever `settle` left behind.
+      // `NotOwner` is foreclosed too: every account named comes from the
+      // order or the resting order it traded with.
       // Reported as insufficient funds rather than given a reason variant of
       // its own, because a reason no code path produces through this
       // function is a claim the code does not back.
@@ -1160,6 +1162,7 @@ impl< E : EscrowPort > Exchange< E >
       | EscrowError::NotReserved
       | EscrowError::NoReservation( _ )
       | EscrowError::AlreadyReserved( _ )
+      | EscrowError::NotOwner( _ )
       | EscrowError::ObligationMismatch
       | EscrowError::NegativeAmount => RejectReason::InsufficientFunds,
     }
