@@ -32,3 +32,5 @@ checked out next to this repo, at the revisions `.github/workflows/ci.yml` pins.
 - **`package_info`**: nothing here reads it yet.
 - **Per-crate `module/<crate>/verb/` wrappers and `_crate_dispatch`**: `verb/test_only crate::<name>`
   and `verb/lint crate::<name>` already narrow to one crate.
+- **A shared argument-parsing helper**: each verb parses its own `key::val` parameters, as in `ring`.
+  Standalone scripts stay diffable against `../ring/verb/`, which is how drift is caught.
