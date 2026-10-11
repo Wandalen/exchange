@@ -122,9 +122,9 @@ verb/test                            # full suite, every crate. Final verificati
 verb/test_only crate::exchange_book  # filtered to one crate. Ordinary development
 ```
 
-CI runs `verb/test` levels 1-3 and `verb/doc` on every push and pull request — see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml). [`verb/readme.md`](verb/readme.md)
-lists every verb and what each needs installed.
+CI runs the same cargo commands as `verb/test` levels 1-3 and `verb/doc` on every push
+and pull request — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+[`verb/readme.md`](verb/readme.md) lists every verb and what each needs installed.
 
 ## Provenance
 
