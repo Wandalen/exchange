@@ -262,6 +262,27 @@ fn books_with_the_same_orders_are_equal_whatever_their_history()
   assert_eq!( churned, fresh );
 }
 
+/// An instrument whose last order left compares as one nothing ever rested
+/// on — whether the order was cancelled or consumed.
+///
+/// An emptied instrument keeps its slot, and equality compared the slots, so
+/// a book back to empty was not equal to a new one.
+#[ test ]
+fn an_emptied_instrument_leaves_no_trace_in_equality()
+{
+  let other = InstrumentId( 2 );
+
+  let mut cancelled = Book::new();
+  assert!( cancelled.insert( rest_on( other, 1, Side::Buy, "2.00", 5, 10 ) ) );
+  assert!( cancelled.cancel( other, OrderId( 1 ) ).is_some() );
+  assert_eq!( cancelled, Book::new() );
+
+  let mut consumed = Book::new();
+  assert!( consumed.insert( rest_on( other, 1, Side::Sell, "2.00", 5, 10 ) ) );
+  assert!( consumed.consume_best( other, Side::Sell, Quantity::from_int( 5 ).unwrap() ) );
+  assert_eq!( consumed, Book::new() );
+}
+
 /// Root Cause: `Book::insert` placed every `Resting` handed to it with no
 /// check that `remaining` was above zero, even though `Resting::remaining`'s
 /// own doc comment states the invariant "always greater than zero — a

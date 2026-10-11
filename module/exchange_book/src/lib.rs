@@ -63,13 +63,19 @@ pub struct Book
   id_high : Option< OrderId >,
 }
 
-/// Equal when the same orders rest the same way; `id_high` is a cache of
-/// past inserts, not part of what rests.
+/// Equal when the same orders rest the same way. `id_high` is a cache of
+/// past inserts, and an emptied instrument's slot a leftover of them; neither
+/// is part of what rests.
+//
+// Fix(an_emptied_instrument_made_two_equal_books_unequal):
+// Root cause: a slot outlives its instrument's last order, and `eq` compared
+// the slots, so a book cancelled back to empty differed from `Book::new()`.
+// Pitfall: excluding `id_high` covered one leftover of history, not all.
 impl PartialEq for Book
 {
   fn eq( &self, other : &Self ) -> bool
   {
-    self.per_instrument == other.per_instrument
+    self.live().eq( other.live() )
   }
 }
 
@@ -341,6 +347,12 @@ impl Book
     self.side( instrument, Side::Buy ).chain( self.side( instrument, Side::Sell ) )
       .filter( | resting | resting.order.account == account )
       .count()
+  }
+
+  /// Every instrument slot with an order resting.
+  fn live( &self ) -> impl Iterator< Item = &( InstrumentId, InstrumentBook ) >
+  {
+    self.per_instrument.iter().filter( | ( _, book ) | !book.bids.is_empty() || !book.asks.is_empty() )
   }
 
   /// `instrument`'s own levels on `side`, or no levels if nothing has ever
