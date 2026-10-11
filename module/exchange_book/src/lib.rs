@@ -11,8 +11,9 @@
 //!
 //! Arrival is an `exchange_seq::Sequence` the caller claims, never a clock
 //! reading: two orders placed in the same instant still get distinct
-//! positions, and a replay reproduces them. Nothing here iterates a hash or
-//! compares addresses.
+//! positions, and a replay reproduces them. Should two share an arrival, the
+//! one inserted first stays ahead. Nothing here iterates a hash or compares
+//! addresses.
 //!
 //! # One book per instrument
 //!
@@ -129,8 +130,14 @@ impl Book
       // Not `level_push`, which appends: callers may insert out of arrival
       // order (`t02_time_priority_within_one_price_level`), so the node goes
       // to its arrival's position.
+      //
+      // Fix(an_insert_sharing_an_arrival_jumped_the_queue):
+      // Root cause: the position was found with `<`, which lands before
+      // every node of equal arrival, so ties came out newest first.
+      // Pitfall: the one caller that claims arrivals itself never ties;
+      // `exchange_inbound::inbound_apply` rests whatever its producer stamped.
       let nodes = &mut levels[ at ].nodes;
-      let node_at = nodes.partition_point( | node | node.arrival < resting.arrival );
+      let node_at = nodes.partition_point( | node | node.arrival <= resting.arrival );
       nodes.insert( node_at, resting );
     }
     else

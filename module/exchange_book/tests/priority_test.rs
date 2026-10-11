@@ -65,6 +65,21 @@ fn t02_time_priority_within_one_price_level()
   assert_eq!( ids( &book, Side::Buy ), vec![ 1, 2, 3 ], "earliest arrival first, whatever the insertion order" );
 }
 
+/// Orders sharing an arrival keep the order they were inserted in.
+///
+/// `exchange_inbound::inbound_apply` rests whatever arrival its producer
+/// stamped, so two can match. A later insert must not jump the queue.
+#[ test ]
+fn orders_sharing_an_arrival_keep_insertion_order()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Sell, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 2, Side::Sell, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 3, Side::Sell, "2.50", 5, 10 ) ) );
+
+  assert_eq!( ids( &book, Side::Sell ), vec![ 1, 2, 3 ], "first inserted first" );
+}
+
 /// T03 — a better price rests ahead, whenever it arrived.
 ///
 /// For bids "better" means higher, and the newest order here is also the most

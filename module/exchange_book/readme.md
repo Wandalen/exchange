@@ -58,7 +58,7 @@ So every test in [`tests/priority_test.rs`](tests/priority_test.rs) reads
 `exchange_side::side_ahead`, that `insert` calls and the tests re-derive:
 
 - better price first — higher for bids, lower for asks;
-- at one price, earlier arrival first.
+- at one price, earlier arrival first; equal arrivals in insertion order.
 
 Price outranks arrival. The two rules only disagree when a later order is priced
 better, and an implementation sorting by `( arrival, price )` passes both
