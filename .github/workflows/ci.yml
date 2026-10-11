@@ -1,9 +1,9 @@
 # Fast verification — master pushes and PRs.
 #
 # Mirrors `Wandalen/exact`'s own CI structure (itself mirroring `Wandalen/ring`)
-# and this project's CLAUDE.md Level 1-3 verification commands (nextest, doctests,
-# clippy). Deliberately has no fmt job: CLAUDE.md forbids `cargo fmt` for this
-# project's custom codestyle.
+# and runs the same cargo commands as `verb/test` levels 1-3 and `verb/doc`,
+# called directly as in ring's CI. Deliberately has no fmt job: CLAUDE.md
+# forbids `cargo fmt` for this project's custom codestyle.
 
 name: CI
 
