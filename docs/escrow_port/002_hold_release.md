@@ -7,7 +7,9 @@
 - **In Scope**: Cancel, IOC leftover, and FOK reject — every path that ends a hold without a fill.
 - **Out of Scope**: Converting a hold into a settled transfer — that is `hold_commit`'s job.
 
-**Design status**: Named differently in the real build — `exchange_escrow::Escrow` (`module/exchange_escrow/src/lib.rs`) exposes `release()`, matching this operation's intent closely by name as well as behavior.
+**Design status**: Built as `exchange_core::EscrowPort::release`, which
+`exchange_escrow::Escrow` implements; it also names the order's owner, and
+refuses any other account.
 
 ### Statement
 

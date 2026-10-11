@@ -2,11 +2,9 @@
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_book`'s
 own per-instrument storage) and now lives at
-[`../../module/exchange_book/readme.md`](../../module/exchange_book/readme.md)'s
-"Closes hard problem 1, and features 6 and 22" section. (The central Design
-status this entry used to carry — "Not addressed... the real book is
-implicitly single-instrument" — is stale: `exchange_book::Book` now keys
-every side by `InstrumentId`, and `exchange_order::Order` now carries one.)
+[`../../module/exchange_book/readme.md`](../../module/exchange_book/readme.md):
+`Book` keys every side by `InstrumentId`, which `exchange_order::Order`
+carries.
 
 ### Sources
 

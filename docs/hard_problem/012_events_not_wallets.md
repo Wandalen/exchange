@@ -2,8 +2,7 @@
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_event`'s
 own `event_drain`) and now lives at
-[`../../module/exchange_event/readme.md`](../../module/exchange_event/readme.md)'s
-"Closes hard problem 12 and feature 26" section.
+[`../../module/exchange_event/readme.md`](../../module/exchange_event/readme.md).
 
 ### Sources
 

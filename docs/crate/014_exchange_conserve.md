@@ -7,13 +7,12 @@
 - **In Scope**: The assertion itself.
 - **Out of Scope**: Walking the book — this crate does not do that.
 
-**Design status**: Built, as its own crate — `conserve_assert` matches the
-proposal's own function name; the proposed `fill_legs_sum` was dropped for
-`exact_arith::money_sum_assert_zero`, which does the same sum (its `ConserveError` has 3 variants
-rather than the proposed 2; see the crate's own item doc). Full writeup
-moved to [`../../module/exchange_conserve/readme.md`](../../module/exchange_conserve/readme.md),
+**Design status**: Built — `conserve_assert`, called by
+`exchange_match::cross` on every batch. `fill_legs_sum` is not built:
+`exact_arith::money_sum_assert_zero` does the sum. `ConserveError` has three
+variants. Built-vs-proposed comparison:
 [`../../module/exchange_conserve/docs/item/readme.md`](../../module/exchange_conserve/docs/item/readme.md).
-"Workstream 006's types" above resolves to `exact_arith` directly (006's
+"Workstream 006's types" below resolves to `exact_arith` directly (006's
 facade; proposed leaves were `exact_conserve`, `exact_kind`) — see
 `../neighbor_contract/001_006_supplies_money_qty_price.md`'s per-crate table.
 

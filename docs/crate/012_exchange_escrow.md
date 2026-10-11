@@ -7,7 +7,12 @@
 - **In Scope**: The port itself. No balances — workstream 010 implements the port.
 - **Out of Scope**: Balances.
 
-**Design status**: Built as the real `exchange_escrow` crate, but scope-expanded: it holds real `Account` balances (`open()`, `total_cash()`, `total_asset()`) rather than being a thin port workstream 010 implements, and its methods are named `reserve()`/`release()`/`settle()` rather than the proposed `hold_try`/`hold_release`/`hold_commit`.
+**Design status**: Built, scope-expanded: `Escrow` holds real `Account`
+balances (`open`, `total_cash`, `total_asset`) rather than leaving them to
+workstream 010, and names its methods `reserve`/`release`/`settle`. The port
+is `exchange_core::EscrowPort`, which `Escrow` implements. Built-vs-proposed
+comparison:
+[`../../module/exchange_escrow/docs/item/readme.md`](../../module/exchange_escrow/docs/item/readme.md).
 Also depends directly on `exact_arith` (006's facade; proposed leaf was
 `exact_kind`) — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s
 per-crate table.
