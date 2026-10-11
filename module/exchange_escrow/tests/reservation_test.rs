@@ -230,6 +230,43 @@ fn t09_a_fill_settles_and_leaves_nothing_reserved()
   assert_eq!( escrow.reservation_count(), 0, "both reservations are discharged" );
 }
 
+/// A hold resolves once: a fill that discharged it cannot be cancelled, and a
+/// cancelled one cannot be filled. Nothing moves on the second attempt.
+#[ test ]
+fn a_hold_resolves_once()
+{
+  let mut escrow = two_sided();
+  let seller = order( 1, 1, Side::Sell, "2.50", 4 );
+  let buyer = order( 2, 2, Side::Buy, "2.50", 4 );
+  escrow.reserve( &seller ).unwrap();
+  escrow.reserve( &buyer ).unwrap();
+  let trade = Trade
+  {
+    taker : buyer.id,
+    taker_account : buyer.account,
+    taker_side : Side::Buy,
+    maker : seller.id,
+    maker_account : seller.account,
+    price : price( "2.50" ),
+    quantity : qty( 4 ),
+  };
+
+  escrow.settle( &trade ).unwrap();
+  let settled = escrow.clone();
+  assert_eq!( escrow.release( buyer.account, buyer.id ), Err( EscrowError::NoReservation( buyer.id ) ), "settled, then released" );
+  assert_eq!( escrow.settle( &trade ), Err( EscrowError::NoReservation( buyer.id ) ), "settled twice" );
+  assert_eq!( escrow, settled );
+
+  let mut escrow = two_sided();
+  escrow.reserve( &seller ).unwrap();
+  escrow.reserve( &buyer ).unwrap();
+  escrow.release( buyer.account, buyer.id ).unwrap();
+  let released = escrow.clone();
+  assert_eq!( escrow.settle( &trade ), Err( EscrowError::NoReservation( buyer.id ) ), "released, then settled" );
+  assert_eq!( escrow.release( buyer.account, buyer.id ), Err( EscrowError::NoReservation( buyer.id ) ), "released twice" );
+  assert_eq!( escrow, released );
+}
+
 /// A buyer who executes better than its limit gets the difference back.
 ///
 /// The buyer reserved at 3.00 and executed at 2.50, so 4 units cost 10 rather
