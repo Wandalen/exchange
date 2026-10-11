@@ -328,8 +328,8 @@ impl From< TypeError > for EscrowError
   }
 }
 
-/// One live reservation: whose it is, what it still holds, and how much of its
-/// order is still unfilled.
+/// One live reservation: whose it is, the limit it was reserved at, what it
+/// still holds, and how much of its order is still unfilled.
 ///
 /// The entry lives until both reach zero. A buy at price zero holds
 /// `Cash( 0 )` from the start, so the amount alone cannot say when the order
@@ -338,6 +338,7 @@ impl From< TypeError > for EscrowError
 struct Reservation
 {
   account : AccountId,
+  limit : Price,
   obligation : Obligation,
   unfilled : Quantity,
 }
@@ -494,7 +495,7 @@ impl Escrow
       Obligation::Asset( quantity ) => account.asset.reserve( quantity )?,
     }
 
-    self.reservations.insert( order.id, Reservation { account : order.account, obligation, unfilled : order.quantity } );
+    self.reservations.insert( order.id, Reservation { account : order.account, limit : order.price, obligation, unfilled : order.quantity } );
     Ok( obligation )
   }
 
@@ -553,40 +554,73 @@ impl Escrow
   /// Move the units `trade` names between its two parties, drawing from their
   /// reservations.
   ///
-  /// `taker_side` says which side aggressed, and `taker_limit` is the price
-  /// the aggressor reserved at. The two are needed together for one reason:
-  /// **a buyer reserves at its own limit and may execute better**, and the
-  /// difference has to go back. Reserving the maximum is what makes the order
-  /// executable; returning the unused part is what stops the exchange
-  /// quietly accumulating the spread.
+  /// **A buyer reserves at its own limit and may execute better**, and the
+  /// difference goes back to it. The limit is the one the buyer's
+  /// reservation recorded: a taker's improvement is returned, a maker
+  /// executing at its own price has none. Reserving the maximum is what makes
+  /// the order executable; returning the unused part is what stops the
+  /// exchange quietly accumulating the spread.
   ///
   /// Every step below runs against local copies of the two accounts and the
-  /// two reservations before anything is written back into `self`. `Account`
-  /// and `Obligation` are both `Copy`, so this costs nothing beyond the copy
-  /// itself, and it is what stops a fallible step late in the sequence — an
-  /// asset holding already at its representable ceiling, say — from leaving
-  /// one party already paid out of a trade that, as a whole, never happened.
-  /// See this function's own regression test.
+  /// two reservations before anything is written back into `self`, so a
+  /// fallible step late in the sequence — an asset holding already at its
+  /// representable ceiling, say — cannot leave one party already paid out of
+  /// a trade that, as a whole, never happened.
+  ///
+  /// Fix(settle_trusted_the_callers_side_and_limit):
+  /// Root cause: the taker's side and limit were arguments, and a buying
+  /// maker's limit was taken to be the trade price. A limit above the one
+  /// reserved returned more than the fill freed, leaving the rest of the
+  /// order under-backed; one below left a filled order's entry behind; a
+  /// maker charged above its limit paid from what backed its remainder.
+  /// Pitfall: an argument restating what the ledger already recorded is a
+  /// second source of truth, and the two only disagree when a caller is
+  /// wrong.
   ///
   /// # Errors
   ///
   /// [`EscrowError`] if either party is unknown, holds no reservation, holds
   /// one of the wrong shape, or is not the account that reserved it
-  /// ([`EscrowError::NotOwner`]). On any error, neither account and neither
-  /// reservation is changed.
-  pub fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >
+  /// ([`EscrowError::NotOwner`]); [`EscrowError::NotReserved`] if the trade's
+  /// price is above the buyer's limit. On any error, neither account and
+  /// neither reservation is changed.
+  pub fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
-    let ( buyer, seller, buyer_limit ) = match taker_side
+    let ( buyer_order, buyer, seller ) = match trade.taker_side
     {
-      Side::Buy => ( trade.taker_account, trade.maker_account, taker_limit ),
-      // The maker is the buyer, and a maker always executes at its own price,
-      // so there is nothing to give back.
-      Side::Sell => ( trade.maker_account, trade.taker_account, trade.price ),
+      Side::Buy => ( trade.taker, trade.taker_account, trade.maker_account ),
+      Side::Sell => ( trade.maker, trade.maker_account, trade.taker_account ),
     };
+    let buyer_limit = self.reservations.get( &buyer_order ).ok_or( EscrowError::NoReservation( buyer_order ) )?.limit;
 
     let paid = notional( trade.price, trade.quantity )?;
     let reserved_for_this_fill = notional( buyer_limit, trade.quantity )?;
     let improvement = reserved_for_this_fill.checked_sub( paid ).map_err( | _ | EscrowError::Arithmetic )?;
+    if improvement < Money::ZERO
+    {
+      // Above the buyer's limit: the fill would spend what backs the rest of
+      // its order.
+      return Err( EscrowError::NotReserved );
+    }
+
+    let taker_reservation = Self::reduced_obligation
+    (
+      self.reservations.get( &trade.taker ).copied(),
+      trade.taker,
+      trade.taker_account,
+      trade.taker_side,
+      reserved_for_this_fill,
+      trade.quantity,
+    )?;
+    let maker_reservation = Self::reduced_obligation
+    (
+      self.reservations.get( &trade.maker ).copied(),
+      trade.maker,
+      trade.maker_account,
+      trade.taker_side.opposite(),
+      reserved_for_this_fill,
+      trade.quantity,
+    )?;
 
     let mut buyer_account = *self.accounts.get( &buyer ).ok_or( EscrowError::UnknownAccount( buyer ) )?;
     buyer_account.cash.deliver( paid )?;
@@ -610,25 +644,6 @@ impl Escrow
     };
     seller_account.asset.deliver( trade.quantity )?;
     seller_account.cash.receive( paid )?;
-
-    let taker_reservation = Self::reduced_obligation
-    (
-      self.reservations.get( &trade.taker ).copied(),
-      trade.taker,
-      trade.taker_account,
-      taker_side,
-      reserved_for_this_fill,
-      trade.quantity,
-    )?;
-    let maker_reservation = Self::reduced_obligation
-    (
-      self.reservations.get( &trade.maker ).copied(),
-      trade.maker,
-      trade.maker_account,
-      taker_side.opposite(),
-      paid,
-      trade.quantity,
-    )?;
 
     // Every fallible step above succeeded — commit all four at once.
     if seller == buyer

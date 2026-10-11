@@ -92,7 +92,7 @@ impl EscrowPort for ScriptedEscrow
     Ok( obligation )
   }
 
-  fn settle( &mut self, trade : &Trade, _taker_side : Side, _taker_limit : Price ) -> Result< (), EscrowError >
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
     if let Some( error ) = self.settle_fails_for_maker.get( &trade.maker )
     {

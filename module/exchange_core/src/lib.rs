@@ -169,7 +169,7 @@ pub trait EscrowPort : Clone
   ///
   /// [`EscrowError`] if either side cannot be settled, in which case nothing
   /// moves.
-  fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >;
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >;
 }
 
 /// Forwards to [`Escrow`]'s inherent methods — `Escrow::reserve( self, .. )`
@@ -187,9 +187,9 @@ impl EscrowPort for Escrow
     Escrow::release( self, owner, order )
   }
 
-  fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
-    Escrow::settle( self, trade, taker_side, taker_limit )
+    Escrow::settle( self, trade )
   }
 }
 
@@ -779,7 +779,7 @@ impl< E : EscrowPort > Exchange< E >
     let dry_crossing = exchange_match::cross( &mut dry_book, &order, policy )?;
     for trade in &dry_crossing.trades
     {
-      if let Err( error ) = dry_escrow.settle( trade, order.side, order.price )
+      if let Err( error ) = dry_escrow.settle( trade )
       {
         return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
       }
@@ -852,7 +852,7 @@ impl< E : EscrowPort > Exchange< E >
     self.count( order.instrument, stats_fill_add, crossing.trades.len() as u64 );
     for trade in &crossing.trades
     {
-      self.escrow.settle( trade, order.side, order.price ).expect( "already validated by the dry run above" );
+      self.escrow.settle( trade ).expect( "already validated by the dry run above" );
       self.emit( order.id, order.account, EventKind::Trade( *trade ) );
     }
 
