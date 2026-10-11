@@ -36,8 +36,8 @@ use exchange_id::{ InstrumentId, OrderId };
 /// is in being the one place a caller reaches for *any* of the three
 /// non-matching moves, not in adding logic `insert` does not already have.
 ///
-/// Returns `false` on the same terms `insert` does: a zero-remaining
-/// `resting`, or an `order.id` already resting on either side.
+/// Returns `false` on the same terms `insert` does: a `remaining` of zero or
+/// above `order.quantity`, or an `order.id` already resting on either side.
 #[ must_use ]
 pub fn rest_place( book : &mut Book, resting : Resting ) -> bool
 {
@@ -69,8 +69,9 @@ pub enum RestReplaceError
   InstrumentMismatch,
   /// `old_id` was not resting on `instrument` — nothing to replace.
   Missing,
-  /// The replacement was refused by [`Book::insert`]: a zero-remaining
-  /// `Resting`, or an `order.id` already resting elsewhere on the book. The
+  /// The replacement was refused by [`Book::insert`]: a `remaining` of zero
+  /// or above its order's quantity, or an `order.id` already resting
+  /// elsewhere on the book. The
   /// order named by `old_id` has been put back exactly as it was.
   Refused,
 }

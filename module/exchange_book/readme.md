@@ -97,13 +97,17 @@ routine event into an outage.
 clamping. A clamp leaves the book and its caller disagreeing about how much
 changed hands: books that balance, quantities that do not.
 
+`insert` with nothing left, or more left than the order's own quantity,
+returns `false`: a book trading past an order's size moves more than its owner
+committed.
+
 `insert` on an id that already rests — on either side — returns `false` and
 leaves the book untouched, rather than seating the duplicate. `cancel` only
 ever removes the first match for an id, so an unrejected duplicate would
 silently outlive its own cancellation and keep trading under a name its owner
 believes is gone. The check walks the book only for an id at or below the
-highest ever seated; callers minting ids in order never pay for it. Building
-a book of 40 000 orders took 443 ms with the walk on every insert, and takes
+highest ever seated; callers minting ids in order never pay for it. Inserting
+40 000 orders directly took 443 ms with the walk on every insert, and takes
 3.4 ms now.
 
 ## Responsibility Table

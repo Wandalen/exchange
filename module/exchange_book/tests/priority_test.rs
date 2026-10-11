@@ -319,6 +319,25 @@ fn insert_refuses_a_zero_remaining_order()
   assert!( book.is_empty(), "the refused insert must leave no trace" );
 }
 
+/// A resting order cannot have more left than it was placed for.
+///
+/// Seated, it would trade past its own size: `consume_best` takes from
+/// `remaining` and never looks at `order.quantity`.
+#[ test ]
+fn insert_refuses_more_remaining_than_the_order_holds()
+{
+  let mut book = Book::new();
+  let mut overfull = rest( 1, Side::Sell, "2.50", 5, 10 );
+  overfull.remaining = Quantity::from_int( 500 ).unwrap();
+
+  assert!( !book.insert( overfull ) );
+  assert!( book.is_empty() );
+
+  let mut whole = rest( 1, Side::Sell, "2.50", 5, 10 );
+  whole.remaining = whole.order.quantity;
+  assert!( book.insert( whole ), "exactly the order's quantity is fine" );
+}
+
 /// Consuming part of the best order keeps it at the front with less left.
 #[ test ]
 fn a_partly_consumed_order_keeps_its_place()

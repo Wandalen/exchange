@@ -45,8 +45,8 @@ caller, with `book_new`, `book_instrument`, `book_best_bid`, `book_best_ask`,
   crate's boundary.
 - **No `BookError`.** An instrument nothing rested on is an empty book, not
   an unknown one; a halt is `exchange_halt`'s. `insert` returns `false` for a
-  duplicate id or a zero remainder, and `cancel` returns `None` for an absent
-  order — see `src/lib.rs`.
+  duplicate id, or a remainder of zero or above the order's quantity, and
+  `cancel` returns `None` for an absent order — see `src/lib.rs`.
 
 ### Sources
 

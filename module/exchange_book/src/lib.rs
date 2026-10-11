@@ -97,9 +97,9 @@ impl Book
   /// has to remember to call.
   ///
   /// Returns `false`, refusing the insert, if `resting.remaining` is zero or
-  /// `resting.order.id` already rests on either side — the same "caller
-  /// error that would silently corrupt the book" class [`Self::consume_best`]
-  /// guards.
+  /// above `resting.order.quantity`, or `resting.order.id` already rests on
+  /// either side — the same "caller error that would silently corrupt the
+  /// book" class [`Self::consume_best`] guards.
   //
   // Fix(book_insert_had_no_duplicate_order_id_rejection):
   // Root cause: `insert` seated a second order under an id already resting.
@@ -114,12 +114,21 @@ impl Book
   // phantom stayed at the front and every later `consume_best` against it
   // underflowed and returned `false`.
   // Pitfall: as above — a guard in every caller is not a guard in `Book`.
+  //
+  // Fix(book_insert_seated_more_than_the_order_holds):
+  // Root cause: only a zero `remaining` was refused. One above
+  // `order.quantity` traded past the order's size, since `consume_best`
+  // reads `remaining` alone.
+  // Pitfall: `rest_replace` and `inbound_apply`'s `Replace` pass a
+  // caller-built `Resting` straight through.
   #[ must_use ]
   pub fn insert( &mut self, resting : Resting ) -> bool
   {
     let id = resting.order.id;
     let maybe_seated = self.id_high.is_some_and( | high | id <= high );
-    if resting.remaining == Quantity::ZERO || ( maybe_seated && self.contains_id( id ) )
+    if resting.remaining == Quantity::ZERO
+      || resting.remaining > resting.order.quantity
+      || ( maybe_seated && self.contains_id( id ) )
     {
       return false;
     }
