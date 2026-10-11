@@ -6,7 +6,7 @@
 //! against a real `exchange_match::cross` batch proved that shape
 //! unreachable: both of a trade's legs go in together, so two trades can
 //! never fail to offset each other. See `exchange_conserve/src/lib.rs`'s
-//! "Revision" section.
+//! "Two legs per trade".
 
 use exact_arith::{ Price, Quantity };
 use exchange_conserve::conserve_assert;

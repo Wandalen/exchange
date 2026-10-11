@@ -1,10 +1,7 @@
 //! Test Matrix T01 — the batch-level assertion. Summing the legs is
-//! `exact_arith::money_sum_assert_zero`'s job, tested in `exact`.
-//!
-//! `conserve_assert`'s own tests moved from demonstrating a magnitude
-//! mismatch to demonstrating an inexact notional — see `src/lib.rs`'s
-//! "Revision" section for why a magnitude mismatch is no longer constructible
-//! through `Trade` data at all once both of a trade's legs go in together.
+//! `exact_arith::money_sum_assert_zero`'s job, tested in `exact`. No `Trade`
+//! batch can be unbalanced (see `src/lib.rs`'s "Two legs per trade"), so the
+//! refusal tested here is an inexact notional.
 
 use exact_arith::{ Price, Quantity };
 use exchange_conserve::{ ConserveError, conserve_assert };
@@ -58,8 +55,7 @@ fn a_single_trade_conserves()
 /// A batch whose trades carry *different* magnitudes and a mix of
 /// `taker_side` still conserves — each trade contributes both its own debit
 /// and credit, so there is no way for two trades to "not offset" each other;
-/// each already offsets itself. This is the behaviour the old, one-leg-per-trade
-/// design could not produce (see `src/lib.rs`'s "Revision" section).
+/// each already offsets itself.
 #[ test ]
 fn a_mixed_batch_of_different_magnitudes_still_conserves()
 {
@@ -75,8 +71,8 @@ fn an_empty_batch_conserves_trivially()
 }
 
 /// A trade whose own notional cannot be expressed exactly is refused, not
-/// silently approximated — the one failure `conserve_assert` can still
-/// actually produce today (see `src/lib.rs`'s "What this still catches").
+/// silently approximated — the one failure `conserve_assert` can produce
+/// today.
 #[ test ]
 fn a_trade_with_an_inexact_notional_is_refused()
 {
@@ -97,7 +93,7 @@ fn p17_conserve_assert_distinguishes_ok_from_inexact()
 }
 
 /// An unbalanced batch's message names the amount it was off by. No `Trade`
-/// batch reaches this today (see `src/lib.rs`'s "Revision" section), so the
+/// batch reaches this today (see `src/lib.rs`'s "Two legs per trade"), so the
 /// variant is built directly.
 #[ test ]
 fn an_unbalanced_batch_reports_its_net()

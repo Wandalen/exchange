@@ -194,8 +194,8 @@ pub enum MatchError
   /// `quantity` pair (see [`Trade::executed_price`]), so they offset by
   /// construction — unreachable through this function today, kept as
   /// defense-in-depth for the day a fee or similar asymmetry enters the
-  /// family's design. See `exchange_conserve`'s own module doc, "Revision"
-  /// section.
+  /// family's design. See `exchange_conserve`'s module doc, "Two legs per
+  /// trade".
   Conservation( ConserveError ),
   /// A post-only order would have taken liquidity. `book` is untouched.
   PostOnlyWouldTake,
