@@ -679,9 +679,9 @@ fn a_buyer_is_never_charged_above_its_own_limit()
 /// at a time (`deliver`, then `release`, then `receive`), each through `?`.
 /// A failure on the *last* edge left the first two already written into
 /// `self.accounts` — cash delivered out of the buyer's reservation with
-/// nothing credited back anywhere, no seller ever paid, and — on the real
-/// `Exchange::submit` path — the resting order already gone from the book by
-/// the time this function is even called.
+/// nothing credited back anywhere, no seller ever paid, and — on
+/// `exchange_core`'s placement path — the resting order already gone from
+/// the book by the time this function is even called.
 ///
 /// # Why Not Caught
 ///

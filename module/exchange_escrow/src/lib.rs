@@ -150,27 +150,17 @@ impl< T : Conserved > Holding< T >
   /// The precondition every edge below shares: an amount moved across the
   /// partition is not negative.
   ///
-  /// Unstated until it was violated. The four edges are each written as one
-  /// checked subtraction and one checked addition, and their correctness rests
-  /// entirely on `amount >= NOTHING` — a negative amount turns every
-  /// subtraction into an addition and every addition into a subtraction, so
-  /// each edge quietly runs backwards and the guards face the wrong way. For
-  /// `Quantity` the precondition holds for free, because the type refuses a
-  /// negative in its own constructor; `Money` is signed, so here it is
-  /// checked. Expressed against `NOTHING` and `Ord`, which [`Conserved`]
-  /// already requires, so it stays one rule for both.
+  /// A negative amount turns each edge's subtraction into an addition and the
+  /// reverse, so it runs backwards past guards facing the wrong way.
+  /// `Quantity` refuses a negative itself; `Money` is signed, so it is checked
+  /// here, once for both.
   ///
   /// Fix(a_negative_obligation_is_refused_rather_than_minting_spendable_currency):
-  /// Root cause: `Money::checked_minus`'s `difference >= ZERO` guard
-  /// constrains the *result* of the subtraction, not the sign of the operand.
-  /// Given `-200`, `reserve` computed `available - ( -200 )`, which is larger
-  /// and trivially over the floor, then `reserved + ( -200 )`, which had no
-  /// floor at all — so 200 units of spendable currency appeared and the
-  /// account's `available + reserved` total stayed correct to the minor unit.
-  ///
-  /// Pitfall: a conservation sum is not a solvency check. Any defect that
-  /// moves value between the two halves of a partition — including one moving
-  /// it the wrong way — leaves the sum invariant, so the sum can never see it.
+  /// Root cause: `checked_minus` guards the *result* of a subtraction, not
+  /// the operand's sign. Reserving `-200` raised `available` and lowered
+  /// `reserved`: 200 spendable units appeared, and the total stayed right.
+  /// Pitfall: a conservation sum is not a solvency check — value moved
+  /// between the two halves leaves the sum unchanged.
   fn movement( amount : T ) -> Result< (), EscrowError >
   {
     if amount < T::NOTHING
@@ -261,13 +251,10 @@ pub enum EscrowError
   ObligationMismatch,
   /// An edge was asked to move a negative amount across the partition.
   ///
-  /// Not an exhaustion error and not a shortfall: the account may hold plenty.
-  /// A negative movement is a movement in the wrong direction wearing the
-  /// right name, and every one of them creates value on one side of the
-  /// partition and destroys it on the other. Reachable from a negative
-  /// [`Price`], which is what makes a buy's notional negative — refused here
-  /// as well as at each `submit`, because [`Escrow`] is public and a caller
-  /// that reaches it directly gets no validation step of its own.
+  /// Not a shortfall: a movement in the wrong direction, creating value on
+  /// one side of the partition and destroying it on the other. Reachable from
+  /// a negative [`Price`], which makes a buy's notional negative.
+  /// `exchange_core` refuses one first; a direct caller is refused here.
   NegativeAmount,
   /// A value step did not fit its type.
   Arithmetic,
@@ -370,55 +357,30 @@ impl Escrow
   /// and `asset` are added to what is still `available`; `reserved` — the
   /// backing for whatever is still resting on the book — is untouched.
   ///
-  /// The deposit edge — the only way the sum of a pair changes. Because it
-  /// is documented as one of exactly four edges that ever move value, and
-  /// the other three ([`Escrow::reserve`], [`Escrow::release`],
-  /// [`Escrow::settle`]) never write `reserved` from outside its own
-  /// checked move, a second call for the same `id` must not either — doing
-  /// so would be a fifth, undocumented edge.
+  /// The deposit edge — the only way into the pair from outside. A second
+  /// call never touches `reserved`; that would be a fifth edge.
   ///
   /// # Errors
   ///
   /// [`EscrowError::Arithmetic`] if either holding's total would pass the
   /// ceiling. [`EscrowError::NegativeAmount`] if `cash` is negative.
   ///
-  /// Fix(open_wiped_reserved_out_from_under_a_live_reservation): Root cause:
-  /// `open` always ran `self.accounts.insert(id, Account { cash :
-  /// Holding::new(cash), .. })`, and `BTreeMap::insert` on an existing key
-  /// discards the old value outright — `Holding::new` sets `reserved` to
-  /// `NOTHING`, so a second `open` for an `id` with a resting order's
-  /// reservation zeroed that reservation's backing while
-  /// `self.reservations` kept the entry pointing at it, unchanged.
-  ///
-  /// Pitfall: the account-level `reserved` field and the order-indexed
-  /// `self.reservations` map are two views of the same fact (see this
-  /// module's own "`reserved` is stored, never derived" section) and
-  /// nothing keeps them in sync automatically — any edge that replaces an
-  /// `Account` wholesale, rather than moving a checked amount across its
-  /// existing `Holding`s, silently reintroduces the exact divergence that
-  /// design was meant to make impossible.
+  /// Fix(open_wiped_reserved_out_from_under_a_live_reservation):
+  /// Root cause: `open` inserted a fresh `Account` over an existing one,
+  /// zeroing `reserved` behind a live reservation the ledger still held.
+  /// Pitfall: the account's `reserved` and the order ledger are two views of
+  /// one fact; replacing an `Account` wholesale splits them.
   pub fn open( &mut self, id : AccountId, cash : Money, asset : Quantity ) -> Result< (), EscrowError >
   {
     match self.accounts.get( &id )
     {
       Some( existing ) =>
       {
-        // Fix(exchange_escrow_open_merge_leg_torn_on_partial_failure): the
-        // merge branch used to run `account.cash.receive(cash)?` and
-        // `account.asset.receive(asset)?` as two statements against a live
-        // `&mut` into `self.accounts` — a failure on the asset leg still left
-        // the cash leg's already-successful `receive` committed, so a caller
-        // saw `open` return `Err` while the account's cash balance had
-        // already changed underneath it.
-        // Root cause: `receive` writes `self.available` before returning
-        // `Ok`, so sequencing two of them through `?` commits the first the
-        // moment it succeeds, regardless of whether the second one goes on to
-        // fail — nothing here made the two writes one atomic unit.
-        // Pitfall: a merge of two independent fallible edges on the same
-        // struct must compute both against a local copy and commit them
-        // together — mutate-then-`?` commits eagerly no matter how many more
-        // fallible steps follow, the same shape `settle` and `release` were
-        // hardened against earlier in this file.
+        // Fix(exchange_escrow_open_merge_leg_torn_on_partial_failure):
+        // Root cause: the two `receive`s ran against the live account, so an
+        // asset leg that failed left the cash leg committed under an `Err`.
+        // Pitfall: two fallible edges are one unit only if computed on a copy
+        // and committed together.
         let mut account = *existing;
         account.cash.receive( cash )?;
         account.asset.receive( asset )?;
