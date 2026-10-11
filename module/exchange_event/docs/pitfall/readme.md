@@ -4,7 +4,7 @@
 
 - **Purpose**: Record the one trap named for workstream 002's "Ring" design area that this crate's own storage choice bears on.
 - **Responsibility**: Document the pitfall, how `exchange_event` avoids it, and the grep that verifies the avoidance.
-- **In Scope**: The one central "Ring" pitfall about a speculative second event/fill ring — the only one of the 7 Ring pitfalls this crate's own scope touches (the other 6 are about `exchange_inbound`, which doesn't exist yet, or the book/match boundary, and stay in the central catalog).
+- **In Scope**: The one central "Ring" pitfall about a speculative second event/fill ring; the other six are `exchange_inbound`'s or the book/match boundary's.
 - **Out of Scope**: External constraints this crate absorbs (→ [`../workaround/`](../workaround/readme.md)).
 
 ### Overview Table
