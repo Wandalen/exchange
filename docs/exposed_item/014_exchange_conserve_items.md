@@ -5,8 +5,9 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_conserve`.
 - **Responsibility**: Asserting that a set of fills sums to zero.
 
-**Design status**: Built, as its own crate — `fill_legs_sum`/`conserve_assert`
-match the proposal's own names; `ConserveError` has 3 variants
+**Design status**: Built, as its own crate — `conserve_assert` matches the
+proposal's own name; the proposed `fill_legs_sum` was dropped for
+`exact_arith::money_sum_assert_zero`, which does the same sum; `ConserveError` has 3 variants
 (`Notional`, `Overflow`, `Unbalanced` — the proposal's `NotZero` renamed,
 plus a `Notional` variant the proposal didn't name) rather than the
 proposed 2. Full comparison, including why this crate's existence does not

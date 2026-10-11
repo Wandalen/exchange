@@ -4,12 +4,23 @@ A batch of fills nets to zero across its signed legs, or is refused as
 unbalanced.
 
 ```rust
-use exact_arith::Money;
-use exchange_conserve::fill_legs_sum;
+use exact_arith::{ Price, Quantity };
+use exchange_conserve::conserve_assert;
+use exchange_fill::Trade;
+use exchange_id::{ AccountId, OrderId };
+use exchange_side::Side;
 
-let legs = [ Money::from_int( 10 ).unwrap(), Money::from_int( -10 ).unwrap() ];
-assert_eq!( fill_legs_sum( &legs ).unwrap(), Money::ZERO );
+let trade = Trade
+{
+  taker : OrderId( 1 ), taker_account : AccountId( 1 ), taker_side : Side::Buy,
+  maker : OrderId( 2 ), maker_account : AccountId( 2 ),
+  price : Price::parse( "2.50" ).unwrap(), quantity : Quantity::from_int( 4 ).unwrap(),
+};
+assert!( conserve_assert( &[ trade ] ).is_ok() );
 ```
+
+Summing the legs is `exact_arith::money_sum_assert_zero`'s job; this crate
+only turns trades into signed legs.
 
 ## Not extracted from `Escrow::total_cash`/`total_asset`
 
@@ -43,7 +54,7 @@ guaranteed the day a fee or similar asymmetry enters this family's design.
 | File | Responsibility |
 |------|-----------------|
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_fill`, `exchange_side`, `exchange_types`, `exact_arith` |
-| [`src/lib.rs`](src/lib.rs) | `ConserveError`, `fill_legs_sum`, `conserve_assert` |
+| [`src/lib.rs`](src/lib.rs) | `ConserveError`, `conserve_assert` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |

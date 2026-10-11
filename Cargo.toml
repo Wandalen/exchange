@@ -40,7 +40,7 @@ members = [
 #   ring_handle = { path = "../ring/ring_handle" }
 #   ring_types = { path = "../ring/ring_types" }
 [workspace.dependencies]
-exact_arith = { git = "https://github.com/Wandalen/exact", rev = "ca9682a481a2d6ee434963c0a0dde0130f3bc7d5" }
+exact_arith = { git = "https://github.com/Wandalen/exact", rev = "b7e92829bbd4d742fc64ae19a63d12bec5739256" }
 ring_factory = { git = "https://github.com/Wandalen/ring", rev = "95988754d34458f0c6c3a5b3ae893b72aeac1505" }
 ring_handle = { git = "https://github.com/Wandalen/ring", rev = "95988754d34458f0c6c3a5b3ae893b72aeac1505" }
 ring_types = { git = "https://github.com/Wandalen/ring", rev = "95988754d34458f0c6c3a5b3ae893b72aeac1505" }

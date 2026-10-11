@@ -8,7 +8,7 @@
 //! The family's two prohibitions — no ECS type, no floating point — are
 //! checked across every crate by `exchange_core/tests/contract_test.rs`.
 
-use exact_arith::{ Backing, MONEY_SCALE, Money, Price, Quantity, pow10 };
+use exact_arith::{ Money, Price, Quantity, RatioError, Rounding, price_mul_qty };
 use exchange_order::{ Obligation, Order };
 use exchange_side::Side;
 
@@ -40,8 +40,9 @@ impl core::error::Error for TypeError {}
 
 /// The exact currency value of `quantity` units at `price`.
 ///
-/// Both operands carry scale [`MONEY_SCALE`], so their product lands at twice
-/// that and must come back down. It comes down by exact division only: a
+/// Both operands carry scale [`MONEY_SCALE`](exact_arith::MONEY_SCALE), so
+/// their product lands at twice that and must come back down. It comes down
+/// through `exact_arith`'s [`price_mul_qty`] under [`Rounding::Exact`]: a
 /// product with any remainder at the currency's own scale is **refused**, not
 /// rounded. That refusal is the whole point — a settlement amount that has
 /// been rounded is value created or destroyed, and it is created or destroyed
@@ -62,21 +63,14 @@ impl core::error::Error for TypeError {}
 /// ```
 pub fn notional( price : Price, quantity : Quantity ) -> Result< Money, TypeError >
 {
-  let scale = i128::from( pow10( MONEY_SCALE ) );
-  let product = i128::from( price.minor() ) * i128::from( quantity.minor() );
-
-  if product % scale != 0
+  price_mul_qty( price, quantity, Rounding::Exact ).map_err( | error | match error
   {
-    return Err( TypeError::NotionalInexact );
-  }
-
-  let minor = product / scale;
-  let minor = Backing::try_from( minor ).map_err( | _ | TypeError::NotionalOutOfRange )?;
-
-  // Every way `from_minor` can refuse — over the ceiling, or over the backing
-  // width — is the same fact to a caller here: the exact answer exists and
-  // this currency type cannot hold it.
-  Money::from_minor( minor ).map_err( | _ | TypeError::NotionalOutOfRange )
+    RatioError::Inexact => TypeError::NotionalInexact,
+    // The exact answer exists and this currency type cannot hold it.
+    RatioError::Overflow => TypeError::NotionalOutOfRange,
+    RatioError::DivZero | RatioError::Negative { .. } =>
+      unreachable!( "the divisor is one whole quantity, and Money holds a negative result: {error}" ),
+  } )
 }
 
 /// What `order` must commit to be allowed to rest.

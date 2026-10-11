@@ -177,12 +177,15 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   // book.side( instrument, Side::Buy ).next() reads the best bid, published-order first.
   ```
   `exchange_types` doesn't appear here at all — this crate never depended on it for `Side`/`OrderId`, and the brief period (before 2026-10-05) where either arrived via its re-export is over; both now come from their owning leaf crate directly, same as `InstrumentId`.
-- **`exchange_conserve`** (→ `exchange_fill`, `exchange_side`, `exchange_types`) — `conserve_assert(fills: &[Trade])`: both legs of every trade (debit the buyer, credit the seller) must sum to zero. Standalone — not called from `exchange_match::cross` yet; see Introduction, point 2.
+- **`exchange_conserve`** (→ `exchange_fill`, `exchange_side`, `exchange_types`) — `conserve_assert(fills: &[Trade])`: both legs of every trade (debit the buyer, credit the seller) must sum to zero, summed by `exact_arith::money_sum_assert_zero`. Called from `exchange_match::cross` on every batch of trades it produces.
   ```rust
-  use exact_arith::Money;
-  use exchange_conserve::fill_legs_sum;
-  let legs = [ Money::from_int( 10 ).unwrap(), Money::from_int( -10 ).unwrap() ];
-  assert_eq!( fill_legs_sum( &legs ).unwrap(), Money::ZERO );
+  use exact_arith::{ Price, Quantity };
+  use exchange_conserve::conserve_assert;
+  use exchange_fill::Trade;
+  use exchange_id::{ AccountId, OrderId };
+  use exchange_side::Side;
+  let trade = Trade { taker : OrderId( 1 ), taker_account : AccountId( 1 ), taker_side : Side::Buy, maker : OrderId( 2 ), maker_account : AccountId( 2 ), price : Price::parse( "2.50" ).unwrap(), quantity : Quantity::from_int( 4 ).unwrap() };
+  assert!( conserve_assert( &[ trade ] ).is_ok() );
   ```
 - **`exchange_escrow`** (→ `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_types`) — `Escrow`/`Account`/`Holding<T>`: `reserve`/`release`/`settle`, `available`/`reserved` stored separately (never derived from the book) so the two can be compared, not merely agree by construction. The `exchange_types` edge is real but narrow now — just `TypeError` — not the multi-type re-export it used to be before 2026-10-05.
   ```rust
