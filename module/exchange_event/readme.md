@@ -27,6 +27,13 @@ No `EventDrain` type and no `EventError { Full }`: the functions take the
 [`docs/decisions/001_no_event_drain_type.md`](docs/decisions/001_no_event_drain_type.md)
 and [`docs/decisions/002_no_event_error.md`](docs/decisions/002_no_event_error.md).
 
+## Not built: more than one consumer
+
+`event_drain` hands the stream to one consumer. A second — an audit beside
+workstream 010, say — needs a cursor of its own, and the stream has to keep
+events until the slowest has read them. That is a retention policy, and the
+family has neither a clock nor a capacity to base one on (ADR-002).
+
 ## Responsibility Table
 
 | File | Responsibility |

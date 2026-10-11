@@ -62,12 +62,23 @@ the ceiling, so a reservation always has room to come back.
 `Holding`'s edges are private. Value moves only through `Escrow`'s own
 methods, so nothing changes one side of the partition without the other.
 
-## One asset per account
+## Not built: per-asset holdings
 
-`Account` holds one cash and one asset `Holding`, whatever the instrument. The
-`base`/`quote` an `InstrumentSpec` names are not read here, so two instruments
-on one exchange draw on the same holdings — hard problem 19 stays open until
-holdings are keyed by `AssetId`.
+`Account` holds one cash and one asset `Holding`, whatever the instrument, so
+two instruments on one exchange draw on the same holdings — hard problem 19
+stays open. Keying holdings by `AssetId` needs each order's base and quote
+asset at `reserve` and each trade's at `settle`. `Order` carries only its instrument,
+the instrument's assets live in `exchange_core`'s specs, and `Trade` carries
+no instrument at all (`exchange_fill`'s readme). Until one of them does, an
+account holds one cash and one asset.
+
+## Not built: withdrawal
+
+`open` deposits; nothing takes funds out. Balances are workstream 010's by the
+source design
+([`../../docs/decision/003_010_implements_escrow_and_consumes_fills.md`](../../docs/decision/003_010_implements_escrow_and_consumes_fills.md)),
+and a withdrawal edge here would widen the boundary breach that decision
+records rather than close it.
 
 ## Responsibility Table
 

@@ -110,6 +110,24 @@ highest ever seated; callers minting ids in order never pay for it. Inserting
 40 000 orders directly took 443 ms with the walk on every insert, and takes
 3.4 ms now.
 
+## Not built: an id index
+
+`Exchange::cancel` finds an order by walking every resting order, `cancel`
+walks the instrument's levels for anything behind the front, and
+`account_rests` walks the instrument's book. An index from id to instrument,
+side and price, plus per-account counts, would make each logarithmic. But
+`exchange_core::step_place` clones the whole book on every placement for its
+dry run, and a set of ids alone made that clone five times dearer and
+placement 48% slower. The index waits for a dry run that does not clone.
+
+## Not built: reducing an order in place
+
+Venues let an order shrink without losing its place
+(`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`). The book
+side is a write to the node's `remaining`; the rest is not here — the
+facade has to release the freed reservation in the same step and report it,
+and it applies no amend or replace yet.
+
 ## Responsibility Table
 
 | File | Responsibility |

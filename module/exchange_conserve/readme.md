@@ -38,6 +38,14 @@ The source design names those as this crate's extraction source. They sum the
 ledger's own balances, which agree by construction; this checks one batch of
 trades, before escrow or the event stream sees it.
 
+## Not built: fee legs
+
+A fee turns a trade's two legs into three — buyer, seller, and the fee sink —
+and makes `Unbalanced` reachable. The point of assessment is decided
+(`exchange_core/docs/algorithm/004_fee_assessment_point.md`); the schedule is
+not, and the sink is workstream 010's
+([`../../docs/not_a_002_crate/004_wallet_fee_sink.md`](../../docs/not_a_002_crate/004_wallet_fee_sink.md)).
+
 ## Responsibility Table
 
 | File | Responsibility |
