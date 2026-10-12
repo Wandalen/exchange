@@ -34,11 +34,11 @@
 //!
 //! `available → reserved` on acceptance ([`Escrow::reserve`]);
 //! `reserved → available` on cancel ([`Escrow::release`]);
-//! `reserved →` the counterparty on a fill ([`Escrow::settle`]);
+//! `reserved →` the counterparty on a fill ([`Escrow::settle`]), a buyer's
+//! price improvement back to `available`;
 //! and deposit, which enters the pair from outside ([`Escrow::open`]).
 //! In particular there is no path that debits `available` while an order
-//! rests, and no path back from `reserved` to `available` that is not a
-//! cancel.
+//! rests.
 
 use std::collections::BTreeMap;
 
