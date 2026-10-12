@@ -831,6 +831,38 @@ fn a_resting_order_stays_cancellable_at_the_ceiling()
   assert_eq!( exchange.escrow().reserved_for( order_1.order ), None );
 }
 
+/// One account at the ceiling does not stop everyone else trading.
+///
+/// Account 1 cannot take proceeds, so its ask cannot be filled. Account 3's
+/// ask behind it can, and a buy crossing both is not refused for account 1's
+/// sake.
+#[ test ]
+fn a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill()
+{
+  let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
+  exchange.open_account( AccountId( 1 ), money( "8999999997" ), qty( 10 ) ).unwrap();
+  exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
+  exchange.open_account( AccountId( 3 ), Money::ZERO, qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  // Account 1: a buy reserving 1, and an ask of 2 at $2 whose $4 of proceeds
+  // would carry its cash past the ceiling. Account 3: an ask of 2 at $3.
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1" ), qty( 1 ) ).unwrap();
+  // A fix may refuse this ask up front instead; either way it must not block the buy below.
+  let _ = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) );
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Sell, price( "3" ), qty( 2 ) ).unwrap();
+
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3" ), qty( 2 ) );
+
+  let taking = taking.expect( "account 3 can fill the whole buy" );
+  assert!( taking.is_complete() );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().asset.available(), qty( 2 ) );
+  assert_eq!( exchange.escrow().account( AccountId( 3 ) ).unwrap().cash.available(), money( "6" ) );
+}
+
 /// A crossing whose second trade cannot settle commits nothing at all — not
 /// the first trade, not the incoming order's own reservation, and not the
 /// resting orders `cross` already consumed to produce both trades.
