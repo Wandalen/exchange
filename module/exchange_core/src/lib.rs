@@ -587,8 +587,9 @@ impl< E : EscrowPort > Exchange< E >
 
   /// Take every event recorded so far, leaving the stream empty.
   ///
-  /// The owned counterpart to [`Self::events`]'s borrowed slice — see
-  /// `exchange_event`'s own module doc for why both exist.
+  /// The owned counterpart to [`Self::events`]'s borrowed slice: a consumer
+  /// that reads the stream once takes it here rather than cloning the slice,
+  /// and draining keeps the stream from growing without bound.
   #[ must_use ]
   pub fn event_drain( &mut self ) -> Vec< Event >
   {
