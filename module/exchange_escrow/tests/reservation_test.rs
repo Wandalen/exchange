@@ -669,6 +669,47 @@ fn a_buyer_is_never_charged_above_its_own_limit()
   assert_eq!( escrow, before );
 }
 
+/// A seller is never paid below its own limit, as maker or as taker.
+///
+/// The seller's mirror of `a_buyer_is_never_charged_above_its_own_limit`:
+/// the reservation records the ask's limit, and a trade below it is refused.
+#[ test ]
+fn a_seller_is_never_paid_below_its_own_limit()
+{
+  let mut escrow = two_sided();
+  let ask = order( 1, 1, Side::Sell, "15", 2 );
+  let bid = order( 2, 2, Side::Buy, "20", 2 );
+  escrow.reserve( &ask ).unwrap();
+  escrow.reserve( &bid ).unwrap();
+  let before = escrow.clone();
+
+  let as_maker = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert!( escrow.settle( &as_maker ).is_err(), "the ask sold at 1 against its limit of 15" );
+  assert_eq!( escrow, before );
+
+  let as_taker = Trade
+  {
+    taker : ask.id,
+    taker_account : ask.account,
+    taker_side : Side::Sell,
+    maker : bid.id,
+    maker_account : bid.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert!( escrow.settle( &as_taker ).is_err(), "the ask sold at 1 against its limit of 15" );
+  assert_eq!( escrow, before );
+}
+
 /// A settlement that fails on its very last step — crediting the buyer's
 /// asset — leaves every earlier step's effect uncommitted too, not applied
 /// halfway.
