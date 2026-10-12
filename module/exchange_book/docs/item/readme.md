@@ -17,6 +17,7 @@ The exposed surface of `exchange_book`, as built.
 | `Book` | struct | fields private; equality compares resting orders only |
 | `Book::new` | fn | `() -> Self` |
 | `Book::insert` | fn | `(&mut self, resting: Resting) -> bool` |
+| `Book::insertable` | fn | `(&self, resting: &Resting, vacating: Option<OrderId>) -> bool` — `insert`'s checks, nothing moved; for `exchange_rest::rest_replace` |
 | `Book::cancel` | fn | `(&mut self, instrument: InstrumentId, id: OrderId) -> Option<Resting>` |
 | `Book::side` | fn | `(&self, instrument: InstrumentId, side: Side) -> impl Iterator<Item = &Resting>` |
 | `Book::best` | fn | `(&self, instrument: InstrumentId, side: Side) -> Option<&Resting>` |

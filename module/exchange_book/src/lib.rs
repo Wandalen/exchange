@@ -124,15 +124,11 @@ impl Book
   #[ must_use ]
   pub fn insert( &mut self, resting : Resting ) -> bool
   {
-    let id = resting.order.id;
-    let maybe_seated = self.id_high.is_some_and( | high | id <= high );
-    if resting.remaining == Quantity::ZERO
-      || resting.remaining > resting.order.quantity
-      || ( maybe_seated && self.contains_id( id ) )
+    if !self.insertable( &resting, None )
     {
       return false;
     }
-    self.id_high = self.id_high.max( Some( id ) );
+    self.id_high = self.id_high.max( Some( resting.order.id ) );
 
     let side = resting.order.side;
     let price = resting.order.price;
@@ -162,6 +158,19 @@ impl Book
       levels.insert( at, level );
     }
     true
+  }
+
+  /// Whether [`Self::insert`] would seat `resting`, counting `vacating` as
+  /// already gone. Nothing moves: a replace asks before it withdraws the
+  /// order it replaces, so a refusal leaves that order where it stood.
+  #[ must_use ]
+  pub fn insertable( &self, resting : &Resting, vacating : Option< OrderId > ) -> bool
+  {
+    let id = resting.order.id;
+    let maybe_seated = self.id_high.is_some_and( | high | id <= high );
+    resting.remaining != Quantity::ZERO
+      && resting.remaining <= resting.order.quantity
+      && ( vacating == Some( id ) || !( maybe_seated && self.contains_id( id ) ) )
   }
 
   /// Whether an order with this id rests on any instrument's either side.

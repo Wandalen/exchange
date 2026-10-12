@@ -246,6 +246,28 @@ fn insert_refuses_a_duplicate_id_in_any_arrival_order()
   assert!( book.insert( rest( 5, Side::Buy, "2.50", 5, 40 ) ), "id 5 left the book" );
 }
 
+/// `insertable` answers as `insert` would, and counts the vacating id as
+/// gone.
+#[ test ]
+fn insertable_answers_as_insert_would()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 2, Side::Buy, "2.50", 5, 20 ) ) );
+  let before = book.clone();
+
+  assert!( book.insertable( &rest( 3, Side::Sell, "3.00", 5, 30 ), None ) );
+  assert!( !book.insertable( &rest( 1, Side::Sell, "3.00", 5, 30 ), None ), "id 1 rests" );
+  assert!( book.insertable( &rest( 1, Side::Sell, "3.00", 5, 30 ), Some( OrderId( 1 ) ) ), "id 1 is leaving" );
+  assert!( !book.insertable( &rest( 2, Side::Sell, "3.00", 5, 30 ), Some( OrderId( 1 ) ) ), "id 2 is not" );
+
+  let mut nothing_left = rest( 1, Side::Buy, "2.50", 5, 30 );
+  nothing_left.remaining = Quantity::ZERO;
+  assert!( !book.insertable( &nothing_left, Some( OrderId( 1 ) ) ) );
+
+  assert_eq!( book, before, "nothing moved" );
+}
+
 /// Two books holding the same orders are equal, whatever ids came and went
 /// before.
 #[ test ]

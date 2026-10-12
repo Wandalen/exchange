@@ -6,7 +6,7 @@
 "Closes hard problem 9, and features 8 and 25" section. (The central Design
 status this entry used to carry — "Not built as a dedicated operation...
 no `replace` method" — is stale: `exchange_rest::rest_replace` is built and
-tested, as an atomic cancel-then-reinsert-with-rollback.)
+tested, as an atomic cancel-then-reinsert, checked before the cancel.)
 
 ### Sources
 

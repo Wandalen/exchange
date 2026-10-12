@@ -44,6 +44,6 @@ orchestration"). Only `rest_replace`, this crate's one genuinely new
 operation, gets a dedicated error type, and `RestReplaceError` carries only
 the two outcomes a cancel-then-insert wrapper can itself produce —
 `Missing` (nothing resting under `old_id`) and `Refused` (the replacement
-was rejected by `Book::insert`, original restored) — not the proposal's
+would be rejected by `Book::insert`, nothing touched) — not the proposal's
 `Duplicate`, `Full`, `Halted`, `Escrow`, or `Snap`, which a thin wrapper
 over `Book::insert`/`Book::cancel` cannot itself distinguish.

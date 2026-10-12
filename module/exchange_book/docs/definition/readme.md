@@ -15,6 +15,7 @@
 | `Book` | struct (opaque) | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Book::new` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Book::insert` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `Book::insertable` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Book::cancel` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Book::side` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Book::best` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
