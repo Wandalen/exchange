@@ -548,12 +548,13 @@ impl Escrow
   /// neither reservation is changed.
   pub fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
-    let ( buyer_order, buyer, seller ) = match trade.taker_side
+    let taker = *self.reservations.get( &trade.taker ).ok_or( EscrowError::NoReservation( trade.taker ) )?;
+    let maker = *self.reservations.get( &trade.maker ).ok_or( EscrowError::NoReservation( trade.maker ) )?;
+    let ( buyer_limit, buyer, seller ) = match trade.taker_side
     {
-      Side::Buy => ( trade.taker, trade.taker_account, trade.maker_account ),
-      Side::Sell => ( trade.maker, trade.maker_account, trade.taker_account ),
+      Side::Buy => ( taker.limit, trade.taker_account, trade.maker_account ),
+      Side::Sell => ( maker.limit, trade.maker_account, trade.taker_account ),
     };
-    let buyer_limit = self.reservations.get( &buyer_order ).ok_or( EscrowError::NoReservation( buyer_order ) )?.limit;
 
     let paid = notional( trade.price, trade.quantity )?;
     let reserved_for_this_fill = notional( buyer_limit, trade.quantity )?;
@@ -567,7 +568,7 @@ impl Escrow
 
     let taker_reservation = Self::reduced_obligation
     (
-      self.reservations.get( &trade.taker ).copied(),
+      taker,
       trade.taker,
       trade.taker_account,
       trade.taker_side,
@@ -576,7 +577,7 @@ impl Escrow
     )?;
     let maker_reservation = Self::reduced_obligation
     (
-      self.reservations.get( &trade.maker ).copied(),
+      maker,
       trade.maker,
       trade.maker_account,
       trade.taker_side.opposite(),
@@ -662,7 +663,7 @@ impl Escrow
     } )
   }
 
-  /// Compute what `order`'s reservation becomes after taking out the filled
+  /// Compute what `order`'s `reservation` becomes after taking out the filled
   /// portion, without committing it — the compute half of `settle`'s
   /// compute-then-commit split. `Ok( None )` means fully discharged: nothing
   /// held and nothing unfilled.
@@ -682,14 +683,13 @@ impl Escrow
   ///
   /// # Errors
   ///
-  /// [`EscrowError::NoReservation`] if `order` holds none,
   /// [`EscrowError::NotOwner`] if `owner` did not reserve it,
   /// [`EscrowError::ObligationMismatch`] if the stored shape does not match
   /// `side`, [`EscrowError::NotReserved`] if the amount or quantity named
   /// exceeds what remains.
   fn reduced_obligation
   (
-    current : Option< Reservation >,
+    reservation : Reservation,
     order : OrderId,
     owner : AccountId,
     side : Side,
@@ -697,7 +697,6 @@ impl Escrow
     asset_delivered : Quantity,
   ) -> Result< Option< Reservation >, EscrowError >
   {
-    let reservation = current.ok_or( EscrowError::NoReservation( order ) )?;
     if reservation.account != owner
     {
       return Err( EscrowError::NotOwner( order ) );
