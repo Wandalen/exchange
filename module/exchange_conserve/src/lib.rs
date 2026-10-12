@@ -1,60 +1,28 @@
-//! A batch of fills nets to zero across its legs, or is refused.
+//! A batch of fills nets to zero across its legs, or is refused. Closes hard
+//! problem 5 and feature 21. `exchange_match::cross` calls
+//! [`conserve_assert`] on every batch it produces.
 //!
-//! # Not extracted from `Escrow::total_cash`/`total_asset`
+//! # Two legs per trade
 //!
-//! The source design names those two methods as this crate's extraction
-//! source. They check the *ledger's* own internal self-consistency — the sum
-//! of every account's `available + reserved`, which is trivially true by
-//! construction, since it sums the same state every other `Escrow` method
-//! already maintains. That is a different check at a different grain from
-//! hard problem 5 / feature 21's actual ask: whether *one batch of fills*,
-//! taken on its own with no ledger in sight, nets to zero.
+//! The source design signs one leg per trade by `taker_side`. Every trade one
+//! `cross` call produces shares its taker, so those legs would all carry one
+//! sign and never net to zero. Each trade here contributes both: the buyer
+//! debited the notional, the seller credited it. The two come from one
+//! `price`/`quantity`, so they always cancel and
+//! [`ConserveError::Unbalanced`] is unreachable today. It stays for the day a
+//! fee makes the debit and the credit differ.
 //!
-//! # Revision — one signed leg per trade did not survive contact with `cross`
+//! [`ConserveError::Notional`] is reachable — a trade whose notional is not
+//! exact, as in `demo_p17_cons`. [`ConserveError::Overflow`] is not: a
+//! notional negates within `Money`'s range, and the sum runs in `i128`.
 //!
-//! The first design (one leg per trade, signed by `taker_side`: negative on a
-//! buy, positive on a sell) was built to match the family's proposal and the
-//! P17 phase doc's literal "10 and -10" example. It could never be called
-//! correctly from `exchange_match::cross`: every trade one call to `cross`
-//! produces shares the *same* `taker_side`, because there is exactly one
-//! incoming order per call — so every leg in a real batch carries the same
-//! sign, and a sum of same-signed non-zero legs can never land on zero. Wired
-//! in as the plan originally described, every successful match would have
-//! come back `Unbalanced`.
+//! # Not `Escrow::total_cash`/`total_asset`
 //!
-//! The fix is this crate's second design: **both legs, every trade.** Each
-//! trade debits whichever side is the buyer and credits whichever is the
-//! seller — `taker_side` says which one the taker was, the maker is always
-//! its opposite — and both go into the batch together. A trade's own debit
-//! and credit are computed from the same `price`/`quantity`, so they always
-//! cancel; a batch of any size, any mix of `taker_side`, sums to zero by the
-//! same construction `postings()` already relies on below. [`ConserveError::Unbalanced`]
-//! is consequently **unreachable through this function today** — recorded
-//! here rather than left for a mutation test to discover by surprise (see
-//! `tests/manual/readme.md`'s M0). It stays rather than being deleted because
-//! the day a fee enters this family's design, a buyer's debit and a seller's
-//! credit stop being the same number, and this is exactly the check that
-//! starts catching a fee silently miscomputed on one side only.
-//!
-//! # What this still catches
-//!
-//! [`ConserveError::Notional`] if any trade's own `price`/`quantity` cannot be
-//! expressed exactly — a real, reachable failure, demoed by `demo_p17_cons`.
-//! [`ConserveError::Overflow`] is not reachable from valid `Trade` data: a
-//! notional negates within `Money`'s symmetric range, and the sum runs in
-//! `i128`, which one batch cannot fill.
-//!
-//! # Relationship to `exchange_core::postings`
-//!
-//! `exchange_core::postings` builds the same debit-buyer/credit-seller cash
-//! pair per trade, plus the asset pair moving the other way, across whatever
-//! slice of the exchange's event stream it is given, for
-//! [`exact_arith::verify`] to grade with machinery the exchange did not
-//! write (see that function's own doc comment). This crate's
-//! [`conserve_assert`] is its cash half at a narrower, pre-ledger grain — one
-//! batch, straight off `Trade` data, with no event log or account lookup
-//! involved — callable the instant `cross` produces a batch, before escrow or
-//! the event stream see it at all.
+//! The source design names those as this crate's extraction source. They sum
+//! the ledger's own balances, which agree by construction; this checks one
+//! batch of trades before escrow or the event stream sees it.
+//! `exchange_core::postings` builds the same cash legs, plus the asset legs,
+//! for [`exact_arith::verify`] to audit.
 
 use exact_arith::{ ConservationError, Money, money_sum_assert_zero };
 use exchange_fill::Trade;
@@ -107,13 +75,8 @@ impl core::error::Error for ConserveError
 /// Confirm `fills`, taken as one batch, nets to zero: every trade's own
 /// notional is expressible, and the running sum fits.
 ///
-/// Both of a trade's legs go in: a debit for whichever side bought, a credit
-/// for whichever sold. `taker_side` names which one the taker was — the
-/// maker is always its opposite — purely to label which amount is whose; the
-/// sum this checks is identical either way `taker_side` reads, since addition
-/// does not care which order its two terms were pushed in. See the module
-/// doc's "Revision" section for why that makes [`ConserveError::Unbalanced`]
-/// unreachable today, and why it stays regardless.
+/// Both of a trade's legs go in; `taker_side` only labels which is the
+/// buyer's. See the module doc's "Two legs per trade".
 ///
 /// # Errors
 ///

@@ -34,11 +34,11 @@
 //!
 //! `available → reserved` on acceptance ([`Escrow::reserve`]);
 //! `reserved → available` on cancel ([`Escrow::release`]);
-//! `reserved →` the counterparty on a fill ([`Escrow::settle`]);
+//! `reserved →` the counterparty on a fill ([`Escrow::settle`]), a buyer's
+//! price improvement back to `available`;
 //! and deposit, which enters the pair from outside ([`Escrow::open`]).
 //! In particular there is no path that debits `available` while an order
-//! rests, and no path back from `reserved` to `available` that is not a
-//! cancel.
+//! rests.
 
 use std::collections::BTreeMap;
 
@@ -139,8 +139,9 @@ impl< T : Conserved > Holding< T >
   ///
   /// # Errors
   ///
-  /// [`EscrowError::Arithmetic`] if the sum does not fit, which can only
-  /// happen if the two sides were built by something other than this type.
+  /// [`EscrowError::Arithmetic`] if the sum does not fit, which no sequence
+  /// of edges reaches: `receive` keeps it within the ceiling, and the other
+  /// three never grow it.
   pub fn total( &self ) -> Result< T, EscrowError >
   {
     self.available.checked_plus( self.reserved ).ok_or( EscrowError::Arithmetic )
@@ -149,27 +150,17 @@ impl< T : Conserved > Holding< T >
   /// The precondition every edge below shares: an amount moved across the
   /// partition is not negative.
   ///
-  /// Unstated until it was violated. The four edges are each written as one
-  /// checked subtraction and one checked addition, and their correctness rests
-  /// entirely on `amount >= NOTHING` — a negative amount turns every
-  /// subtraction into an addition and every addition into a subtraction, so
-  /// each edge quietly runs backwards and the guards face the wrong way. For
-  /// `Quantity` the precondition holds for free, because the type refuses a
-  /// negative in its own constructor; `Money` is signed, so here it is
-  /// checked. Expressed against `NOTHING` and `Ord`, which [`Conserved`]
-  /// already requires, so it stays one rule for both.
+  /// A negative amount turns each edge's subtraction into an addition and the
+  /// reverse, so it runs backwards past guards facing the wrong way.
+  /// `Quantity` refuses a negative itself; `Money` is signed, so it is checked
+  /// here, once for both.
   ///
   /// Fix(a_negative_obligation_is_refused_rather_than_minting_spendable_currency):
-  /// Root cause: `Money::checked_minus`'s `difference >= ZERO` guard
-  /// constrains the *result* of the subtraction, not the sign of the operand.
-  /// Given `-200`, `reserve` computed `available - ( -200 )`, which is larger
-  /// and trivially over the floor, then `reserved + ( -200 )`, which had no
-  /// floor at all — so 200 units of spendable currency appeared and the
-  /// account's `available + reserved` total stayed correct to the minor unit.
-  ///
-  /// Pitfall: a conservation sum is not a solvency check. Any defect that
-  /// moves value between the two halves of a partition — including one moving
-  /// it the wrong way — leaves the sum invariant, so the sum can never see it.
+  /// Root cause: `checked_minus` guards the *result* of a subtraction, not
+  /// the operand's sign. Reserving `-200` raised `available` and lowered
+  /// `reserved`: 200 spendable units appeared, and the total stayed right.
+  /// Pitfall: a conservation sum is not a solvency check — value moved
+  /// between the two halves leaves the sum unchanged.
   fn movement( amount : T ) -> Result< (), EscrowError >
   {
     if amount < T::NOTHING
@@ -209,10 +200,19 @@ impl< T : Conserved > Holding< T >
     Ok( () )
   }
 
-  /// Add `amount` to available — it arrived from a counterparty.
+  /// Add `amount` to available — it arrived from a counterparty or a
+  /// deposit. Refused if the holding's total would pass the ceiling.
+  ///
+  /// Fix(a_holding_past_the_ceiling_could_not_release_its_reservation):
+  /// Root cause: only `available + amount` was checked. Proceeds or a top-up
+  /// landing beside a reservation carried `available + reserved` past the
+  /// ceiling, and from then on `release` could not return the reservation —
+  /// a resting order nobody could cancel — and `total` failed.
+  /// Pitfall: each half fitting is not the sum fitting.
   fn receive( &mut self, amount : T ) -> Result< (), EscrowError >
   {
     Self::movement( amount )?;
+    self.total()?.checked_plus( amount ).ok_or( EscrowError::Arithmetic )?;
     self.available = self.available.checked_plus( amount ).ok_or( EscrowError::Arithmetic )?;
     Ok( () )
   }
@@ -244,18 +244,17 @@ pub enum EscrowError
   /// This order already holds a reservation. Reserving twice for one order
   /// would leave the first one unreachable and therefore permanently locked.
   AlreadyReserved( OrderId ),
+  /// This order's reservation belongs to another account than the one named.
+  NotOwner( OrderId ),
   /// A reservation of the wrong shape for what is being settled — cash where
   /// the asset was expected, or the reverse.
   ObligationMismatch,
   /// An edge was asked to move a negative amount across the partition.
   ///
-  /// Not an exhaustion error and not a shortfall: the account may hold plenty.
-  /// A negative movement is a movement in the wrong direction wearing the
-  /// right name, and every one of them creates value on one side of the
-  /// partition and destroys it on the other. Reachable from a negative
-  /// [`Price`], which is what makes a buy's notional negative — refused here
-  /// as well as at each `submit`, because [`Escrow`] is public and a caller
-  /// that reaches it directly gets no validation step of its own.
+  /// Not a shortfall: a movement in the wrong direction, creating value on
+  /// one side of the partition and destroying it on the other. Reachable from
+  /// a negative [`Price`], which makes a buy's notional negative.
+  /// `exchange_core` refuses one first; a direct caller is refused here.
   NegativeAmount,
   /// A value step did not fit its type.
   Arithmetic,
@@ -274,6 +273,7 @@ impl core::fmt::Display for EscrowError
       Self::NotReserved => write!( f, "the amount named is more than was reserved" ),
       Self::NoReservation( id ) => write!( f, "order {} holds no reservation", id.0 ),
       Self::AlreadyReserved( id ) => write!( f, "order {} already holds a reservation", id.0 ),
+      Self::NotOwner( id ) => write!( f, "order {} is reserved by another account", id.0 ),
       Self::ObligationMismatch => write!( f, "the reservation is not of the shape this settlement needs" ),
       Self::NegativeAmount => write!( f, "a negative amount is not something an account can move" ),
       Self::Arithmetic => write!( f, "a value step did not fit its type" ),
@@ -301,7 +301,8 @@ impl core::error::Error for EscrowError
     {
       Self::Obligation( error ) => Some( error ),
       Self::UnknownAccount( _ ) | Self::Insufficient | Self::NotReserved | Self::NoReservation( _ )
-      | Self::AlreadyReserved( _ ) | Self::ObligationMismatch | Self::NegativeAmount | Self::Arithmetic => None,
+      | Self::AlreadyReserved( _ ) | Self::NotOwner( _ ) | Self::ObligationMismatch | Self::NegativeAmount
+      | Self::Arithmetic => None,
     }
   }
 }
@@ -314,8 +315,8 @@ impl From< TypeError > for EscrowError
   }
 }
 
-/// One live reservation: what it still holds, and how much of its order is
-/// still unfilled.
+/// One live reservation: whose it is, the limit it was reserved at, what it
+/// still holds, and how much of its order is still unfilled.
 ///
 /// The entry lives until both reach zero. A buy at price zero holds
 /// `Cash( 0 )` from the start, so the amount alone cannot say when the order
@@ -323,6 +324,8 @@ impl From< TypeError > for EscrowError
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 struct Reservation
 {
+  account : AccountId,
+  limit : Price,
   obligation : Obligation,
   unfilled : Quantity,
 }
@@ -354,55 +357,30 @@ impl Escrow
   /// and `asset` are added to what is still `available`; `reserved` — the
   /// backing for whatever is still resting on the book — is untouched.
   ///
-  /// The deposit edge — the only way the sum of a pair changes. Because it
-  /// is documented as one of exactly four edges that ever move value, and
-  /// the other three ([`Escrow::reserve`], [`Escrow::release`],
-  /// [`Escrow::settle`]) never write `reserved` from outside its own
-  /// checked move, a second call for the same `id` must not either — doing
-  /// so would be a fifth, undocumented edge.
+  /// The deposit edge — the only way into the pair from outside. A second
+  /// call never touches `reserved`; that would be a fifth edge.
   ///
   /// # Errors
   ///
-  /// [`EscrowError::Arithmetic`] if adding to an existing balance overflows
-  /// either side. [`EscrowError::NegativeAmount`] if `cash` is negative.
+  /// [`EscrowError::Arithmetic`] if either holding's total would pass the
+  /// ceiling. [`EscrowError::NegativeAmount`] if `cash` is negative.
   ///
-  /// Fix(open_wiped_reserved_out_from_under_a_live_reservation): Root cause:
-  /// `open` always ran `self.accounts.insert(id, Account { cash :
-  /// Holding::new(cash), .. })`, and `BTreeMap::insert` on an existing key
-  /// discards the old value outright — `Holding::new` sets `reserved` to
-  /// `NOTHING`, so a second `open` for an `id` with a resting order's
-  /// reservation zeroed that reservation's backing while
-  /// `self.reservations` kept the entry pointing at it, unchanged.
-  ///
-  /// Pitfall: the account-level `reserved` field and the order-indexed
-  /// `self.reservations` map are two views of the same fact (see this
-  /// module's own "`reserved` is stored, never derived" section) and
-  /// nothing keeps them in sync automatically — any edge that replaces an
-  /// `Account` wholesale, rather than moving a checked amount across its
-  /// existing `Holding`s, silently reintroduces the exact divergence that
-  /// design was meant to make impossible.
+  /// Fix(open_wiped_reserved_out_from_under_a_live_reservation):
+  /// Root cause: `open` inserted a fresh `Account` over an existing one,
+  /// zeroing `reserved` behind a live reservation the ledger still held.
+  /// Pitfall: the account's `reserved` and the order ledger are two views of
+  /// one fact; replacing an `Account` wholesale splits them.
   pub fn open( &mut self, id : AccountId, cash : Money, asset : Quantity ) -> Result< (), EscrowError >
   {
     match self.accounts.get( &id )
     {
       Some( existing ) =>
       {
-        // Fix(exchange_escrow_open_merge_leg_torn_on_partial_failure): the
-        // merge branch used to run `account.cash.receive(cash)?` and
-        // `account.asset.receive(asset)?` as two statements against a live
-        // `&mut` into `self.accounts` — a failure on the asset leg still left
-        // the cash leg's already-successful `receive` committed, so a caller
-        // saw `open` return `Err` while the account's cash balance had
-        // already changed underneath it.
-        // Root cause: `receive` writes `self.available` before returning
-        // `Ok`, so sequencing two of them through `?` commits the first the
-        // moment it succeeds, regardless of whether the second one goes on to
-        // fail — nothing here made the two writes one atomic unit.
-        // Pitfall: a merge of two independent fallible edges on the same
-        // struct must compute both against a local copy and commit them
-        // together — mutate-then-`?` commits eagerly no matter how many more
-        // fallible steps follow, the same shape `settle` and `release` were
-        // hardened against earlier in this file.
+        // Fix(exchange_escrow_open_merge_leg_torn_on_partial_failure):
+        // Root cause: the two `receive`s ran against the live account, so an
+        // asset leg that failed left the cash leg committed under an `Err`.
+        // Pitfall: two fallible edges are one unit only if computed on a copy
+        // and committed together.
         let mut account = *existing;
         account.cash.receive( cash )?;
         account.asset.receive( asset )?;
@@ -479,7 +457,7 @@ impl Escrow
       Obligation::Asset( quantity ) => account.asset.reserve( quantity )?,
     }
 
-    self.reservations.insert( order.id, Reservation { obligation, unfilled : order.quantity } );
+    self.reservations.insert( order.id, Reservation { account : order.account, limit : order.price, obligation, unfilled : order.quantity } );
     Ok( obligation )
   }
 
@@ -491,38 +469,38 @@ impl Escrow
   /// is economically a deletion and which nothing on the fill path can
   /// discover.
   ///
-  /// The ledger entry is removed only once the account-level move has already
-  /// succeeded — never before. `Escrow` is public and `owner` is supplied by
-  /// the caller rather than derived from `order` itself, so a caller error
-  /// naming the wrong account must fail without destroying the *correct*
-  /// account's reservation record on its way to failing.
+  /// `owner` must be the account that reserved `order`. The ledger entry is
+  /// removed only once the account-level move has succeeded.
+  ///
+  /// Fix(a_release_naming_another_account_drained_its_reserve):
+  /// Root cause: a reservation did not record its owner, so `release` moved
+  /// the amount out of whichever account was named. One holding enough
+  /// `reserved` of its own absorbed it: the true owner's funds stayed locked
+  /// with no entry left to release them, and the named account's own order
+  /// could no longer settle or cancel.
+  /// Pitfall: the fix below made a wrong account fail only when it held too
+  /// little to absorb the move.
   ///
   /// Fix(a_release_deleted_the_ledger_entry_before_the_account_move_could_fail):
-  /// Root cause: the ledger entry was removed via `self.reservations.remove`
-  /// as the first statement, unconditionally — a `BTreeMap::remove` mutates
-  /// on the `Some` path regardless of what the rest of the function goes on
-  /// to do. Every following step could still fail (`UnknownAccount`, or the
-  /// account-level `Holding::release` itself), and on any of those failures
-  /// the function returned `Err` with the entry already gone: the true
-  /// owner's reservation was orphaned — nothing else ever reads or re-derives
-  /// it — and if the wrongly-named account happened to exist with enough of
-  /// its *own*, unrelated `reserved` pool to absorb the move, that account's
-  /// partition was silently corrupted too, with no error at all.
-  ///
-  /// Pitfall: an early, unconditional mutation of a lookup structure — a
-  /// `remove` used where a `get` would do — is invisible in a diff and in a
-  /// short function; only tracing which of the following lines can still
-  /// return `Err` reveals that the removal already happened by then.
+  /// Root cause: the entry was removed first, so a release that then failed
+  /// returned `Err` with the reservation already orphaned.
+  /// Pitfall: a `remove` where a `get` would do mutates whether or not the
+  /// rest of the function succeeds.
   ///
   /// # Errors
   ///
   /// [`EscrowError::NoReservation`] if `order` holds none,
-  /// [`EscrowError::UnknownAccount`] if its owner is gone. On either error, or
-  /// on the account-level move itself failing, the reservation is left
-  /// exactly as it was.
+  /// [`EscrowError::NotOwner`] if `owner` did not reserve it,
+  /// [`EscrowError::UnknownAccount`] if its owner is gone. On any error the
+  /// reservation and every account are left exactly as they were.
   pub fn release( &mut self, owner : AccountId, order : OrderId ) -> Result< Obligation, EscrowError >
   {
-    let obligation = self.reservations.get( &order ).ok_or( EscrowError::NoReservation( order ) )?.obligation;
+    let reservation = self.reservations.get( &order ).ok_or( EscrowError::NoReservation( order ) )?;
+    if reservation.account != owner
+    {
+      return Err( EscrowError::NotOwner( order ) );
+    }
+    let obligation = reservation.obligation;
     let account = self.accounts.get_mut( &owner ).ok_or( EscrowError::UnknownAccount( owner ) )?;
 
     match obligation
@@ -538,44 +516,78 @@ impl Escrow
   /// Move the units `trade` names between its two parties, drawing from their
   /// reservations.
   ///
-  /// `taker_side` says which side aggressed, and `taker_limit` is the price
-  /// the aggressor reserved at. The two are needed together for one reason:
-  /// **a buyer reserves at its own limit and may execute better**, and the
-  /// difference has to go back. Reserving the maximum is what makes the order
-  /// executable; returning the unused part is what stops the exchange
-  /// quietly accumulating the spread.
+  /// **A buyer reserves at its own limit and may execute better**, and the
+  /// difference goes back to it. The limit is the one the buyer's
+  /// reservation recorded: a taker's improvement is returned, a maker
+  /// executing at its own price has none. Reserving the maximum is what makes
+  /// the order executable; returning the unused part is what stops the
+  /// exchange quietly accumulating the spread.
   ///
   /// Every step below runs against local copies of the two accounts and the
-  /// two reservations before anything is written back into `self`. `Account`
-  /// and `Obligation` are both `Copy`, so this costs nothing beyond the copy
-  /// itself, and it is what stops a fallible step late in the sequence — an
-  /// asset holding already at its representable ceiling, say — from leaving
-  /// one party already paid out of a trade that, as a whole, never happened.
-  /// See this function's own regression test.
+  /// two reservations before anything is written back into `self`, so a
+  /// fallible step late in the sequence — an asset holding already at its
+  /// representable ceiling, say — cannot leave one party already paid out of
+  /// a trade that, as a whole, never happened.
+  ///
+  /// Fix(settle_trusted_the_callers_side_and_limit):
+  /// Root cause: the taker's side and limit were arguments, and a buying
+  /// maker's limit was taken to be the trade price. A limit above the one
+  /// reserved returned more than the fill freed, leaving the rest of the
+  /// order under-backed; one below left a filled order's entry behind; a
+  /// maker charged above its limit paid from what backed its remainder.
+  /// Pitfall: an argument restating what the ledger already recorded is a
+  /// second source of truth, and the two only disagree when a caller is
+  /// wrong.
   ///
   /// # Errors
   ///
-  /// [`EscrowError`] if either party is unknown, holds no reservation, or
-  /// holds one of the wrong shape. On any error, neither account and neither
-  /// reservation is changed.
-  pub fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >
+  /// [`EscrowError`] if either party is unknown, holds no reservation, holds
+  /// one of the wrong shape, or is not the account that reserved it
+  /// ([`EscrowError::NotOwner`]); [`EscrowError::NotReserved`] if the trade's
+  /// price is above the buyer's limit. On any error, neither account and
+  /// neither reservation is changed.
+  pub fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
-    let ( buyer, seller, buyer_limit ) = match taker_side
+    let taker = *self.reservations.get( &trade.taker ).ok_or( EscrowError::NoReservation( trade.taker ) )?;
+    let maker = *self.reservations.get( &trade.maker ).ok_or( EscrowError::NoReservation( trade.maker ) )?;
+    let ( buyer_limit, buyer, seller ) = match trade.taker_side
     {
-      Side::Buy => ( trade.taker_account, trade.maker_account, taker_limit ),
-      // The maker is the buyer, and a maker always executes at its own price,
-      // so there is nothing to give back.
-      Side::Sell => ( trade.maker_account, trade.taker_account, trade.price ),
+      Side::Buy => ( taker.limit, trade.taker_account, trade.maker_account ),
+      Side::Sell => ( maker.limit, trade.maker_account, trade.taker_account ),
     };
 
     let paid = notional( trade.price, trade.quantity )?;
     let reserved_for_this_fill = notional( buyer_limit, trade.quantity )?;
     let improvement = reserved_for_this_fill.checked_sub( paid ).map_err( | _ | EscrowError::Arithmetic )?;
+    if improvement < Money::ZERO
+    {
+      // Above the buyer's limit: the fill would spend what backs the rest of
+      // its order.
+      return Err( EscrowError::NotReserved );
+    }
+
+    let taker_reservation = Self::reduced_obligation
+    (
+      taker,
+      trade.taker,
+      trade.taker_account,
+      trade.taker_side,
+      reserved_for_this_fill,
+      trade.quantity,
+    )?;
+    let maker_reservation = Self::reduced_obligation
+    (
+      maker,
+      trade.maker,
+      trade.maker_account,
+      trade.taker_side.opposite(),
+      reserved_for_this_fill,
+      trade.quantity,
+    )?;
 
     let mut buyer_account = *self.accounts.get( &buyer ).ok_or( EscrowError::UnknownAccount( buyer ) )?;
     buyer_account.cash.deliver( paid )?;
     buyer_account.cash.release( improvement )?;
-    buyer_account.asset.receive( trade.quantity )?;
 
     // A self-trade is never produced by the matching engine's own self-match
     // prevention, but `Escrow` is public and defends against direct misuse
@@ -595,22 +607,13 @@ impl Escrow
     seller_account.asset.deliver( trade.quantity )?;
     seller_account.cash.receive( paid )?;
 
-    let taker_reservation = Self::reduced_obligation
-    (
-      self.reservations.get( &trade.taker ).copied(),
-      trade.taker,
-      taker_side,
-      reserved_for_this_fill,
-      trade.quantity,
-    )?;
-    let maker_reservation = Self::reduced_obligation
-    (
-      self.reservations.get( &trade.maker ).copied(),
-      trade.maker,
-      taker_side.opposite(),
-      paid,
-      trade.quantity,
-    )?;
+    // Fix(a_self_trade_at_the_ceiling_was_refused):
+    // Root cause: the buyer received the asset before the seller delivered
+    // it. On a self-trade both ran on one holding, whose total passed the
+    // ceiling in between on a trade that nets to zero.
+    // Pitfall: a step order harmless across two holdings is not across one.
+    let receiving = if seller == buyer { &mut seller_account } else { &mut buyer_account };
+    receiving.asset.receive( trade.quantity )?;
 
     // Every fallible step above succeeded — commit all four at once.
     if seller == buyer
@@ -660,7 +663,7 @@ impl Escrow
     } )
   }
 
-  /// Compute what `order`'s reservation becomes after taking out the filled
+  /// Compute what `order`'s `reservation` becomes after taking out the filled
   /// portion, without committing it — the compute half of `settle`'s
   /// compute-then-commit split. `Ok( None )` means fully discharged: nothing
   /// held and nothing unfilled.
@@ -680,20 +683,24 @@ impl Escrow
   ///
   /// # Errors
   ///
-  /// [`EscrowError::NoReservation`] if `order` holds none,
+  /// [`EscrowError::NotOwner`] if `owner` did not reserve it,
   /// [`EscrowError::ObligationMismatch`] if the stored shape does not match
   /// `side`, [`EscrowError::NotReserved`] if the amount or quantity named
   /// exceeds what remains.
   fn reduced_obligation
   (
-    current : Option< Reservation >,
+    reservation : Reservation,
     order : OrderId,
+    owner : AccountId,
     side : Side,
     cash_spent : Money,
     asset_delivered : Quantity,
   ) -> Result< Option< Reservation >, EscrowError >
   {
-    let reservation = current.ok_or( EscrowError::NoReservation( order ) )?;
+    if reservation.account != owner
+    {
+      return Err( EscrowError::NotOwner( order ) );
+    }
 
     let ( obligation, drained ) = match ( side, reservation.obligation )
     {
@@ -711,7 +718,7 @@ impl Escrow
     };
     let unfilled = reservation.unfilled.checked_minus( asset_delivered ).ok_or( EscrowError::NotReserved )?;
 
-    Ok( if drained && unfilled == Quantity::ZERO { None } else { Some( Reservation { obligation, unfilled } ) } )
+    Ok( if drained && unfilled == Quantity::ZERO { None } else { Some( Reservation { obligation, unfilled, ..reservation } ) } )
   }
 
   /// Write a previously-computed reservation update, dropping the record

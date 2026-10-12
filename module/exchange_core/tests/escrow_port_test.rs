@@ -92,7 +92,7 @@ impl EscrowPort for ScriptedEscrow
     Ok( obligation )
   }
 
-  fn settle( &mut self, trade : &Trade, _taker_side : Side, _taker_limit : Price ) -> Result< (), EscrowError >
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
     if let Some( error ) = self.settle_fails_for_maker.get( &trade.maker )
     {
@@ -155,6 +155,7 @@ fn every_reserve_failure_maps_to_its_reject_reason()
     ( EscrowError::NotReserved, RejectReason::InsufficientFunds ),
     ( EscrowError::NoReservation( OrderId( 0 ) ), RejectReason::InsufficientFunds ),
     ( EscrowError::AlreadyReserved( OrderId( 0 ) ), RejectReason::InsufficientFunds ),
+    ( EscrowError::NotOwner( OrderId( 0 ) ), RejectReason::InsufficientFunds ),
     ( EscrowError::ObligationMismatch, RejectReason::InsufficientFunds ),
     ( EscrowError::NegativeAmount, RejectReason::InsufficientFunds ),
   ];

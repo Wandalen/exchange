@@ -7,7 +7,8 @@
 - **In Scope**: Attempting a reservation and failing closed if funds are insufficient.
 - **Out of Scope**: Releasing or committing an existing hold.
 
-**Design status**: Named differently in the real build — `exchange_escrow::Escrow` (`module/exchange_escrow/src/lib.rs`) exposes `reserve()` rather than `hold_try`. Functionally analogous, but `Escrow` is a concrete struct with its own balance bookkeeping, not a trait named `EscrowPort` that a future workstream 010 crate was meant to implement.
+**Design status**: Built as `exchange_core::EscrowPort::reserve`, which
+`exchange_escrow::Escrow` implements over its own balances.
 
 ### Statement
 

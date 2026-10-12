@@ -169,7 +169,7 @@ pub trait EscrowPort : Clone
   ///
   /// [`EscrowError`] if either side cannot be settled, in which case nothing
   /// moves.
-  fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >;
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >;
 }
 
 /// Forwards to [`Escrow`]'s inherent methods — `Escrow::reserve( self, .. )`
@@ -187,9 +187,9 @@ impl EscrowPort for Escrow
     Escrow::release( self, owner, order )
   }
 
-  fn settle( &mut self, trade : &Trade, taker_side : Side, taker_limit : Price ) -> Result< (), EscrowError >
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
-    Escrow::settle( self, trade, taker_side, taker_limit )
+    Escrow::settle( self, trade )
   }
 }
 
@@ -587,8 +587,9 @@ impl< E : EscrowPort > Exchange< E >
 
   /// Take every event recorded so far, leaving the stream empty.
   ///
-  /// The owned counterpart to [`Self::events`]'s borrowed slice — see
-  /// `exchange_event`'s own module doc for why both exist.
+  /// The owned counterpart to [`Self::events`]'s borrowed slice: a consumer
+  /// that reads the stream once takes it here rather than cloning the slice,
+  /// and draining keeps the stream from growing without bound.
   #[ must_use ]
   pub fn event_drain( &mut self ) -> Vec< Event >
   {
@@ -779,7 +780,7 @@ impl< E : EscrowPort > Exchange< E >
     let dry_crossing = exchange_match::cross( &mut dry_book, &order, policy )?;
     for trade in &dry_crossing.trades
     {
-      if let Err( error ) = dry_escrow.settle( trade, order.side, order.price )
+      if let Err( error ) = dry_escrow.settle( trade )
       {
         return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
       }
@@ -852,7 +853,7 @@ impl< E : EscrowPort > Exchange< E >
     self.count( order.instrument, stats_fill_add, crossing.trades.len() as u64 );
     for trade in &crossing.trades
     {
-      self.escrow.settle( trade, order.side, order.price ).expect( "already validated by the dry run above" );
+      self.escrow.settle( trade ).expect( "already validated by the dry run above" );
       self.emit( order.id, order.account, EventKind::Trade( *trade ) );
     }
 
@@ -998,11 +999,11 @@ impl< E : EscrowPort > Exchange< E >
   /// Fix(a_cancel_removed_the_order_before_the_release_could_fail):
   /// Root cause: `book.cancel` is infallible once an order is found — it
   /// removes and returns it unconditionally — while the `escrow.release`
-  /// that followed it could still fail, most reachably with
-  /// `EscrowError::Arithmetic` when the account's `available` balance sits
-  /// close enough to the declared ceiling that crediting the reservation
-  /// back would breach it. On that failure the function returned `Err`, but
-  /// the order was already gone from the book: not filled, not cancelled,
+  /// that followed it could still fail: with `EscrowError::Arithmetic`, back
+  /// when `Escrow` let an account's total pass the ceiling, and with
+  /// whatever another [`EscrowPort`] refuses. On that failure the function
+  /// returned `Err`, but the order was already gone from the book: not
+  /// filled, not cancelled,
   /// not resting, unreachable by any public API and permanently stuck with
   /// its reservation. The same commit-before-validate shape already fixed
   /// once in `Escrow::release` itself, one level up the call stack.
@@ -1133,9 +1134,9 @@ impl< E : EscrowPort > Exchange< E >
       EscrowError::UnknownAccount( _ ) => RejectReason::UnknownAccount,
       EscrowError::Obligation( _ ) => RejectReason::ObligationUnrepresentable,
       // The account's funds were genuinely sufficient; a fixed-point ceiling
-      // was not — whether at reservation time, or when a trade's own
-      // proceeds would themselves breach one during the dry-run `settle`
-      // this function's own doc comment describes.
+      // was not. With `exchange_escrow::Escrow` that is a trade's proceeds
+      // carrying an account past it in the dry-run `settle`: escrow keeps a
+      // holding's total within the ceiling, so `reserve` never refuses on it.
       EscrowError::Arithmetic => RejectReason::ReservationUnrepresentable,
       // `AlreadyReserved` and `Obligation` stay reserve-only regardless of
       // this function's now-wider callers: the order id is freshly claimed
@@ -1153,6 +1154,8 @@ impl< E : EscrowPort > Exchange< E >
       // next trade or cancellation for that same order is ever considered,
       // so a later self-match release always finds a still-live,
       // correctly-shaped reservation for whatever `settle` left behind.
+      // `NotOwner` is foreclosed too: every account named comes from the
+      // order or the resting order it traded with.
       // Reported as insufficient funds rather than given a reason variant of
       // its own, because a reason no code path produces through this
       // function is a claim the code does not back.
@@ -1160,6 +1163,7 @@ impl< E : EscrowPort > Exchange< E >
       | EscrowError::NotReserved
       | EscrowError::NoReservation( _ )
       | EscrowError::AlreadyReserved( _ )
+      | EscrowError::NotOwner( _ )
       | EscrowError::ObligationMismatch
       | EscrowError::NegativeAmount => RejectReason::InsufficientFunds,
     }

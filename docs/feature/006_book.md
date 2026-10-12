@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_book`'s own
 `Book`) and now lives at
-[`../../module/exchange_book/readme.md`](../../module/exchange_book/readme.md)'s
-"Closes hard problem 1, and features 6 and 22" section.
+[`../../module/exchange_book/readme.md`](../../module/exchange_book/readme.md).
 
 ### Sources
 

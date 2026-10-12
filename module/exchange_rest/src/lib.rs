@@ -23,9 +23,9 @@
 //! an order currently calls `cancel` then `submit` as two separate,
 //! non-atomic steps, which can lose the old order's priority slot to a
 //! third party arriving between them with nothing left to roll back to if
-//! the second step fails. [`rest_replace`] closes that: cancel first, then
-//! insert, and if the insert is refused, the original goes back exactly as
-//! it was rather than staying cancelled with nothing to show for it.
+//! the second step fails. [`rest_replace`] closes that: it checks the
+//! replacement before touching the original, so a refused one leaves the
+//! original exactly where it stood.
 
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
@@ -36,8 +36,8 @@ use exchange_id::{ InstrumentId, OrderId };
 /// is in being the one place a caller reaches for *any* of the three
 /// non-matching moves, not in adding logic `insert` does not already have.
 ///
-/// Returns `false` on the same terms `insert` does: a zero-remaining
-/// `resting`, or an `order.id` already resting on either side.
+/// Returns `false` on the same terms `insert` does: a `remaining` of zero or
+/// above `order.quantity`, or an `order.id` already resting on either side.
 #[ must_use ]
 pub fn rest_place( book : &mut Book, resting : Resting ) -> bool
 {
@@ -69,9 +69,9 @@ pub enum RestReplaceError
   InstrumentMismatch,
   /// `old_id` was not resting on `instrument` — nothing to replace.
   Missing,
-  /// The replacement was refused by [`Book::insert`]: a zero-remaining
-  /// `Resting`, or an `order.id` already resting elsewhere on the book. The
-  /// order named by `old_id` has been put back exactly as it was.
+  /// [`Book::insert`] would refuse the replacement: a `remaining` of zero or
+  /// above its order's quantity, or an `order.id` already resting elsewhere
+  /// on the book. Nothing was touched.
   Refused,
 }
 
@@ -93,21 +93,21 @@ impl core::error::Error for RestReplaceError {}
 /// Atomically replace the order resting at `old_id` on `instrument` with
 /// `new_resting`.
 ///
-/// Cancels `old_id` first, then inserts `new_resting`. If that insert is
-/// refused, the cancelled order is reinserted unchanged before returning —
-/// a caller never observes a state where the old order is gone and the new
-/// one never arrived. See the module doc's "`rest_replace` is new, not
-/// extracted" section for why this exists at all.
+/// Checks `new_resting` with [`Book::insertable`], counting `old_id` as
+/// gone, then cancels `old_id` and inserts `new_resting`. A refused
+/// replacement touches nothing, so the original keeps its place in the queue.
+/// See the module doc's "`rest_replace` is new, not extracted" section for
+/// why this exists at all.
 ///
 /// Returns the original `Resting` that was replaced, on success.
 ///
 /// # Errors
 ///
 /// [`RestReplaceError::InstrumentMismatch`] if `new_resting.order.instrument`
-/// disagrees with `instrument` — checked first, before anything is touched.
+/// disagrees with `instrument`. [`RestReplaceError::Refused`] if
+/// [`Book::insert`] would refuse `new_resting`.
 /// [`RestReplaceError::Missing`] if `old_id` is not resting on `instrument`.
-/// [`RestReplaceError::Refused`] if `new_resting` is refused by
-/// [`Book::insert`] — the original stays exactly as it was.
+/// Checked in that order; on any error nothing is touched.
 ///
 /// ```rust
 /// use exact_arith::{ Price, Quantity };
@@ -153,20 +153,23 @@ pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : Order
     return Err( RestReplaceError::InstrumentMismatch );
   }
 
+  // Fix(a_refused_replace_sent_the_original_behind_its_peers):
+  // Root cause: the original was cancelled first and reinserted on refusal.
+  // `insert` seats an order behind every peer sharing its arrival, so it came
+  // back behind those it had been ahead of.
+  // Pitfall: reinserting by the same key is not putting back where it was.
+  if !book.insertable( &new_resting, Some( old_id ) )
+  {
+    return Err( RestReplaceError::Refused );
+  }
+
   let Some( old ) = book.cancel( instrument, old_id )
   else
   {
     return Err( RestReplaceError::Missing );
   };
 
-  if book.insert( new_resting )
-  {
-    Ok( old )
-  }
-  else
-  {
-    let restored = book.insert( old );
-    debug_assert!( restored, "an id just freed by cancel(), with its own prior-valid remaining, cannot be refused by insert()" );
-    Err( RestReplaceError::Refused )
-  }
+  let seated = book.insert( new_resting );
+  assert!( seated, "insertable() checked every refusal insert() makes, with old_id gone" );
+  Ok( old )
 }

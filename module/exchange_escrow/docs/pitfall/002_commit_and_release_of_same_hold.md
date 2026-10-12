@@ -9,53 +9,30 @@
 
 ### Statement
 
-A hold has exactly one valid resolution — a fill commits it, anything else
-releases it — and applying both operations to the same hold either
-double-frees funds that were already spent or double-counts funds that were
-already returned.
+A hold has exactly one resolution — a fill commits it, anything else releases
+it. Applying both to one hold either frees funds already spent or counts
+funds already returned twice.
 
 ### How this crate avoids it
 
-Both resolution paths consult the same `self.reservations: BTreeMap<OrderId, Obligation>`
-before mutating anything, and both remove (or shrink) the order's entry as
-part of resolving it — there is exactly one ledger, not one counter per
-operation ([`src/lib.rs`](../../src/lib.rs)):
+`release` and `settle` both look the order up in the one `reservations`
+ledger before touching an account, and refuse with `NoReservation` once it is
+gone. `release` removes the entry; `settle` removes it once nothing is held
+and nothing unfilled. Both compute against local copies and commit nothing on
+a refusal.
 
-- `Escrow::release` looks up `self.reservations.get(&order)` first and
-  returns `Err(EscrowError::NoReservation(order))` if nothing is there —
-  exactly the state left behind by an earlier `release` (which calls
-  `self.reservations.remove(&order)`) or an earlier fully-discharging
-  `settle` (whose `commit_reservation` also removes the entry once nothing
-  remains, via `reduced_obligation` returning `None`).
-- `Escrow::settle`'s `reduced_obligation` helper performs the identical
-  lookup (`current.ok_or(EscrowError::NoReservation(order))?`) against the
-  same map, for both the taker's and the maker's reservation, before either
-  account is touched. A hold already resolved by an earlier `release` is
-  therefore refused by a later `settle` the same way, and vice versa.
-- Both functions compute every fallible step against local copies and
-  commit nothing until every step has succeeded (`settle`'s own doc
-  comment: "every step below runs against local copies... before anything
-  is written back into `self`"), so a refused double-resolution changes
-  nothing rather than partially applying one side of the operation.
+A partial fill leaves the reduced entry in place, and a later `release`
+returns what remains — one resolution of the remainder, not a second one of
+the filled part.
 
-A partial fill is not a counterexample: `reduced_obligation` can leave
-`Some(reduced amount)` in the map rather than removing it, and a later
-`release` of that same order then correctly releases whatever remains — one
-resolution of the *whole* remaining hold, not a second resolution of the
-already-settled portion.
-
-Not yet backed by a test narrating this exact double-resolution scenario by
-name — the closest existing coverage is
 [`tests/reservation_test.rs`](../../tests/reservation_test.rs)'s
-`releasing_without_a_reservation_is_refused`, which exercises the same
-`self.reservations.get` → `NoReservation` code path that a post-settle or
-post-release double-resolution would also hit, just not phrased as "this
-order was already resolved once." Documented honestly here rather than
-claiming dedicated coverage that does not exist.
+`a_hold_resolves_once` settles then releases, settles twice, releases then
+settles, and releases twice; each second attempt is refused and moves
+nothing.
 
 ### Sources
 
 | File | Relationship |
 |------|--------------|
-| `../../../../docs/pitfall/014_commit_and_release_of_same_hold.md` | The central catalog's own (now-relocated) copy of this pitfall |
+| `../../../../docs/pitfall/014_commit_and_release_of_same_hold.md` | The central catalog's own copy of this pitfall |
 | `../../../../../../codename_space_sandbox/intake/core_exchange.txt:909` | Pitfall in the source's Prompt 7 "Escrow" list |

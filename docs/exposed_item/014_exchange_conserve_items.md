@@ -5,19 +5,15 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_conserve`.
 - **Responsibility**: Asserting that a set of fills sums to zero.
 
-**Design status**: Built, as its own crate — `conserve_assert` matches the
-proposal's own name; the proposed `fill_legs_sum` was dropped for
-`exact_arith::money_sum_assert_zero`, which does the same sum; `ConserveError` has 3 variants
-(`Notional`, `Overflow`, `Unbalanced` — the proposal's `NotZero` renamed,
-plus a `Notional` variant the proposal didn't name) rather than the
-proposed 2. Full comparison, including why this crate's existence does not
-contradict `Escrow::total_cash()`/`total_asset()` serving a *different*,
-global-balance-sheet check, moved to
+**Design status**: Built — `conserve_assert` as proposed; `fill_legs_sum`
+not built, `exact_arith::money_sum_assert_zero` doing the sum; `ConserveError`
+with `Notional`, `Overflow` and `Unbalanced` (the proposal's `NotZero`).
+Built-vs-proposed comparison:
 [`../../module/exchange_conserve/docs/item/readme.md`](../../module/exchange_conserve/docs/item/readme.md).
 
 ### Statement
 
-Prompt 3 specifies a standalone crate asserting that one set of fill legs sums to zero, with its own error type. The real build has no such crate; conservation is instead checked by summing total balances before and after an operation in `exchange_escrow`, reusing that crate's own error type rather than introducing a dedicated one.
+Prompt 3 specifies a standalone crate asserting that one set of fill legs sums to zero, with its own error type.
 
 ### Sources
 

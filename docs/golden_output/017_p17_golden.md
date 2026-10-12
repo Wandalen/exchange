@@ -12,7 +12,7 @@
 Revised from the original 10/-10-vs-10/-9 magnitude-mismatch framing: wiring
 `conserve_assert` against a real `exchange_match::cross` batch (Stage 6)
 proved that shape unreachable, since both of a trade's legs go in together —
-see `exchange_conserve/src/lib.rs`'s "Revision" section.
+see `exchange_conserve/src/lib.rs`'s "Two legs per trade".
 
 ### Sources
 

@@ -26,20 +26,17 @@ value, never `Result`. No `EventError` type is declared.
 
 ### Option 1: Add a fixed-capacity event buffer and a real `Full` case
 
-Rejected for now: same reasoning as `exchange_snap`'s ADR-002 — this is a
-family-wide capacity-bounding decision (a chosen capacity, an eviction or
-refusal policy), not a one-crate choice, and nothing today needs it. The
-real event stream has never once overflowed in practice because nothing
-bounds it.
+Rejected for now, as in `exchange_snap`'s ADR-002: a capacity and an
+eviction or refusal policy are a family-wide decision, and nothing needs one
+yet.
 
 ## Consequences
 
 **Positive:** `event_push`'s signature says exactly what it does — it
 cannot fail.
 
-**Negative:** if a bounded event stream is adopted later, `event_push`'s
-signature changes from infallible to fallible — a breaking change for any
-caller by then. Revisit this decision first if that direction is taken.
+**Negative:** bounding the stream later makes `event_push` fallible — a
+breaking change.
 
 ## Related
 

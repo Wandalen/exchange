@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_conserve`'s
 own `conserve_assert`) and now lives at
-[`../../module/exchange_conserve/readme.md`](../../module/exchange_conserve/readme.md)'s
-"Closes hard problem 5 and feature 21" section.
+[`../../module/exchange_conserve/readme.md`](../../module/exchange_conserve/readme.md).
 
 ### Sources
 

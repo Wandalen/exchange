@@ -6,7 +6,7 @@
 //! test suite — these just confirm the wrapper forwards faithfully, not a
 //! second copy of `Book`'s own matrix. `rest_replace` is this crate's one
 //! genuinely new operation and gets the deeper coverage, including the
-//! rollback path a plain cancel-then-insert can't offer atomically.
+//! refusal a plain cancel-then-insert can't make atomic.
 
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
@@ -135,13 +135,13 @@ fn rest_replace_on_a_missing_id_is_refused_and_touches_nothing()
   assert_eq!( book.len(), 1, "the unrelated order 1 is untouched" );
 }
 
-// --- rest_replace: Refused, with rollback --------------------------------
+// --- rest_replace: Refused ----------------------------------------------
 
-/// The rollback path this crate exists to provide: a replacement that
-/// collides with a third order is refused, and the original comes back
-/// exactly as it was rather than staying cancelled.
+/// What this crate exists to provide: a replacement that collides with a
+/// third order is refused, and the original stays exactly as it was rather
+/// than staying cancelled.
 #[ test ]
-fn rest_replace_refused_by_a_colliding_id_restores_the_original()
+fn rest_replace_refused_by_a_colliding_id_leaves_the_original()
 {
   let mut book = Book::new();
   assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
@@ -154,15 +154,15 @@ fn rest_replace_refused_by_a_colliding_id_restores_the_original()
   assert_eq!( error, RestReplaceError::Refused );
   assert_eq!( book.len(), 2, "neither order was lost" );
   let restored = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
-  assert_eq!( restored.order.id, OrderId( 1 ), "order 1 is back, unchanged" );
+  assert_eq!( restored.order.id, OrderId( 1 ), "order 1 still rests, unchanged" );
   assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap() );
   assert_eq!( restored.remaining, qty( 4 ) );
 }
 
-/// Same rollback path, reached through the other refusal cause: a
-/// zero-remaining replacement.
+/// Same refusal, reached through the other cause: a zero-remaining
+/// replacement.
 #[ test ]
-fn rest_replace_refused_by_zero_quantity_restores_the_original()
+fn rest_replace_refused_by_zero_quantity_leaves_the_original()
 {
   let mut book = Book::new();
   assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
@@ -172,8 +172,52 @@ fn rest_replace_refused_by_zero_quantity_restores_the_original()
 
   assert_eq!( error, RestReplaceError::Refused );
   let restored = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
-  assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap(), "rolled back to the pre-replace order" );
+  assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap(), "still the pre-replace order" );
   assert_eq!( restored.remaining, qty( 4 ) );
+}
+
+/// A refused replace keeps the original's place among orders sharing its
+/// arrival.
+///
+/// # Root Cause
+///
+/// `rest_replace` cancelled the original, then reinserted it when the
+/// replacement was refused. `Book::insert` seats an order behind every peer
+/// sharing its arrival, so it came back behind those it had been ahead of.
+///
+/// # Why Not Caught
+///
+/// Every refusal test rested one order per arrival.
+///
+/// # Fix Applied
+///
+/// `rest_replace` asks `Book::insertable` first and touches nothing on a
+/// refusal.
+///
+/// # Prevention
+///
+/// "Put back exactly as it was" is checked against the queue, not the order.
+///
+/// # Pitfall
+///
+/// Only ties expose it, and only `exchange_inbound::inbound_apply` rests
+/// arrivals it did not claim itself.
+#[ test ]
+fn rest_replace_refused_keeps_the_originals_place_among_shared_arrivals()
+{
+  let mut book = Book::new();
+  for id in 1..=3
+  {
+    assert!( rest_place( &mut book, resting( id, Side::Sell, "2.50", 4, 10 ) ) );
+  }
+  let queue = | book : &Book | book.side( InstrumentId( 1 ), Side::Sell ).map( | resting | resting.order.id.0 ).collect::< Vec< _ > >();
+
+  for id in [ 1, 2 ]
+  {
+    let zero = Resting { remaining : Quantity::ZERO, ..resting( id, Side::Sell, "2.60", 4, 20 ) };
+    assert_eq!( rest_replace( &mut book, InstrumentId( 1 ), OrderId( id ), zero ), Err( RestReplaceError::Refused ) );
+    assert_eq!( queue( &book ), vec![ 1, 2, 3 ], "order {id} keeps its place" );
+  }
 }
 
 // --- rest_replace: InstrumentMismatch ------------------------------------

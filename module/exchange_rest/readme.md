@@ -34,7 +34,7 @@ rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting ).unwrap();
 `rest_place`/`rest_cancel` are the primitive mutations feature 8 (`book_rest`,
 `book_cancel`) names — insert into the book, remove by id — the two moves
 every higher-level operation here builds from. `rest_replace` adds the
-atomic cancel-then-reinsert-with-rollback feature 25 (`book_replace`) names,
+atomic cancel-then-reinsert feature 25 (`book_replace`) names,
 closing hard problem 9 (cancel and replace): a resting order can be
 withdrawn or changed with no stale remnant left behind either way.
 
@@ -49,9 +49,9 @@ Stage 9 decision. See [`src/lib.rs`](src/lib.rs) for the full reasoning.
 
 No atomic cancel-and-reinsert exists anywhere else in the family — a caller
 wanting to replace an order today calls `cancel` then `submit` as two
-separate, non-atomic steps. `rest_replace` closes that, with a rollback to
-the original on a refused insert rather than leaving the book short an
-order. See [`src/lib.rs`](src/lib.rs)'s doc comment for the exact contract.
+separate, non-atomic steps. `rest_replace` closes that: it checks the
+replacement before cancelling, so a refused one leaves the original where it
+stood rather than leaving the book short an order. See [`src/lib.rs`](src/lib.rs)'s doc comment for the exact contract.
 
 ## Not yet wired into `exchange_core`
 
@@ -76,7 +76,7 @@ standalone only with respect to `exchange_core`, not every caller.
 | `docs/pitfall/` | The central "Book" pitfall `rest_replace`'s ordering avoids, plus one open gap it does not yet guard against |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
-| [`tests/exchange_rest_test.rs`](tests/exchange_rest_test.rs) | Test Matrix — place/cancel forwarding, replace success and both refusal paths with rollback |
+| [`tests/exchange_rest_test.rs`](tests/exchange_rest_test.rs) | Test Matrix — place/cancel forwarding, replace success and both refusal paths, the original keeping its place |
 | [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan |
 
 ## Related

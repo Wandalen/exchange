@@ -1,7 +1,7 @@
 # exchange_conserve
 
-A batch of fills nets to zero across its signed legs, or is refused as
-unbalanced.
+A batch of fills nets to zero across its legs, or is refused. Closes hard
+problem 5 and feature 21.
 
 ```rust
 use exact_arith::{ Price, Quantity };
@@ -20,34 +20,31 @@ assert!( conserve_assert( &[ trade ] ).is_ok() );
 ```
 
 Summing the legs is `exact_arith::money_sum_assert_zero`'s job; this crate
-only turns trades into signed legs.
+only turns trades into legs — the buyer debited the notional, the seller
+credited it.
 
-## Not extracted from `Escrow::total_cash`/`total_asset`
+## Unbalanced is unreachable today
 
-The source design names those two methods as this crate's extraction source.
-They check the ledger's own internal self-consistency, which is trivially
-true by construction — a different check, at a different grain, from "does
-this one batch of fills net to zero." See [`src/lib.rs`](src/lib.rs) for the
-full reasoning, including why a single trade can never fail this check on its
-own (its two legs come from one shared `price`/`quantity`, not two
-independent sources) and why the batch is where this earns its keep.
+A trade's two legs come from one `price`/`quantity`, so they always cancel.
+`exchange_match::cross` calls `conserve_assert` on every batch anyway, and
+wraps a refusal in `MatchError::Conservation`: the day a fee makes a debit
+and its credit differ, this is the check that catches a fee miscomputed on
+one side. What can fail today is a trade whose notional is not exact — see
+[`src/lib.rs`](src/lib.rs).
 
-## Closes hard problem 5 and feature 21
+## Not `Escrow::total_cash`/`total_asset`
 
-`conserve_assert` is hard problem 5 (conservation) and feature 21
-(`conservation_assert`) both: one batch of fills, checked to net to exactly
-zero. See [`src/lib.rs`](src/lib.rs)'s own module doc for why this is a
-different, narrower check than `Escrow::total_cash`/`total_asset`.
+The source design names those as this crate's extraction source. They sum the
+ledger's own balances, which agree by construction; this checks one batch of
+trades, before escrow or the event stream sees it.
 
-## Wired into `exchange_match`
+## Not built: fee legs
 
-`exchange_match::cross_inner` calls `conserve_assert` on its own batch of
-trades before returning, as defense-in-depth — `MatchError::Conservation`
-wraps a refusal, matching the crate's existing, pre-established pattern for
-`MatchError::Quantity`/`BookDesynchronized`: documented as unreachable
-through the real submission path today, kept because a trade's two legs
-coming from the same `price`/`quantity` (so they always offset) stops being
-guaranteed the day a fee or similar asymmetry enters this family's design.
+A fee turns a trade's two legs into three — buyer, seller, and the fee sink —
+and makes `Unbalanced` reachable. The point of assessment is decided
+(`exchange_core/docs/algorithm/004_fee_assessment_point.md`); the schedule is
+not, and the sink is workstream 010's
+([`../../docs/not_a_002_crate/004_wallet_fee_sink.md`](../../docs/not_a_002_crate/004_wallet_fee_sink.md)).
 
 ## Responsibility Table
 
@@ -57,14 +54,14 @@ guaranteed the day a fee or similar asymmetry enters this family's design.
 | [`src/lib.rs`](src/lib.rs) | `ConserveError`, `conserve_assert` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
-| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
-| `docs/pitfall/` | The 1 "Money" pitfall this crate's exact-arithmetic choice bears on |
-| [`tests/exchange_conserve_test.rs`](tests/exchange_conserve_test.rs) | Test Matrix T01 — leg summation and batch assertion, plus Phase P17's smoke assertion |
+| `docs/item/` | Exposed surface, as built vs. proposed |
+| `docs/pitfall/` | Conservation summed in floats |
+| [`tests/exchange_conserve_test.rs`](tests/exchange_conserve_test.rs) | Test Matrix T01 — the batch assertion, plus Phase P17's smoke assertion |
 | [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan |
 
 ## Related
 
 - [`exchange_fill/`](../exchange_fill/readme.md) — supplies `Trade` and its `taker_side` field
-- [`exchange_escrow/`](../exchange_escrow/readme.md) — the ledger-level conservation check this crate is *not* (see above)
-- [`exchange_match/`](../exchange_match/readme.md) — the real caller, via `cross_inner`
+- [`exchange_escrow/`](../exchange_escrow/readme.md) — the ledger-level totals this crate is not
+- [`exchange_match/`](../exchange_match/readme.md) — calls it from `cross`
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p17_cons`, this crate's phase smoke

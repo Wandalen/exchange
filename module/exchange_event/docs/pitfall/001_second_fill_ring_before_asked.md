@@ -8,14 +8,9 @@
 
 ### Statement
 
-A second ring carrying fills out to workstream 010 is explicitly deferred,
-not forbidden forever — building it speculatively, before 010 names a
-concrete throughput problem the plain event drain cannot handle, adds
-concurrency-primitive complexity against a need nobody has confirmed yet
-(see this crate's own
-[`../decisions/001_no_event_drain_type.md`](../decisions/001_no_event_drain_type.md)
-for the parallel reasoning against inventing a dedicated `EventDrain`
-container).
+A second ring carrying fills out to workstream 010 is deferred, not
+forbidden. Built before 010 names a throughput problem the plain drain
+cannot handle, it adds a concurrency primitive nobody needs yet.
 
 ### How this crate avoids it
 

@@ -7,7 +7,9 @@
 - **In Scope**: Consuming a hold into the settlement a `Fill` describes.
 - **Out of Scope**: Returning a hold unconsumed — that is `hold_release`'s job.
 
-**Design status**: Named differently in the real build — `exchange_escrow::Escrow` (`module/exchange_escrow/src/lib.rs`) exposes `settle()` rather than `hold_commit`, taking a `Trade` directly rather than a bare hold identifier.
+**Design status**: Built as `exchange_core::EscrowPort::settle`, which
+`exchange_escrow::Escrow` implements; it takes the `Trade` rather than a hold
+identifier.
 
 ### Statement
 

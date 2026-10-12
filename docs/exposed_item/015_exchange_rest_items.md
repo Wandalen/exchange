@@ -19,8 +19,8 @@ elsewhere:
   `exchange_rest` crate (dependent only on `book, idem, cap, escrow, spec`)
   implies but does not spell out as one atomic caller-facing operation the
   way the real `Exchange::cancel` does.
-- **`rest_replace` is new, and built**: an atomic cancel-then-reinsert with
-  rollback on refusal. The central catalog's own former note that this
+- **`rest_replace` is new, and built**: an atomic cancel-then-reinsert,
+  checked before the cancel so a refusal touches nothing. The central catalog's own former note that this
   "does not exist anywhere" predates this crate's real build and is now
   stale — see the thinned pointer at
   [`../crate/015_exchange_rest.md`](../crate/015_exchange_rest.md).

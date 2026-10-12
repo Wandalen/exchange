@@ -1,78 +1,36 @@
-//! The resting order book — what is on offer, in the order the exchange will
-//! consume it.
-//!
-//! This crate holds no matching logic. Its whole responsibility is the
-//! *ordering*: given a side, hand out resting orders best-first, so that the
-//! matching engine can take them from the front without ever deciding who is
+//! The resting order book — what is on offer, in the order matching will
+//! consume it. No matching logic: the book hands out resting orders best
+//! first, so `exchange_match` takes from the front and never decides who is
 //! next.
 //!
 //! # The priority rule
 //!
-//! **Price first, then arrival.** A better price always ranks ahead. Within
-//! one price, strictly the earlier arrival — FIFO, no exceptions.
+//! Price first, then arrival: a better price always ranks ahead, and within
+//! one price the earlier arrival — FIFO, no exceptions. Better is higher for a
+//! bid, lower for an ask ([`exchange_side::side_ahead`]).
 //!
-//! "Better" is side-dependent and that is the only asymmetry in this crate:
-//! for a bid a higher price is better, for an ask a lower one is. Both are
-//! the same statement — *more willing to trade* ranks first.
-//!
-//! # Why arrival and not time
-//!
-//! Ties are broken by `exchange_seq::Sequence`, a claimed position, and never by a clock
-//! reading. Two orders submitted in the same instant still receive distinct,
-//! ordered positions, so there is no tie left for a tie-break to resolve
-//! wrongly. This matters more than it looks: with time priority resolved by
-//! timestamp, two same-price orders would be ranked by whichever host's clock
-//! was ahead, the result would differ between machines, and every
-//! single-threaded test — the regime a matching engine is almost always
-//! tested in — would still pass.
-//!
-//! The same rule forbids the other ways a container can leak an order into a
-//! decision. There is no hash iteration anywhere here, and nothing compares
+//! Arrival is an `exchange_seq::Sequence` the caller claims, never a clock
+//! reading: two orders placed in the same instant still get distinct
+//! positions, and a replay reproduces them. Should two share an arrival, the
+//! one inserted first stays ahead. Nothing here iterates a hash or compares
 //! addresses.
 //!
 //! # One book per instrument
 //!
-//! [`Book`] holds every instrument's own bids and asks side by side, never
-//! mixed — hard problem 1. [`insert`](Book::insert) reads which instrument a
-//! `Resting` belongs to off its own `resting.order.instrument`, so that call
-//! keeps its original shape; every other method that touches one
-//! instrument's levels — [`cancel`](Book::cancel), [`side`](Book::side),
-//! [`best`](Book::best), [`consume_best`](Book::consume_best) — has no order
-//! to read an instrument from, so each takes one as its own first argument
-//! instead. An instrument nothing has ever inserted into behaves exactly
-//! like an empty book, with no separate registration step: the first insert
-//! for a new instrument creates its slot, the same way the first order at a
-//! new price creates its level.
-//!
-//! [`iter`](Book::iter), [`len`](Book::len), and [`is_empty`](Book::is_empty)
-//! stay global, across every instrument at once — the shape their one real
-//! caller needs: `exchange_core::Exchange::cancel` finds an order by id
-//! alone, with no instrument known ahead of time, so it needs a global
-//! search before it can call the now instrument-scoped `cancel` with
-//! whatever that search found.
+//! [`Book`] keeps each instrument's bids and asks apart — hard problem 1.
+//! [`insert`](Book::insert) reads the instrument off the order; every other
+//! per-instrument method takes it as its first argument. An instrument nothing
+//! has rested on behaves as an empty book. [`iter`](Book::iter),
+//! [`len`](Book::len) and [`is_empty`](Book::is_empty) span every instrument:
+//! `exchange_core::Exchange::cancel` finds an order by id alone.
 //!
 //! # Representation
 //!
-//! A [`Vec`] of `(`[`InstrumentId`]`, InstrumentBook)` pairs sorted by
-//! instrument; each instrument's side is a [`VecDeque`] of [`Level`]s sorted
-//! best first, so an emptied best level leaves in O(1) and a taker sweeping
-//! many prices pays linear, not quadratic, cost. Within each level,
-//! [`exchange_level`] keeps arrival order. Every lookup finds its instrument,
-//! and `insert` its price, by `partition_point` — a second keyed dimension
-//! does not reopen the "no hash iteration anywhere" clause above.
-//!
-//! This used to be a single flat `Vec<Resting>` per side, with same-price
-//! orders simply sitting adjacent to each other — this crate's own design
-//! documents named a price-level map as the shape to reach for "when
-//! insertion cost starts mattering," and explicitly declined to build one
-//! until it did. Nothing about insertion cost changed; what changed is that
-//! the family's own refactor plan calls for the per-price FIFO queue to be an
-//! explicit, independently-tested type (`exchange_level`, closing hard
-//! problems 2 and 3), not an implicit byproduct of one crate's sort order.
-//! [`Resting`] is a type alias for [`exchange_level::LevelNode`] rather than
-//! a second, identically-shaped struct, so every existing caller's
-//! `Resting { order, remaining, arrival }` literal and field access is
-//! unaffected by either that change or the instrument-keying one above it.
+//! A `Vec` of `( InstrumentId, InstrumentBook )` pairs sorted by instrument;
+//! each side a [`VecDeque`] of [`Level`]s, best first, so an emptied best level
+//! leaves in O(1). Within a level, [`exchange_level`] keeps arrival order.
+//! Instruments and prices are found by `partition_point`. [`Resting`] is an
+//! alias of [`exchange_level::LevelNode`].
 
 use std::collections::VecDeque;
 
@@ -82,9 +40,6 @@ use exchange_level::{ Level, level_empty_is, level_len, level_new, level_pop_fro
 use exchange_side::{ Side, side_ahead };
 
 /// An order on the book, with what is left of it.
-///
-/// A type alias, not a new struct — see the module doc's "Representation"
-/// section for why.
 pub type Resting = exchange_level::LevelNode;
 
 /// One instrument's own two sides.
@@ -108,13 +63,19 @@ pub struct Book
   id_high : Option< OrderId >,
 }
 
-/// Equal when the same orders rest the same way; `id_high` is a cache of
-/// past inserts, not part of what rests.
+/// Equal when the same orders rest the same way. `id_high` is a cache of
+/// past inserts, and an emptied instrument's slot a leftover of them; neither
+/// is part of what rests.
+//
+// Fix(an_emptied_instrument_made_two_equal_books_unequal):
+// Root cause: a slot outlives its instrument's last order, and `eq` compared
+// the slots, so a book cancelled back to empty differed from `Book::new()`.
+// Pitfall: excluding `id_high` covered one leftover of history, not all.
 impl PartialEq for Book
 {
   fn eq( &self, other : &Self ) -> bool
   {
-    self.per_instrument == other.per_instrument
+    self.live().eq( other.live() )
   }
 }
 
@@ -136,49 +97,38 @@ impl Book
   /// has to remember to call.
   ///
   /// Returns `false`, refusing the insert, if `resting.remaining` is zero or
-  /// `resting.order.id` already rests on either side — the same "caller
-  /// error that would silently corrupt the book" class [`Self::consume_best`]
-  /// already guards, applied to the quantity and id spaces respectively.
+  /// above `resting.order.quantity`, or `resting.order.id` already rests on
+  /// either side — the same "caller error that would silently corrupt the
+  /// book" class [`Self::consume_best`] guards.
   //
   // Fix(book_insert_had_no_duplicate_order_id_rejection):
-  // Root cause: `insert` placed every `Resting` handed to it with no check
-  // that its `order.id` was not already resting. `cancel` can only ever
-  // return one match for an id (`position()` stops at the first), so a
-  // second resting order sharing an id would silently outlive its own
-  // cancellation — the caller believes it cancelled, a duplicate keeps
-  // trading under the same identity.
-  // Pitfall: unreachable through both current callers, which each mint ids
-  // from their own private monotonic counter — but `Book` is a public,
-  // standalone crate (`Book::new`, `Resting`'s fields, and `insert` itself
-  // are all `pub`), so its own contract must hold for any caller, not only
-  // today's two.
+  // Root cause: `insert` seated a second order under an id already resting.
+  // `cancel` removes only the first match, so the duplicate outlived its own
+  // cancellation and kept trading under the same identity.
+  // Pitfall: both in-repo callers mint unique ids, but `Book` is public; its
+  // contract must hold for any caller.
   //
   // Fix(book_insert_had_no_zero_remaining_rejection):
-  // Root cause: `insert` placed every `Resting` handed to it with no check
-  // that `remaining` was above zero, even though `Resting::remaining`'s own
-  // doc comment states the invariant "always greater than zero — a resting
-  // order with nothing left is removed rather than kept at zero."
-  // `consume_best` only ever removes a zero-remaining order from inside a
-  // `checked_sub` that just reached zero — a zero-remaining `Resting` seated
-  // directly by `insert` never passes through that arithmetic, so nothing
-  // ever evicts it, and it jams every later match against that side: the
-  // next positive `taken` against it underflows `checked_sub`, so
-  // `consume_best` returns `false` without ever removing the phantom order.
-  // Pitfall: unreachable through both current callers, which each guard
-  // `remaining > Quantity::ZERO` before calling `insert` — but `Book` is a
-  // public, standalone crate (`Resting`'s fields and `insert` itself are all
-  // `pub`), so its own contract must hold for any caller, not only today's
-  // two.
+  // Root cause: `insert` seated a zero-remaining order. Only `consume_best`
+  // evicts an order, and only when its own subtraction reaches zero, so the
+  // phantom stayed at the front and every later `consume_best` against it
+  // underflowed and returned `false`.
+  // Pitfall: as above — a guard in every caller is not a guard in `Book`.
+  //
+  // Fix(book_insert_seated_more_than_the_order_holds):
+  // Root cause: only a zero `remaining` was refused. One above
+  // `order.quantity` traded past the order's size, since `consume_best`
+  // reads `remaining` alone.
+  // Pitfall: `rest_replace` and `inbound_apply`'s `Replace` pass a
+  // caller-built `Resting` straight through.
   #[ must_use ]
   pub fn insert( &mut self, resting : Resting ) -> bool
   {
-    let id = resting.order.id;
-    let maybe_seated = self.id_high.is_some_and( | high | id <= high );
-    if resting.remaining == Quantity::ZERO || ( maybe_seated && self.contains_id( id ) )
+    if !self.insertable( &resting, None )
     {
       return false;
     }
-    self.id_high = self.id_high.max( Some( id ) );
+    self.id_high = self.id_high.max( Some( resting.order.id ) );
 
     let side = resting.order.side;
     let price = resting.order.price;
@@ -188,16 +138,17 @@ impl Book
 
     if levels.get( at ).is_some_and( | level | level.price == price )
     {
-      // Not `level_push`: that function's contract is "append as newest
-      // arrival," which assumes its caller submits in increasing-arrival
-      // order. `Book::insert` makes no such assumption of its own callers —
-      // the arrival *value* determines position, not the call order it
-      // arrived in (`t02_time_priority_within_one_price_level` constructs
-      // exactly this case) — so this sorts into `arrival`'s position
-      // directly, the same way the pre-`exchange_level` code sorted by
-      // `(price, arrival)` together.
+      // Not `level_push`, which appends: callers may insert out of arrival
+      // order (`t02_time_priority_within_one_price_level`), so the node goes
+      // to its arrival's position.
+      //
+      // Fix(an_insert_sharing_an_arrival_jumped_the_queue):
+      // Root cause: the position was found with `<`, which lands before
+      // every node of equal arrival, so ties came out newest first.
+      // Pitfall: the one caller that claims arrivals itself never ties;
+      // `exchange_inbound::inbound_apply` rests whatever its producer stamped.
       let nodes = &mut levels[ at ].nodes;
-      let node_at = nodes.partition_point( | node | node.arrival < resting.arrival );
+      let node_at = nodes.partition_point( | node | node.arrival <= resting.arrival );
       nodes.insert( node_at, resting );
     }
     else
@@ -207,6 +158,19 @@ impl Book
       levels.insert( at, level );
     }
     true
+  }
+
+  /// Whether [`Self::insert`] would seat `resting`, counting `vacating` as
+  /// already gone. Nothing moves: a replace asks before it withdraws the
+  /// order it replaces, so a refusal leaves that order where it stood.
+  #[ must_use ]
+  pub fn insertable( &self, resting : &Resting, vacating : Option< OrderId > ) -> bool
+  {
+    let id = resting.order.id;
+    let maybe_seated = self.id_high.is_some_and( | high | id <= high );
+    resting.remaining != Quantity::ZERO
+      && resting.remaining <= resting.order.quantity
+      && ( vacating == Some( id ) || !( maybe_seated && self.contains_id( id ) ) )
   }
 
   /// Whether an order with this id rests on any instrument's either side.
@@ -401,6 +365,12 @@ impl Book
     self.side( instrument, Side::Buy ).chain( self.side( instrument, Side::Sell ) )
       .filter( | resting | resting.order.account == account )
       .count()
+  }
+
+  /// Every instrument slot with an order resting.
+  fn live( &self ) -> impl Iterator< Item = &( InstrumentId, InstrumentBook ) >
+  {
+    self.per_instrument.iter().filter( | ( _, book ) | !book.bids.is_empty() || !book.asks.is_empty() )
   }
 
   /// `instrument`'s own levels on `side`, or no levels if nothing has ever

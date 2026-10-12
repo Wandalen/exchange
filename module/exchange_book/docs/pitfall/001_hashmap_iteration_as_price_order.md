@@ -8,27 +8,20 @@
 
 ### Statement
 
-A hash map's iteration order is an implementation detail, not a price order —
-code that walks one expecting price-time priority will see a different,
-unstable order on every run (and potentially every machine), silently
-corrupting the one guarantee a matching engine cannot do without.
+A hash map's iteration order is not a price order. Code walking one for
+price-time priority sees a different order from run to run, and from machine
+to machine.
 
 ### How this crate avoids it
 
-`grep -n "HashMap" module/exchange_book/src/lib.rs` returns zero hits. Each
-instrument's own `InstrumentBook` holds `bids`/`asks` as a sorted `VecDeque<Level>`
-([`src/lib.rs`](../../src/lib.rs)) — highest price first for bids, lowest
-first for asks — never a hash-keyed container; price ranking is the deque's own
-sort order, not an incidental side effect of iterating anything. (The type
-narrowed from an earlier `Vec<Resting>` to a `Vec<Level>` when
-per-price-level storage moved out to `exchange_level`, then to a
-`VecDeque<Level>` so an emptied best level leaves in O(1); the "no hash
-iteration" guarantee this pitfall is about held before that move and holds
-unchanged after it.) Verified directly:
+`grep -n "HashMap" module/exchange_book/src/lib.rs` returns nothing. Each
+instrument's `bids`/`asks` are a sorted `VecDeque<Level>` — highest price
+first for bids, lowest first for asks — and the instruments themselves a
+sorted `Vec`. Price ranking is the deque's own order.
 [`tests/priority_test.rs`](../../tests/priority_test.rs)'s
 `t03_price_priority_across_levels_for_bids` and
-`t03_price_priority_across_levels_for_asks` insert resting orders out of
-price order and assert they come back ranked correctly.
+`t03_price_priority_across_levels_for_asks` insert out of price order and read
+the ranking back.
 
 ### Sources
 

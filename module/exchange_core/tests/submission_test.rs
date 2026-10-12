@@ -8,7 +8,7 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, Entry, EscrowError, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
+  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, Entry, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
   InstrumentId, Money, Obligation, Order, OrderId, PostingAsset, Price, Producer, Quantity, Receipt, RejectReason, Resting,
   SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, postings, verify,
 };
@@ -660,103 +660,71 @@ fn a_negative_price_is_refused_before_it_can_rest()
   assert_eq!( exchange.book().len(), 1 );
 }
 
-/// An order refused for a genuinely representable-ceiling reason is reported
-/// as such, not folded into `RejectReason::InsufficientFunds` when the
-/// account's funds are, in fact, ample.
+/// An order refused for a representable-ceiling reason is reported as such,
+/// not folded into `RejectReason::InsufficientFunds` when the funds are, in
+/// fact, ample.
 ///
 /// # Root Cause
 ///
 /// `Exchange::reason_for` mapped every `EscrowError` other than
 /// `UnknownAccount`/`Obligation` to `RejectReason::InsufficientFunds`, on the
-/// documented claim that nothing else was reachable from `submit`'s call to
-/// `Escrow::reserve`. `Holding::reserve` checks `available` and `reserved`
-/// independently, and only the first of those is a funds check — the second,
-/// `reserved.checked_plus(amount)`, is a ceiling check on the account's
-/// *pooled* commitment across every one of its live orders, and it can fail
-/// on its own.
+/// claim that nothing else was reachable. `EscrowError::Arithmetic` was: a
+/// ceiling refusal, with the account's funds sufficient.
 ///
 /// # Why Not Caught
 ///
-/// Every account in the existing suite holds one reservation at a time, so
-/// `available` and `reserved` never drift far enough apart to matter. Seeing
-/// them diverge needs an account that both (a) already carries one very large
-/// reservation, and (b) separately earns fresh, genuinely spendable funds —
-/// settling as a seller — before placing a second small order: `available`
-/// comfortably covers the second order, but folding it into `reserved`
-/// alongside the first commitment does not fit the ceiling.
+/// No account in the suite came near the ceiling.
 ///
 /// # Fix Applied
 ///
-/// `reason_for` now maps `EscrowError::Arithmetic` to its own
+/// `reason_for` maps `EscrowError::Arithmetic` to its own
 /// `RejectReason::ReservationUnrepresentable` and matches every remaining
-/// `EscrowError` variant exhaustively (no wildcard), so a future variant
-/// reaching `reserve` has to be given a considered reason rather than
-/// silently inheriting the funds-shortfall bucket.
+/// variant exhaustively, so a new one needs a considered reason.
 ///
 /// # Prevention
 ///
-/// A catch-all reason is a claim that every variant it swallows is either
-/// equivalent or unreachable. That claim has an expiry date the moment a new
-/// variant is added to the error enum it swallows from — verify it again
-/// rather than assuming the bundle still holds.
+/// A catch-all reason claims every variant it swallows is equivalent or
+/// unreachable; re-check that claim whenever the enum grows.
 ///
 /// # Pitfall
 ///
-/// The two ceilings look identical from the caller's side — both refuse an
-/// order that would otherwise have gone through — but they call for different
-/// responses: a real shortfall needs more funds, a pooled-reservation ceiling
-/// needs fewer *simultaneous* live orders on the account, and conflating them
-/// sends the caller looking for the wrong fix.
+/// This first surfaced as `reserve`'s pooled `reserved` check failing beside
+/// ample `available`. Escrow now keeps each holding's total within the
+/// ceiling, so that state is refused where it would start — at the proceeds
+/// below — and the refusal still has to read as a ceiling, not a shortfall.
 #[ test ]
-fn a_reservation_ceiling_breach_is_distinguished_from_a_funds_shortfall()
+fn a_ceiling_breach_is_distinguished_from_a_funds_shortfall()
 {
   let mut exchange = Exchange::new();
   instrument_register( &mut exchange );
-  // Account 1 opens holding the whole-unit ceiling in cash outright, plus
-  // enough asset to sell later.
+  // Account 1 holds the whole-unit ceiling in cash, plus asset to sell.
   exchange.open_account( AccountId( 1 ), money( "9000000000" ), qty( 600 ) ).unwrap();
   exchange.open_account( AccountId( 2 ), money( "2000" ), qty( 0 ) ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  // Order 1: a huge resting buy at $1 that reserves nearly all of account 1's
-  // cash — 500 minor units short of the whole-unit ceiling in minor units.
+  // A huge resting buy at $1 reserves nearly all of account 1's cash, and a
+  // sell at $2 rests above it, so the two do not cross.
   let huge = Quantity::from_minor( 8_999_999_999_999_500 ).unwrap();
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1" ), huge ).unwrap();
-
-  // Order 2: account 1 separately rests a sell for 500 of the asset, priced
-  // at $2 — above order 1's own $1 buy, so the two do not cross each other
-  // (which would otherwise trigger this account's own self-match policy).
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 500 ) ).unwrap();
 
-  // Account 2 crosses it at $2, paying account 1 $1000 that account 1's
-  // original cash deposit never budgeted for — fresh, genuinely spendable
-  // funds landing in `available` on top of the huge reservation already
-  // sitting in `reserved`.
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2" ), qty( 500 ) ).unwrap();
-
-  let account_before = *exchange.escrow().account( AccountId( 1 ) ).unwrap();
-  assert_eq!( account_before.cash.reserved().minor(), 8_999_999_999_999_500, "sanity: still holding order 1's reservation" );
-  assert!
-  (
-    account_before.cash.available() > money( "0.001" ),
-    "far more than order 3 costs is genuinely spendable: {:?}", account_before.cash.available(),
-  );
-
+  let account_1_before = *exchange.escrow().account( AccountId( 1 ) ).unwrap();
+  let account_2_before = *exchange.escrow().account( AccountId( 2 ) ).unwrap();
   let events_before = exchange.events().len();
 
-  // Order 3: a vanishingly small buy — $0.001 — well within `available`, but
-  // `reserved` has only 500 minor units of headroom left before the ceiling.
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1000" ), Quantity::from_minor( 1 ).unwrap() );
+  // Account 2 can pay the $1000; account 1's cash cannot take it.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2" ), qty( 500 ) );
 
   assert_eq!
   (
     refused,
     Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ),
-    "funds are sufficient; only the pooled reservation ceiling is breached",
+    "funds are sufficient; only account 1's ceiling is breached",
   );
-  assert_eq!( *exchange.escrow().account( AccountId( 1 ) ).unwrap(), account_before, "a rejected order moves nothing" );
+  assert_eq!( *exchange.escrow().account( AccountId( 1 ) ).unwrap(), account_1_before, "a rejected order moves nothing" );
+  assert_eq!( *exchange.escrow().account( AccountId( 2 ) ).unwrap(), account_2_before, "a rejected order moves nothing" );
   assert_eq!( exchange.events().len(), events_before + 1, "exactly the rejection event was recorded" );
   assert!
   (
@@ -802,119 +770,65 @@ fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), Money::ZERO, "nothing was reserved" );
 }
 
-/// A cancel whose escrow release fails does not remove the order from the
-/// book first — the release has to actually succeed before that mutation
-/// commits, not after.
+/// A resting order stays cancellable however close its account sits to the
+/// ceiling: a trade whose proceeds would leave no room to return the order's
+/// reservation is refused instead.
 ///
 /// # Root Cause
 ///
-/// `Exchange::cancel` called the infallible, order-removing
-/// `self.book.cancel(id)` one statement before the fallible
-/// `self.escrow.release(...)` — the same commit-before-validate shape as
-/// `Escrow::release`'s own already-fixed bug, one level higher in the call
-/// stack. `escrow.release` can refuse an id `book.cancel` just confirmed
-/// rests: concretely `EscrowError::Arithmetic`, when the owning account's
-/// `available` has grown — via unrelated trades settling after this order
-/// was accepted — close enough to the representable ceiling that returning
-/// this order's own reservation would breach it. On that refusal `cancel`
-/// returned `Err`, but the order was already gone from the book, with no
-/// event and no id left for any future retry to name.
+/// Escrow checked a deposit or proceeds against `available` alone. A sale
+/// filling `available` to the ceiling beside a resting buy's reservation left
+/// `release` no room to return it, so `cancel` failed with
+/// `EscrowError::Arithmetic`. (`cancel` once also removed the order before
+/// that release, stranding it; `escrow_port_test`'s
+/// `a_cancel_whose_release_fails_leaves_the_order_resting` pins that ordering
+/// with a scripted escrow, since the real one no longer refuses a release.)
 ///
 /// # Why Not Caught
 ///
-/// Every existing cancel test releases a reservation into an account with
-/// ample headroom below the ceiling. Seeing `release` fail needs an account
-/// that reserved for one order early, then separately earned fresh,
-/// genuinely spendable funds — settling as the maker on an unrelated,
-/// higher-priced resting order — until `available` alone sits at the
-/// ceiling, with the first order's own reservation still untouched on top of
-/// it.
+/// Every cancel test released into an account with ample headroom.
 ///
 /// # Fix Applied
 ///
-/// `cancel` now looks up the resting order's account through `Book::iter`
-/// (read-only) first, calls `escrow.release` before the book is touched at
-/// all, and only removes the order once that release has actually
-/// succeeded — the same validate-before-commit ordering `Escrow::release`
-/// itself already uses internally.
+/// `Holding::receive` refuses an amount that would carry `available +
+/// reserved` past the ceiling, so the sale is rejected in the dry run.
 ///
 /// # Prevention
 ///
-/// Whenever one step is infallible and irreversible and the next is
-/// fallible, the fallible step has to run first, never the reverse — so a
-/// `?` short-circuit never leaves the first step's effect stranded with
-/// nothing left to undo it.
+/// Bound the sum the later edge relies on, where the sum grows.
 ///
 /// # Pitfall
 ///
-/// The reservation itself was never corrupted by this bug — `Escrow::release`
-/// keeps the ledger entry and the account's `reserved` balance untouched on
-/// its own failure, per its own already-fixed ordering. What was lost is the
-/// *order*: once `book.cancel` had already removed it, no id remained for a
-/// future retry to name, so an otherwise perfectly intact reservation became
-/// permanently unreachable through the public API the moment the account's
-/// balance no longer had room to absorb it.
+/// Refusing the sale is the cost: an account at the ceiling cannot take
+/// proceeds until it spends or withdraws a reservation.
 #[ test ]
-fn a_cancel_that_fails_to_release_leaves_the_order_resting()
+fn a_resting_order_stays_cancellable_at_the_ceiling()
 {
   let mut exchange = Exchange::new();
   instrument_register( &mut exchange );
   // Account 1 starts three cash units short of the whole-unit ceiling, plus
-  // enough asset to sell later.
+  // asset to sell.
   exchange.open_account( AccountId( 1 ), money( "8999999997" ), qty( 10 ) ).unwrap();
   exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  // Order 1: a small resting buy that reserves 1 unit of cash — the
-  // reservation this test tries, and fails, to release.
+  // A small resting buy reserving 1, and a sell of 2 at $2 resting above it.
   let order_1 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1" ), qty( 1 ) ).unwrap();
-  assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), money( "1" ) );
-
-  // Order 2: account 1 separately rests a sell for 2 of the asset, priced
-  // above order 1's own $1 buy so the two do not cross each other (which
-  // would otherwise trigger this account's own self-match policy).
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) ).unwrap();
 
-  // Account 2 crosses it at $2, paying account 1 exactly the 4 cash units
-  // that bring `available` to precisely the whole-unit ceiling — fresh,
-  // genuinely spendable funds landing on top of order 1's reservation, still
-  // sitting untouched in `reserved`.
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2" ), qty( 2 ) ).unwrap();
+  // Account 2's $4 would carry account 1's cash one unit past the ceiling.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2" ), qty( 2 ) );
+  assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ) );
 
   let account = exchange.escrow().account( AccountId( 1 ) ).unwrap();
-  assert_eq!( account.cash.available(), money( "9000000000" ), "sanity: available sits exactly at the ceiling" );
-  assert_eq!( account.cash.reserved(), money( "1" ), "sanity: order 1's reservation is still untouched" );
-
-  // Cancelling order 1 would return its 1 unit to `available` — one more
-  // than the ceiling allows.
-  let first = exchange.cancel( order_1.order );
-  assert_eq!( first, Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
-
-  // The fix: order 1 is still resting, not silently gone. A second attempt
-  // sees the exact same order and fails the exact same way — proof nothing
-  // was stranded by the first attempt.
-  assert!
-  (
-    exchange.book().iter().any( | resting | resting.order.id == order_1.order ),
-    "order 1 must still rest after a release failure",
-  );
-  let second = exchange.cancel( order_1.order );
-  assert_eq!( second, first, "a retry sees the same order and fails the same way, not `NotResting`" );
-
-  // Escrow itself is untouched by either attempt.
-  let account = exchange.escrow().account( AccountId( 1 ) ).unwrap();
-  assert_eq!( account.cash.available(), money( "9000000000" ) );
+  assert_eq!( account.cash.available(), money( "8999999996" ), "no proceeds landed" );
   assert_eq!( account.cash.reserved(), money( "1" ) );
-  assert_eq!( exchange.escrow().reserved_for( order_1.order ), Some( Obligation::Cash( money( "1" ) ) ) );
 
-  // No cancellation event was ever recorded for order 1.
-  assert!
-  (
-    !exchange.events().iter().any( | event | matches!( event.kind, EventKind::OrderCancelled { .. } ) ),
-    "a failed release must not be reported as a completed cancellation",
-  );
+  assert_eq!( exchange.cancel( order_1.order ), Ok( qty( 1 ) ) );
+  assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.available(), money( "8999999997" ) );
+  assert_eq!( exchange.escrow().reserved_for( order_1.order ), None );
 }
 
 /// A crossing whose second trade cannot settle commits nothing at all — not

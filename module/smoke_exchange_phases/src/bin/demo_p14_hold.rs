@@ -52,7 +52,7 @@ fn main()
     price : buy.price,
     quantity : buy.quantity,
   };
-  let com = escrow.settle( &trade, Side::Buy, buy.price ).is_ok();
+  let com = escrow.settle( &trade ).is_ok();
 
   println!( "rel={} com={}", u8::from( rel ), u8::from( com ) );
   assert!( rel );

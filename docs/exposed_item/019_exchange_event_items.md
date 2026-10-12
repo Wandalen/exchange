@@ -5,15 +5,16 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_event`.
 - **Responsibility**: Draining fills, rejects, and cancel-acks for workstream 010.
 
-**Design status**: `Event`/`EventKind` now live in `exchange_fill` (moved on from `exchange_types`, which re-exported them for a time before its own re-export aggregator role retired), in a richer shape than proposed; `event_push`/`event_drain`/`event_len`/`event_clear` are built in their own `exchange_event` crate, re-exporting `Event`/`EventKind` from `exchange_fill` rather than declaring them. Verified built-vs-proposed comparison: [`../../module/exchange_event/docs/item/readme.md`](../../module/exchange_event/docs/item/readme.md).
-- Proposed: `Event { Fill, Reject, Cancel }` (an enum of the three outcomes directly), `EventDrain`, `event_push`/`event_drain`/`event_len`/`event_clear`, `EventError { Full }`.
-- Real: `Event { sequence, order, account, kind }` is a **struct** wrapping a separate `EventKind` enum (`OrderAccepted`, `OrderRejected`, `Trade`, `OrderCancelled`) — four variants, richer payloads, and a `sequence`/`order`/`account` envelope common to all of them (`exchange_fill/src/lib.rs:178-234`).
-- All four functions (`event_push`/`event_drain`/`event_len`/`event_clear`) exist in `exchange_event`, operating on `&mut Vec<Event>` directly — no standalone `EventDrain` type and no `EventError { Full }`, since nothing here has a bounded capacity to exceed.
-- Notably, there is deliberately **no** `OrderFilled`/dedicated-fill-event kind (see the crate's own module doc, `exchange_fill/src/lib.rs:193-198`): fill state is derived from summing `EventKind::Trade` events rather than recorded a second time.
+**Design status**: Built — `event_push`/`event_drain`/`event_len`/`event_clear`
+on a plain `Vec<Event>`; no `EventDrain` and no `EventError { Full }`, since
+nothing bounds the stream. The proposed `Event { Fill, Reject, Cancel }` is
+`exchange_fill`'s `Event { sequence, order, account, kind }` around a
+four-variant `EventKind`, re-exported here. Built-vs-proposed comparison:
+[`../../module/exchange_event/docs/item/readme.md`](../../module/exchange_event/docs/item/readme.md).
 
 ### Statement
 
-Prompt 3 specifies a bounded, push/drain-style event queue with a capacity error. The real event stream is an unbounded `Vec<Event>` — mutated directly through `exchange_event`'s own `event_push`/`event_drain`/`event_len`/`event_clear`, not only read via `exchange_core::Exchange::events()`'s slice — with a four-variant `EventKind` richer than the proposed three-way `Event` enum.
+Prompt 3 specifies a bounded, push/drain-style event queue with a capacity error.
 
 ### Sources
 

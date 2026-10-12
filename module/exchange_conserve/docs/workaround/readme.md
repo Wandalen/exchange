@@ -11,10 +11,8 @@ External constraints `exchange_conserve` absorbs.
 
 ### Overview
 
-**None.** `exchange_conserve` depends only on `exchange_fill`, `exchange_side`
-(both zero-or-leaf, in-workspace), `exchange_types` (in-workspace, for
-`notional`/`TypeError`), and `exact_arith` (in-workspace, for `Money`) —
-nothing external to work around. Verify with:
+**None.** `exchange_conserve` depends on `exchange_fill`, `exchange_side`,
+`exchange_types` and `exact_arith`, and no published crate. Verify with:
 
 ```bash
 cd module/exchange_conserve && cargo tree --depth 1
@@ -27,4 +25,4 @@ cd module/exchange_conserve && cargo tree --depth 1
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — four in-workspace crates |
+| `Cargo.toml` | The dependency surface examined for this finding — three in-workspace crates and `exact_arith`, pinned in the root `Cargo.toml` |

@@ -14,6 +14,5 @@
 | `ConserveError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `conserve_assert` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
-Why this crate exists alongside `exchange_escrow::total_cash`/`total_asset`
-rather than being folded into them: [`../../src/lib.rs`](../../src/lib.rs)'s
-own module doc, "Not extracted from `Escrow::total_cash`/`total_asset`".
+Why this is not `exchange_escrow::total_cash`/`total_asset`:
+[`../../src/lib.rs`](../../src/lib.rs)'s module doc.
