@@ -984,6 +984,60 @@ fn a_reservation_stays_releasable_at_the_ceiling()
   assert_eq!( escrow.release( AccountId( 1 ), held.id ), Ok( Obligation::Cash( money( "1" ) ) ) );
 }
 
+/// A self-trade nets to zero, so an account at the ceiling can still settle
+/// one.
+///
+/// # Root Cause
+///
+/// `settle` credited the buyer's asset before debiting the seller's. On a
+/// self-trade both steps hit one holding, whose total passed the ceiling in
+/// between.
+///
+/// # Why Not Caught
+///
+/// No self-trade test sat near the ceiling.
+///
+/// # Fix Applied
+///
+/// The seller delivers before the buyer receives.
+///
+/// # Prevention
+///
+/// A step order harmless across two holdings is not across one.
+///
+/// # Pitfall
+///
+/// `exchange_core`'s self-match prevention keeps a self-trade from reaching
+/// `settle`; only a direct `Escrow` caller hits this.
+#[ test ]
+fn a_self_trade_at_the_ceiling_settles()
+{
+  let mut escrow = Escrow::new();
+  escrow.open( AccountId( 1 ), money( "10" ), Quantity::from_int( CEILING_WHOLE_UNITS ).unwrap() ).unwrap();
+  let ask = order( 1, 1, Side::Sell, "1", 1 );
+  let bid = order( 2, 1, Side::Buy, "1", 1 );
+  escrow.reserve( &ask ).unwrap();
+  escrow.reserve( &bid ).unwrap();
+  let before = *escrow.account( AccountId( 1 ) ).unwrap();
+
+  let trade = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert_eq!( escrow.settle( &trade ), Ok( () ) );
+
+  let after = escrow.account( AccountId( 1 ) ).unwrap();
+  assert_eq!( after.asset.total(), before.asset.total() );
+  assert_eq!( after.cash.total(), before.cash.total() );
+  assert_eq!( escrow.reservation_count(), 0 );
+}
+
 /// A second `open` for an already-open account tops up `available` and
 /// leaves a live reservation exactly where it was — not zeroed out from
 /// under it.

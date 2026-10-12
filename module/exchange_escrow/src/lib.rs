@@ -587,7 +587,6 @@ impl Escrow
     let mut buyer_account = *self.accounts.get( &buyer ).ok_or( EscrowError::UnknownAccount( buyer ) )?;
     buyer_account.cash.deliver( paid )?;
     buyer_account.cash.release( improvement )?;
-    buyer_account.asset.receive( trade.quantity )?;
 
     // A self-trade is never produced by the matching engine's own self-match
     // prevention, but `Escrow` is public and defends against direct misuse
@@ -606,6 +605,14 @@ impl Escrow
     };
     seller_account.asset.deliver( trade.quantity )?;
     seller_account.cash.receive( paid )?;
+
+    // Fix(a_self_trade_at_the_ceiling_was_refused):
+    // Root cause: the buyer received the asset before the seller delivered
+    // it. On a self-trade both ran on one holding, whose total passed the
+    // ceiling in between on a trade that nets to zero.
+    // Pitfall: a step order harmless across two holdings is not across one.
+    let receiving = if seller == buyer { &mut seller_account } else { &mut buyer_account };
+    receiving.asset.receive( trade.quantity )?;
 
     // Every fallible step above succeeded — commit all four at once.
     if seller == buyer
