@@ -6,7 +6,7 @@
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
-use exchange_match::{ SelfMatchCancellation, SelfMatchPolicy, cross };
+use exchange_match::{ SelfMatchCancellation, SelfMatchPolicy, CrossingStep, cross };
 use exchange_order::Order;
 use exchange_seq::Sequence;
 use exchange_side::Side;
@@ -72,7 +72,7 @@ fn t09_no_trade_in_a_mixed_account_flow_carries_equal_self_match_keys()
   assert_eq!
   (
     second.cancelled,
-    vec![ SelfMatchCancellation { order : OrderId( 3 ), account : AccountId( 42 ), quantity : qty( 4 ) } ],
+    vec![ SelfMatchCancellation { order : OrderId( 3 ), account : AccountId( 42 ), quantity : qty( 4 ), trades_before : 0 } ],
   );
 }
 
@@ -92,7 +92,7 @@ fn t10_cancel_resting_withdraws_the_resting_side_and_the_loop_resumes()
   assert_eq!
   (
     crossing.cancelled,
-    vec![ SelfMatchCancellation { order : OrderId( 1 ), account : AccountId( 9 ), quantity : qty( 3 ) } ],
+    vec![ SelfMatchCancellation { order : OrderId( 1 ), account : AccountId( 9 ), quantity : qty( 3 ), trades_before : 0 } ],
   );
   assert_eq!( crossing.trades.len(), 1, "the loop resumed and filled against the other resting order" );
   assert_eq!( crossing.trades[ 0 ].maker, OrderId( 2 ) );
@@ -116,7 +116,7 @@ fn t11_cancel_incoming_withdraws_the_incoming_side_and_resting_survives()
   assert_eq!
   (
     crossing.cancelled,
-    vec![ SelfMatchCancellation { order : OrderId( 2 ), account : AccountId( 9 ), quantity : qty( 4 ) } ],
+    vec![ SelfMatchCancellation { order : OrderId( 2 ), account : AccountId( 9 ), quantity : qty( 4 ), trades_before : 0 } ],
   );
   let resting = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
   assert_eq!( resting.order.id, OrderId( 1 ) );
@@ -139,8 +139,8 @@ fn t12_cancel_both_withdraws_both_sides()
     crossing.cancelled,
     vec!
     [
-      SelfMatchCancellation { order : OrderId( 1 ), account : AccountId( 9 ), quantity : qty( 4 ) },
-      SelfMatchCancellation { order : OrderId( 2 ), account : AccountId( 9 ), quantity : qty( 4 ) },
+      SelfMatchCancellation { order : OrderId( 1 ), account : AccountId( 9 ), quantity : qty( 4 ), trades_before : 0 },
+      SelfMatchCancellation { order : OrderId( 2 ), account : AccountId( 9 ), quantity : qty( 4 ), trades_before : 0 },
     ],
   );
   assert!( book.is_empty(), "the resting side is gone too" );
@@ -178,9 +178,9 @@ fn cancel_resting_for_a_buy_taker_leaves_the_bids_untouched()
     crossing.cancelled,
     vec!
     [
-      SelfMatchCancellation { order : OrderId( 4 ), account : AccountId( 9 ), quantity : qty( 2 ) },
-      SelfMatchCancellation { order : OrderId( 5 ), account : AccountId( 9 ), quantity : qty( 2 ) },
-      SelfMatchCancellation { order : OrderId( 6 ), account : AccountId( 9 ), quantity : qty( 4 ) },
+      SelfMatchCancellation { order : OrderId( 4 ), account : AccountId( 9 ), quantity : qty( 2 ), trades_before : 0 },
+      SelfMatchCancellation { order : OrderId( 5 ), account : AccountId( 9 ), quantity : qty( 2 ), trades_before : 0 },
+      SelfMatchCancellation { order : OrderId( 6 ), account : AccountId( 9 ), quantity : qty( 4 ), trades_before : 0 },
     ],
   );
   assert_eq!( crossing.trades.len(), 1, "the loop resumed and filled against the other account's ask" );
@@ -218,8 +218,8 @@ fn cancel_both_for_a_buy_taker_leaves_the_bids_untouched()
     crossing.cancelled,
     vec!
     [
-      SelfMatchCancellation { order : OrderId( 3 ), account : AccountId( 9 ), quantity : qty( 4 ) },
-      SelfMatchCancellation { order : OrderId( 5 ), account : AccountId( 9 ), quantity : qty( 4 ) },
+      SelfMatchCancellation { order : OrderId( 3 ), account : AccountId( 9 ), quantity : qty( 4 ), trades_before : 0 },
+      SelfMatchCancellation { order : OrderId( 5 ), account : AccountId( 9 ), quantity : qty( 4 ), trades_before : 0 },
     ],
   );
   let ids = | side | book.side( InstrumentId( 1 ), side ).map( | resting | resting.order.id ).collect::< Vec< _ > >();
@@ -301,7 +301,7 @@ fn t13_a_self_crossing_fok_under_cancel_resting_fills_past_its_own_order()
   assert_eq!
   (
     crossing.cancelled,
-    vec![ SelfMatchCancellation { order : OrderId( 1 ), account : AccountId( 9 ), quantity : qty( 2 ) } ],
+    vec![ SelfMatchCancellation { order : OrderId( 1 ), account : AccountId( 9 ), quantity : qty( 2 ), trades_before : 0 } ],
   );
   assert_eq!( crossing.trades.len(), 1 );
   assert_eq!( crossing.trades[ 0 ].maker, OrderId( 2 ) );
@@ -326,4 +326,26 @@ fn t13_a_self_crossing_fok_that_cannot_fill_leaves_its_own_order_resting()
   assert!( crossing.cancelled.is_empty() );
   assert_eq!( crossing.remaining, qty( 4 ) );
   assert_eq!( book, before, "order 1 still rests" );
+}
+
+/// A withdrawal records where it fell among the trades, and `steps` puts it
+/// back there: a cancel-resting taker trades, passes over its own order, and
+/// trades again behind it.
+#[ test ]
+fn steps_keep_a_withdrawal_between_the_trades_around_it()
+{
+  let mut book = Book::new();
+  rest( &mut book, 1, 8, Side::Sell, "2.50", 2, 10 );
+  rest( &mut book, 2, 9, Side::Sell, "2.50", 2, 20 );
+  rest( &mut book, 3, 7, Side::Sell, "2.60", 4, 30 );
+
+  let crossing = cross( &mut book, &order( 4, 9, Side::Buy, "2.60", 5 ), SelfMatchPolicy::CancelResting ).unwrap();
+
+  assert_eq!( crossing.cancelled[ 0 ].trades_before, 1, "order 1 traded before order 2 was withdrawn" );
+  let steps : Vec< String > = crossing.steps().iter().map( | step | match step
+  {
+    CrossingStep::Trade( trade ) => format!( "trade {}", trade.maker.0 ),
+    CrossingStep::Cancelled( withdrawn ) => format!( "cancel {}", withdrawn.order.0 ),
+  } ).collect();
+  assert_eq!( steps, vec![ "trade 1", "cancel 2", "trade 3" ] );
 }

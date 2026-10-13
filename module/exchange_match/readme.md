@@ -31,7 +31,10 @@ prices that cross; see the module doc in [`src/lib.rs`](src/lib.rs).
 A pair sharing one account never trades. The comparison runs inside the loop,
 before the pair's trade is built. `SelfMatchPolicy` says which side is
 withdrawn — `CancelResting`, `CancelIncoming` or `CancelBoth` — and
-`Crossing::cancelled` reports it; `remaining` keeps its meaning.
+`Crossing::cancelled` reports it; `remaining` keeps its meaning. Cancel-resting
+can withdraw an order and then trade behind it, so each withdrawal records how
+many trades preceded it, and `Crossing::steps` gives both in the order they
+happened — the order to settle and record them in.
 
 [`tests/self_match_test.rs`](tests/self_match_test.rs) covers the three
 policies and the case a fill-then-check design gets wrong: an incoming order

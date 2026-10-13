@@ -105,7 +105,7 @@ pub use exchange_inbound::
   inbound_ring,
 };
 use exchange_inbound::inbound_drain;
-pub use exchange_match::{ Crossing, MatchError, SelfMatchCancellation, SelfMatchPolicy };
+pub use exchange_match::{ Crossing, CrossingStep, MatchError, SelfMatchCancellation, SelfMatchPolicy };
 pub use exchange_order::{ Amount, Obligation, Order };
 use exchange_rest::rest_place;
 pub use exchange_seq::Sequence;
@@ -777,16 +777,14 @@ impl< E : EscrowPort > Exchange< E >
     }
     let mut dry_book = self.book.clone();
     let dry_crossing = exchange_match::cross( &mut dry_book, &order, policy )?;
-    for trade in &dry_crossing.trades
+    for step in dry_crossing.steps()
     {
-      if let Err( error ) = dry_escrow.settle( trade )
+      let done = match step
       {
-        return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
-      }
-    }
-    for cancellation in &dry_crossing.cancelled
-    {
-      if let Err( error ) = dry_escrow.release( cancellation.account, cancellation.order )
+        CrossingStep::Trade( trade ) => dry_escrow.settle( trade ),
+        CrossingStep::Cancelled( cancellation ) => dry_escrow.release( cancellation.account, cancellation.order ).map( drop ),
+      };
+      if let Err( error ) = done
       {
         return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
       }
@@ -848,33 +846,44 @@ impl< E : EscrowPort > Exchange< E >
     let crossing = exchange_match::cross( &mut self.book, &order, policy )
       .expect( "already produced by the identical dry run above — cross is pure" );
 
-    // 4. Settle each trade in the step that generated it.
+    // 4. Settle each trade and release each self-match cancellation, in the
+    // order `cross` made them, and record each as it happens.
+    //
+    // Fix(a_self_match_withdrawal_is_recorded_before_the_trade_behind_it):
+    // Root cause: every trade was settled and recorded, then every
+    // cancellation, so a withdrawal that came first was recorded after a
+    // trade at a worse price.
+    // Pitfall: two lists from one loop lose its order unless it is kept.
     self.count( order.instrument, stats_fill_add, crossing.trades.len() as u64 );
-    for trade in &crossing.trades
-    {
-      self.escrow.settle( trade ).expect( "already validated by the dry run above" );
-      self.emit( order.id, order.account, EventKind::Trade( *trade ) );
-    }
-
-    // 4a. Release and report each self-match cancellation.
     let mut incoming_cancelled = false;
-    for cancellation in &crossing.cancelled
+    for step in crossing.steps()
     {
-      let released = self.escrow.release( cancellation.account, cancellation.order )
-        .expect( "already validated by the dry run above" );
-      self.emit
-      (
-        cancellation.order, cancellation.account,
-        EventKind::OrderCancelled { cause : CancelCause::SelfMatch, quantity : cancellation.quantity, released },
-      );
-      if cancellation.order == order.id
+      match step
       {
-        incoming_cancelled = true;
-      }
-      else
-      {
-        // A resting order withdrawn here is a cancel like any other.
-        self.count( order.instrument, stats_cancel_add, 1 );
+        CrossingStep::Trade( trade ) =>
+        {
+          self.escrow.settle( trade ).expect( "already validated by the dry run above" );
+          self.emit( order.id, order.account, EventKind::Trade( *trade ) );
+        },
+        CrossingStep::Cancelled( cancellation ) =>
+        {
+          let released = self.escrow.release( cancellation.account, cancellation.order )
+            .expect( "already validated by the dry run above" );
+          self.emit
+          (
+            cancellation.order, cancellation.account,
+            EventKind::OrderCancelled { cause : CancelCause::SelfMatch, quantity : cancellation.quantity, released },
+          );
+          if cancellation.order == order.id
+          {
+            incoming_cancelled = true;
+          }
+          else
+          {
+            // A resting order withdrawn here is a cancel like any other.
+            self.count( order.instrument, stats_cancel_add, 1 );
+          }
+        },
       }
     }
 

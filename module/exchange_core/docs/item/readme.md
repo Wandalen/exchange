@@ -36,7 +36,7 @@ with `exchange_id`'s/`exchange_escrow`'s own `docs/item/readme.md`).
 | `exchange_halt` | `HaltError` |
 | `exchange_id` | `AccountId, InstrumentId, OrderId` |
 | `exchange_inbound` | `BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject, inbound_ring` |
-| `exchange_match` | `Crossing, MatchError, SelfMatchCancellation, SelfMatchPolicy` |
+| `exchange_match` | `Crossing, CrossingStep, MatchError, SelfMatchCancellation, SelfMatchPolicy` |
 | `exchange_order` | `Amount, Obligation, Order` |
 | `exchange_seq` | `Sequence` |
 | `exchange_side` | `Side` |

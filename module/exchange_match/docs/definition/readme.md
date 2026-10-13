@@ -14,6 +14,8 @@
 | `Crossing` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Crossing::is_complete` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Crossing::filled` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `Crossing::steps` | method | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `CrossingStep` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `SelfMatchCancellation` | struct | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `MatchError` | enum | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `SelfMatchPolicy` | enum (re-export) | `../../../exchange_stp/src/lib.rs`, re-exported at `src/lib.rs` | [`../item/readme.md`](../item/readme.md), full definition at [`../../../exchange_stp/docs/item/readme.md`](../../../exchange_stp/docs/item/readme.md) |

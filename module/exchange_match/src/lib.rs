@@ -77,6 +77,8 @@ pub struct Crossing
   /// order, this was withdrawn, not left for the caller to rest.
   pub remaining : Quantity,
   /// Every order self-match prevention withdrew, in the order it happened.
+  /// Each says where it fell among `trades`; [`Crossing::steps`] interleaves
+  /// the two.
   pub cancelled : Vec< SelfMatchCancellation >,
 }
 
@@ -100,6 +102,35 @@ impl Crossing
   {
     self.trades.iter().try_fold( Quantity::ZERO, | sum, trade | sum.checked_add( trade.quantity ) )
   }
+
+  /// Every trade and self-match withdrawal, in the order `cross` made them —
+  /// the order to settle, release and record them in.
+  #[ must_use ]
+  pub fn steps( &self ) -> Vec< CrossingStep< '_ > >
+  {
+    let mut steps = Vec::with_capacity( self.trades.len() + self.cancelled.len() );
+    let mut cancelled = self.cancelled.iter().peekable();
+    for ( done, trade ) in self.trades.iter().enumerate()
+    {
+      while let Some( withdrawn ) = cancelled.next_if( | withdrawn | withdrawn.trades_before <= done )
+      {
+        steps.push( CrossingStep::Cancelled( withdrawn ) );
+      }
+      steps.push( CrossingStep::Trade( trade ) );
+    }
+    steps.extend( cancelled.map( CrossingStep::Cancelled ) );
+    steps
+  }
+}
+
+/// One thing [`cross`] did — see [`Crossing::steps`].
+#[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
+pub enum CrossingStep< 'a >
+{
+  /// A trade.
+  Trade( &'a Trade ),
+  /// A self-match withdrawal.
+  Cancelled( &'a SelfMatchCancellation ),
 }
 
 /// One order [`SelfMatchPolicy`] withdrew instead of letting it trade.
@@ -115,6 +146,10 @@ pub struct SelfMatchCancellation
   pub account : AccountId,
   /// How much of it was withdrawn.
   pub quantity : Quantity,
+  /// How many of the crossing's trades came before it. Cancel-resting
+  /// withdraws an order and then trades behind it, so a withdrawal can
+  /// precede trades.
+  pub trades_before : usize,
 }
 
 /// Something the matching loop could not do.
@@ -287,7 +322,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
         SelfMatchPolicy::CancelResting =>
         {
           withdraw( book, instrument, best.order.id )?;
-          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
+          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining, trades_before : trades.len() } );
           // The passed-over order was cancelled, not skipped, so nothing
           // ranks ahead of it that did not before — resume at whatever is
           // now the front of the book.
@@ -295,14 +330,14 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
         },
         SelfMatchPolicy::CancelIncoming =>
         {
-          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining } );
+          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining, trades_before : trades.len() } );
           break;
         },
         SelfMatchPolicy::CancelBoth =>
         {
           withdraw( book, instrument, best.order.id )?;
-          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
-          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining } );
+          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining, trades_before : trades.len() } );
+          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining, trades_before : trades.len() } );
           break;
         },
       }

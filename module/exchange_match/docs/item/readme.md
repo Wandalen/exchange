@@ -16,7 +16,9 @@ The exposed surface of `exchange_match`, as built.
 | `Crossing` | struct | `{ trades: Vec<Trade>, remaining: Quantity, cancelled: Vec<SelfMatchCancellation> }` |
 | `Crossing::is_complete` | fn | `(&self) -> bool` |
 | `Crossing::filled` | fn | `(&self) -> Result<Quantity, KindError>` |
-| `SelfMatchCancellation` | struct | `{ order: OrderId, account: AccountId, quantity: Quantity }` (`Copy`) |
+| `Crossing::steps` | fn | `(&self) -> Vec<CrossingStep<'_>>` — trades and withdrawals in the order they happened |
+| `CrossingStep` | enum | `{ Trade(&Trade), Cancelled(&SelfMatchCancellation) }` |
+| `SelfMatchCancellation` | struct | `{ order: OrderId, account: AccountId, quantity: Quantity, trades_before: usize }` (`Copy`) |
 | `MatchError` | enum | `{ Quantity(KindError), BookDesynchronized, Conservation(ConserveError), PostOnlyWouldTake }`, with `Display`, `Error`, `From<KindError>`, `From<ConserveError>` |
 | `SelfMatchPolicy` | enum | `pub use exchange_stp::SelfMatchPolicy;` — `{ CancelResting, CancelIncoming, CancelBoth }` |
 | `cross` | fn | `(book: &mut Book, incoming: &Order, policy: SelfMatchPolicy) -> Result<Crossing, MatchError>` |
@@ -40,8 +42,8 @@ functions — `match_in`, `match_partial`, `match_fok_check`,
   `PostOnlyWouldTake` is the one reachable variant; `Quantity`,
   `BookDesynchronized` and `Conservation` guard states the loop cannot produce
   and are returned rather than panicked on.
-- `Crossing::is_complete`, `Crossing::filled` and `would_take` are not in the
-  proposal.
+- `Crossing::is_complete`, `Crossing::filled`, `Crossing::steps` and
+  `would_take` are not in the proposal.
 - `SelfMatchPolicy` is declared in `exchange_stp` and re-exported; see
   [`../../../exchange_stp/docs/item/readme.md`](../../../exchange_stp/docs/item/readme.md)
   for its variants. `SelfMatchCancellation` stays here, with the outcome it
