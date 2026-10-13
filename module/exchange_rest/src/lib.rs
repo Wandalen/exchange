@@ -1,59 +1,34 @@
 //! The three non-matching ways an order moves on the book: rest, cancel,
 //! replace.
 //!
-//! # Thin, not the proposal's full orchestration
+//! [`rest_place`] and [`rest_cancel`] forward to [`Book::insert`] and
+//! [`Book::cancel`]. Idempotency, caps, halt and escrow stay with the caller
+//! — `exchange_core` checks them before it rests through `rest_place`.
 //!
-//! `docs/exposed_item/015_exchange_rest_items.md` found `rest_place`'s and
-//! `rest_cancel`'s real equivalents already spread across `exchange_core`'s
-//! own `submit`/`cancel` — idempotency, cap, and escrow checks included, not
-//! just the book-level move. This crate does **not** consolidate that
-//! orchestration out of `exchange_core`: the family's own Stage 9 plan keeps
-//! `Exchange::cancel` unchanged on purpose, which only holds if this crate
-//! stays a thin wrapper over [`exchange_book::Book`] rather than the thing
-//! `exchange_core` delegates to. So `exchange_core` keeps deciding
-//! idempotency/cap/escrow inline, unchanged, and this crate owns only the
-//! book-level primitive underneath that decision — the same skeleton-first
-//! shape already used for `exchange_cap` (Stage 1) and `exchange_conserve`
-//! (Stage 5): real, tested, standalone, not yet consumed by the facade.
-//!
-//! # `rest_replace` is new, not extracted
-//!
-//! `docs/exposed_item/015_exchange_rest_items.md` confirms no atomic
-//! cancel-and-reinsert exists anywhere today — a caller wanting to replace
-//! an order currently calls `cancel` then `submit` as two separate,
-//! non-atomic steps, which can lose the old order's priority slot to a
-//! third party arriving between them with nothing left to roll back to if
-//! the second step fails. [`rest_replace`] closes that: it checks the
-//! replacement before touching the original, so a refused one leaves the
-//! original exactly where it stood.
+//! [`rest_replace`] is the one operation of its own. As a cancel followed by
+//! a place, a refused replacement would leave neither order resting, and
+//! putting the original back would seat it behind every order sharing its
+//! arrival. So it checks the replacement first and touches nothing on a
+//! refusal.
 
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
 
-/// Place `resting` on `book`.
+/// Place `resting` on `book` — [`Book::insert`].
 ///
-/// A direct call-through to [`Book::insert`] today — the crate's own value
-/// is in being the one place a caller reaches for *any* of the three
-/// non-matching moves, not in adding logic `insert` does not already have.
-///
-/// Returns `false` on the same terms `insert` does: a `remaining` of zero or
-/// above `order.quantity`, or an `order.id` already resting on either side.
+/// Returns `false` on the same terms: a `remaining` of zero or above
+/// `order.quantity`, or an `order.id` already resting.
 #[ must_use ]
 pub fn rest_place( book : &mut Book, resting : Resting ) -> bool
 {
   book.insert( resting )
 }
 
-/// Withdraw the order `id` resting on `instrument`'s book, whichever side it
-/// is on.
+/// Withdraw the order `id` from `instrument`'s book, either side —
+/// [`Book::cancel`].
 ///
-/// A direct call-through to [`Book::cancel`] — see [`rest_place`]'s doc for
-/// why this crate adds no logic of its own here.
-///
-/// Returns [`None`] if no such order rests — a race result, not a caller
-/// error (see [`Book::cancel`]'s own doc comment): the order may already
-/// have filled, been cancelled, or `instrument` may never have had an order
-/// rest on it at all.
+/// [`None`] if it does not rest: it may have filled or been cancelled
+/// already, a race rather than a caller error.
 pub fn rest_cancel( book : &mut Book, instrument : InstrumentId, id : OrderId ) -> Option< Resting >
 {
   book.cancel( instrument, id )
@@ -63,15 +38,12 @@ pub fn rest_cancel( book : &mut Book, instrument : InstrumentId, id : OrderId ) 
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum RestReplaceError
 {
-  /// `new_resting.order.instrument` disagreed with `instrument` — nothing
-  /// was touched; the order named by `old_id` is still resting exactly as
-  /// it was.
+  /// `new_resting.order.instrument` is not `instrument`.
   InstrumentMismatch,
-  /// `old_id` was not resting on `instrument` — nothing to replace.
+  /// `old_id` does not rest on `instrument`.
   Missing,
   /// [`Book::insert`] would refuse the replacement: a `remaining` of zero or
-  /// above its order's quantity, or an `order.id` already resting elsewhere
-  /// on the book. Nothing was touched.
+  /// above its order's quantity, or an `order.id` resting elsewhere.
   Refused,
 }
 
@@ -90,24 +62,25 @@ impl core::fmt::Display for RestReplaceError
 
 impl core::error::Error for RestReplaceError {}
 
-/// Atomically replace the order resting at `old_id` on `instrument` with
-/// `new_resting`.
+/// Replace the order `old_id` resting on `instrument` with `new_resting`, in
+/// one step, and return the order replaced.
 ///
-/// Checks `new_resting` with [`Book::insertable`], counting `old_id` as
-/// gone, then cancels `old_id` and inserts `new_resting`. A refused
-/// replacement touches nothing, so the original keeps its place in the queue.
-/// See the module doc's "`rest_replace` is new, not extracted" section for
-/// why this exists at all.
+/// Asks [`Book::insertable`] first, counting `old_id` as gone, then cancels
+/// `old_id` and inserts `new_resting`. A refusal touches nothing, so the
+/// original keeps its place in the queue.
 ///
-/// Returns the original `Resting` that was replaced, on success.
+/// The replacement's place is its own `arrival`'s. Passing the original's
+/// keeps the original's place, which the family's amend rule allows only for
+/// a smaller quantity at the same price
+/// (`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`).
 ///
 /// # Errors
 ///
-/// [`RestReplaceError::InstrumentMismatch`] if `new_resting.order.instrument`
-/// disagrees with `instrument`. [`RestReplaceError::Refused`] if
-/// [`Book::insert`] would refuse `new_resting`.
-/// [`RestReplaceError::Missing`] if `old_id` is not resting on `instrument`.
-/// Checked in that order; on any error nothing is touched.
+/// Checked in this order, each with nothing touched:
+/// [`RestReplaceError::InstrumentMismatch`] if `new_resting` names another
+/// instrument; [`RestReplaceError::Refused`] if [`Book::insert`] would refuse
+/// it; [`RestReplaceError::Missing`] if `old_id` does not rest on
+/// `instrument`.
 ///
 /// ```rust
 /// use exact_arith::{ Price, Quantity };
@@ -139,15 +112,11 @@ impl core::error::Error for RestReplaceError {}
 /// ```
 pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : OrderId, new_resting : Resting ) -> Result< Resting, RestReplaceError >
 {
-  // Fix(BUG-001): new_resting's own order.instrument was never checked against the
-  // instrument argument before being handed to insert(), which has no instrument
-  // parameter of its own to catch the disagreement.
-  // Root cause: `instrument` was read only for the cancel() lookup; insert() derives
-  // its target book purely from new_resting.order.instrument, so the two values were
-  // never compared anywhere in the function.
-  // Pitfall: when a selector parameter and a payload's own embedded field encode the
-  // same identity, trusting only one of them lets a caller act on a different target
-  // than the one the lookup already confirmed — assert they agree before either is used.
+  // Fix(rest_replace_refuses_a_new_resting_for_a_different_instrument):
+  // Root cause: `instrument` was read only for the cancel; `insert` seats the
+  // replacement on its own order's instrument, and the two were never compared.
+  // Pitfall: when an argument and the payload name the same thing, check they
+  // agree before either drives a write.
   if new_resting.order.instrument != instrument
   {
     return Err( RestReplaceError::InstrumentMismatch );

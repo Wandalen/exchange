@@ -1,7 +1,9 @@
 # exchange_rest
 
 The three non-matching ways an order moves on the book: rest, cancel,
-replace.
+replace. Depends on `exchange_book` and `exchange_id`. Closes hard problem 9
+(cancel and replace) and features 8 (`book_rest`, `book_cancel`) and 25
+(`book_replace`).
 
 ```rust
 use exact_arith::{ Price, Quantity };
@@ -29,42 +31,26 @@ let resting = Resting { order : replacement, remaining : replacement.quantity, a
 rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting ).unwrap();
 ```
 
-## Closes hard problem 9, and features 8 and 25
+## Two forwards and one operation of its own
 
-`rest_place`/`rest_cancel` are the primitive mutations feature 8 (`book_rest`,
-`book_cancel`) names — insert into the book, remove by id — the two moves
-every higher-level operation here builds from. `rest_replace` adds the
-atomic cancel-then-reinsert feature 25 (`book_replace`) names,
-closing hard problem 9 (cancel and replace): a resting order can be
-withdrawn or changed with no stale remnant left behind either way.
+`rest_place` and `rest_cancel` forward to `Book::insert` and `Book::cancel`
+and answer as they do. Idempotency, caps, halt and escrow stay with the
+caller.
 
-## Thin, not the proposal's full orchestration
+`rest_replace` withdraws one order and rests another in one step. As a cancel
+followed by a place, the original is gone before the replacement is checked:
+a refused replacement leaves neither resting, and putting the original back
+seats it behind every order sharing its arrival. `rest_replace` asks
+`Book::insertable` first, counting the original as gone, and touches nothing
+on a refusal.
 
-`rest_place`/`rest_cancel` are direct call-throughs to [`exchange_book::Book::insert`]/
-[`exchange_book::Book::cancel`] — `exchange_core`'s `submit`/`cancel` keep
-owning idempotency/cap/escrow/halt checks inline, unchanged, per the family's
-Stage 9 decision. See [`src/lib.rs`](src/lib.rs) for the full reasoning.
+## Who calls it
 
-## `rest_replace` is new, not extracted
-
-No atomic cancel-and-reinsert exists anywhere else in the family — a caller
-wanting to replace an order today calls `cancel` then `submit` as two
-separate, non-atomic steps. `rest_replace` closes that: it checks the
-replacement before cancelling, so a refused one leaves the original where it
-stood rather than leaving the book short an order. See [`src/lib.rs`](src/lib.rs)'s doc comment for the exact contract.
-
-## Not yet wired into `exchange_core`
-
-`exchange_core`'s own `Exchange::cancel` still orchestrates idempotency/cap/
-escrow and the book-level cancel inline, unchanged, rather than calling
-through to this crate — consuming `rest_cancel`/`rest_replace` from there is
-facade work this crate does not do itself, same skeleton-first pattern
-already used for `exchange_cap` and `exchange_conserve`. `exchange_inbound`
-is a real, different caller already, though: its `inbound_apply` calls
-`rest_place`/`rest_cancel`/`rest_replace` directly for every `InboundCmd`
-that isn't a fresh `Place`'s cross — see
-[`exchange_inbound/`](../exchange_inbound/readme.md). So this crate is
-standalone only with respect to `exchange_core`, not every caller.
+`exchange_core::step_place` rests every remainder through `rest_place`.
+`Exchange::cancel` cancels on the book itself, releasing escrow in the same
+step, and `exchange_step` answers a drained `Replace` with
+`StepOutcome::ReplaceNotWired`. `exchange_inbound::inbound_apply` calls all
+three.
 
 ## Responsibility Table
 
@@ -73,15 +59,15 @@ standalone only with respect to `exchange_core`, not every caller.
 | [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_id` |
 | [`src/lib.rs`](src/lib.rs) | `rest_place`, `rest_cancel`, `rest_replace`, `RestReplaceError` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
-| `docs/pitfall/` | The central "Book" pitfall `rest_replace`'s ordering avoids, plus one open gap it does not yet guard against |
+| `docs/pitfall/` | A replace leaving the old order resting; a replacement for another instrument |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
-| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
-| [`tests/exchange_rest_test.rs`](tests/exchange_rest_test.rs) | Test Matrix — place/cancel forwarding, replace success and both refusal paths, the original keeping its place |
-| [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan |
+| `docs/item/` | Exposed surface, as built vs. proposed |
+| [`tests/exchange_rest_test.rs`](tests/exchange_rest_test.rs) | Place and cancel forwarding; replace, each refusal, the original keeping its place |
+| [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan — the check before the cancel |
 
 ## Related
 
-- [`exchange_book/`](../exchange_book/readme.md) — the book this crate wraps, never reimplements
-- [`exchange_inbound/`](../exchange_inbound/readme.md) — the real caller today, dispatching `Cancel`/`Replace` commands straight to this crate
-- [`exchange_match/`](../exchange_match/readme.md) — crossing, the one book-entry path this crate deliberately does not cover
-- [`exchange_core/`](../exchange_core/readme.md) — the facade that will eventually consume this crate's `rest_cancel`/`rest_replace`
+- [`exchange_book/`](../exchange_book/readme.md) — the book this crate moves orders on
+- [`exchange_match/`](../exchange_match/readme.md) — the matching way onto the book
+- [`exchange_inbound/`](../exchange_inbound/readme.md) — applies `Cancel` and `Replace` commands through this crate
+- [`exchange_core/`](../exchange_core/readme.md) — rests through `rest_place`

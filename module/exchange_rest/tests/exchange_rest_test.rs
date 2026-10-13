@@ -222,41 +222,33 @@ fn rest_replace_refused_keeps_the_originals_place_among_shared_arrivals()
 
 // --- rest_replace: InstrumentMismatch ------------------------------------
 
-// BUG-001 substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md — bug_reproducer: `new_resting`'s
-// own `order.instrument` disagreeing with the `instrument` parameter used to go unnoticed —
-// the old order was cancelled on one instrument while the new one was inserted onto a
-// different one entirely, with `rest_replace` returning `Ok`.
+/// A replacement naming another instrument is refused, and the original
+/// stays on its own.
 ///
 /// # Root Cause
 ///
-/// `rest_replace` read its `instrument` parameter only for the `book.cancel` lookup;
-/// the subsequent `book.insert( new_resting )` derives its target book purely from
-/// `new_resting.order.instrument`, with no comparison between the two anywhere in the
-/// function (`module/exchange_rest/src/lib.rs:133-151`, pre-fix).
+/// `rest_replace` read `instrument` only to find the original; `Book::insert`
+/// seats the replacement on its own order's instrument. The two were never
+/// compared, so the original was cancelled on one book and the replacement
+/// rested on another, with `Ok`.
 ///
 /// # Why Not Caught
 ///
-/// Every pre-existing test's `order()`/`resting()` helper hardcoded `InstrumentId( 1 )`
-/// for both the explicit `instrument` argument and the constructed order, so the two
-/// values were structurally identical in every call this crate's own suite made —
-/// no test ever supplied two disagreeing values.
+/// Every test built both values from one hardcoded `InstrumentId( 1 )`.
 ///
 /// # Fix Applied
 ///
-/// `rest_replace` now checks `new_resting.order.instrument == instrument` first, before
-/// calling `book.cancel`, returning `RestReplaceError::InstrumentMismatch` on disagreement
-/// so nothing is touched (`module/exchange_rest/src/lib.rs:133-145`).
+/// `rest_replace` compares them first and returns
+/// `RestReplaceError::InstrumentMismatch`.
 ///
 /// # Prevention
 ///
-/// Any function taking both an explicit selector and a payload carrying its own copy of
-/// the same identity must assert the two agree before either drives an effectful
-/// operation — see `substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md § Prevention`.
+/// When a function takes one identity twice, test it with the two apart.
 ///
 /// # Pitfall
 ///
-/// A lookup keyed on one value and a write keyed on a different, untrusted value that is
-/// assumed to agree with it is a silent cross-target hazard — assert agreement first.
+/// A lookup keyed on one value and a write keyed on another, assumed equal,
+/// acts on a target nobody checked.
 #[ test ]
 fn rest_replace_refuses_a_new_resting_for_a_different_instrument()
 {

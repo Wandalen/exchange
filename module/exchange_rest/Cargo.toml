@@ -11,10 +11,8 @@ exchange_book = { path = "../exchange_book" }
 exchange_id = { path = "../exchange_id" }
 
 [dev-dependencies]
-# The test fixture builds a `Resting` by hand, which needs every field of the
-# `Order` it wraps — nothing in this crate's own src/ reads these directly.
-# `exchange_id` is a real dependency now (see [dependencies]) since
-# `rest_cancel`/`rest_replace` take an `InstrumentId`/`OrderId` directly.
+# The tests build a `Resting` by hand, which needs every field of the `Order`
+# it wraps.
 exact_arith = { workspace = true }
 exchange_order = { path = "../exchange_order" }
 exchange_seq = { path = "../exchange_seq" }
