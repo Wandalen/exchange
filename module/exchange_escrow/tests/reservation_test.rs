@@ -744,6 +744,16 @@ fn a_partial_fill_settles_when_only_the_limit_notional_is_inexact()
   assert_eq!( escrow.settle( &trade ), Ok( () ) );
   assert_eq!( escrow.total_cash().unwrap(), cash_before );
 
+  // The rest, 0.5 × 1.999995 = 0.9999975, is inexact too, so a fix has to
+  // round. Its fills are exact amounts, so it can spend at most 0.999997, and
+  // at most 0.000001 has been paid.
+  assert!
+  (
+    matches!( escrow.reserved_for( bid.id ), Some( Obligation::Cash( held ) ) if money( "0.999997" ) <= held && held <= money( "0.999999" ) ),
+    "the rest of the bid is still covered: {:?}",
+    escrow.reserved_for( bid.id ),
+  );
+
   // Cancelling the rest returns everything but the 0.000001 paid.
   escrow.release( bid.account, bid.id ).unwrap();
   let buyer = escrow.account( AccountId( 2 ) ).unwrap();
