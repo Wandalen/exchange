@@ -7,7 +7,12 @@
 - **In Scope**: The row type itself. Not file format 012.
 - **Out of Scope**: Any particular save-file format.
 
-**Design status**: Built, in its own `exchange_snap` crate — `RestRow`/`BookSnap` match the proposal's fields exactly; the two real divergences are a dropped `exchange_order` dependency and no `SnapError`. Verified built-vs-proposed comparison: [`../../module/exchange_snap/docs/item/readme.md`](../../module/exchange_snap/docs/item/readme.md).
+**Design status**: Built — `RestRow`, `BookSnap`, `snap_take`, `snap_len`.
+`RestRow` adds the side, and `tick` is the caller's `u64` step count; no
+`exchange_order` dependency and no `SnapError`. The rows cannot rebuild a
+book: they carry no account, arrival or time in force. Built-vs-proposed
+comparison:
+[`../../module/exchange_snap/docs/item/readme.md`](../../module/exchange_snap/docs/item/readme.md).
 Also depends directly on `exact_arith` (006's facade; proposed leaf was
 `exact_kind`) — see `../neighbor_contract/001_006_supplies_money_qty_price.md`'s
 per-crate table.

@@ -17,7 +17,7 @@
 
 ### Related
 
-- [`../../../exchange_rest/src/lib.rs`](../../../exchange_rest/src/lib.rs) — `rest_replace` is where pitfall `009` (replace leaves the old rest in place) is actually decided and implemented (cancel old, insert new, roll back on refusal); `inbound_apply`'s `Replace` arm is a one-line, logic-free delegation to it. `009` has since been redistributed to [`../../../exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md`](../../../exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md), `exchange_rest`'s own per-crate copy — the central catalog's `docs/pitfall/009_replace_leaves_old_rest_in_place.md` now points there too.
+- [`../../../exchange_rest/src/lib.rs`](../../../exchange_rest/src/lib.rs) — `rest_replace` is where pitfall `009` (replace leaves the old rest in place) is actually decided and implemented (check the replacement, cancel old, insert new); `inbound_apply`'s `Replace` arm is a one-line, logic-free delegation to it. `009` has since been redistributed to [`../../../exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md`](../../../exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md), `exchange_rest`'s own per-crate copy — the central catalog's `docs/pitfall/009_replace_leaves_old_rest_in_place.md` now points there too.
 
 ### Regenerate
 

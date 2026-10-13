@@ -113,9 +113,7 @@ fn t06_the_parts_sum_to_the_submitted_quantity()
 
 /// T07 — priced through no liquidity: zero trades, everything remaining.
 ///
-/// This is the control arm's case, asserted here as well as in the lane
-/// because the lane proves the engine *can* decline and this proves it
-/// declines for the right reason — the book still holds its ask afterwards.
+/// Declining for the right reason: the book still holds its ask afterwards.
 #[ test ]
 fn t07_an_order_priced_through_no_liquidity_does_not_cross()
 {

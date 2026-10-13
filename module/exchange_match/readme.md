@@ -20,7 +20,7 @@ fill-only check and destroys six units of a customer's order.
 T07 — an order priced through no liquidity. An engine that fills
 unconditionally passes the exact-cross and partial-fill cases; only the
 no-cross case tells a matching engine from a machine that pairs whatever it is
-handed. It is asserted here and again as the control arm of the smoke lane.
+handed.
 
 A fill whose price paid cannot be expressed exactly is declined the same way,
 before the book gives up the resting order, and the loop stops there rather

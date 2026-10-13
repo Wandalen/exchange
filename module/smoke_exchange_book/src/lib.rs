@@ -32,12 +32,11 @@
 //!   dependency on `exchange_idem` for exactly this reason. The `dup=1`
 //!   field below checks `exchange_idem` directly and standalone, the same
 //!   way `smoke_exchange_phases::demo_p13_dup` already does.
-//! - **Conservation**: `exchange_match::cross` has zero dependency on
-//!   `exchange_conserve` — settlement conservation is an external audit, not
-//!   something the matching loop checks on its own behalf. The `conserve=0`
-//!   field below runs that audit itself, on the real trades the scene below
-//!   produced, rather than trusting that a batch which filled without error
-//!   must have conserved.
+//! - **Conservation**: `exchange_match::cross` asserts each batch it
+//!   produces with `conserve_assert`, but `Exchange` exposes no audit of its
+//!   own. The `conserve=0` field below runs that audit itself, on the real
+//!   trades the scene below produced, rather than trusting that a batch which
+//!   filled without error must have conserved.
 //!
 //! # Why price fields are repadded before printing
 //!

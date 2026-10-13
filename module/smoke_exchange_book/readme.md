@@ -77,10 +77,9 @@ genuinely racing real threads each time.
 explicit `Err`, never a silent drop — `overflow=1`.
 
 **Conservation, standalone.** `conserve=0` — `exchange_conserve::conserve_assert`
-audits the GTC and IOC takers' real trades and finds zero violations. Also
-checked outside the facade on purpose: `exchange_match::cross` has no
-dependency on `exchange_conserve` at all, so nothing in the matching path
-checks this on its own behalf.
+audits the GTC and IOC takers' real trades and finds zero violations.
+`exchange_match::cross` asserts each batch it produces too, but `Exchange`
+exposes no audit, so the lane runs one itself on what came out.
 
 ## Three dependencies, each named for what it buys
 

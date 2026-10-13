@@ -6,16 +6,12 @@
 - **Responsibility**: Leaving an Immediate-or-Cancel order's unfilled quantity resting on the book.
 - **In Scope**: Match policy
 
-**Not `exchange_match`'s own.** That crate's own module doc
-(`module/exchange_match/src/lib.rs`, "Time-in-force" section) states
-directly: "IOC needs no logic here — this function has never inserted the
-incoming order's remainder itself... only whether a *caller* later rests
-that remainder differs, which is `exchange_rest`/`exchange_core`'s decision,
-not this crate's." The real owner is whichever crate decides to rest (or
-not) — `exchange_core`, or the very new `exchange_rest` crate it may be
-extracting into (both actively changing as of 2026-10-03). Deferred rather
-than assigned to either while that boundary is still moving; stays central
-for now.
+**Not `exchange_match`'s own**: `cross` never rests the incoming order.
+Each caller that rests a remainder decides, and both ask
+`exchange_tif::tif_rests` first — `exchange_core::step_place`, pinned by
+`an_ioc_taker_never_rests_its_remainder_through_the_facade`, and
+`exchange_inbound::inbound_apply`. `exchange_rest::rest_place` only seats
+what it is handed. Stays central: no single crate owns it.
 
 ### Statement
 

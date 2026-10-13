@@ -1,11 +1,9 @@
 # Pitfall: Replace that leaves the old rest in place
 
-**Redistributed**: this pitfall is `exchange_rest`'s own concern (its
-`rest_replace` — cancel old, insert new, roll back on refusal — is exactly
-the operation this pitfall is about) — see
+**Redistributed**: this pitfall is `exchange_rest`'s own — `rest_replace`
+checks the replacement, cancels the original, then inserts — see
 [`../../module/exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md`](../../module/exchange_rest/docs/pitfall/001_replace_leaves_old_rest_in_place.md)
-for the full writeup, including the ordering argument and the test/mutation
-evidence it rests on.
+for the ordering argument and its tests.
 
 ### Sources
 

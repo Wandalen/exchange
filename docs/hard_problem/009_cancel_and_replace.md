@@ -2,8 +2,7 @@
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_rest`'s
 own `rest_cancel`/`rest_replace`) and now lives at
-[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md)'s
-"Closes hard problem 9, and features 8 and 25" section.
+[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md).
 
 ### Sources
 
