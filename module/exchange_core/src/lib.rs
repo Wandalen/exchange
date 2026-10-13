@@ -577,10 +577,9 @@ impl< E : EscrowPort > Exchange< E >
   }
 
   /// A point-in-time copy of `instrument`'s resting book, stamped with the
-  /// caller-supplied `tick` — see [`exchange_snap::snap_take`] for why `tick`
-  /// is never read from a clock here.
+  /// caller's `tick` — a step count it keeps, never read from a clock here.
   #[ must_use ]
-  pub fn snap_take( &self, instrument : InstrumentId, tick : Money ) -> BookSnap
+  pub fn snap_take( &self, instrument : InstrumentId, tick : u64 ) -> BookSnap
   {
     exchange_snap::snap_take( &self.book, instrument, tick )
   }

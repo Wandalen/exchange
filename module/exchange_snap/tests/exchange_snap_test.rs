@@ -1,7 +1,7 @@
 //! Test Matrix T01 — snapshot content, ordering, and independence from the
 //! live book (pitfalls 001–003: aliasing, hash order, clock reads).
 
-use exact_arith::{ Money, Price, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -9,6 +9,8 @@ use exchange_seq::Sequence;
 use exchange_side::Side;
 use exchange_snap::{ BookSnap, RestRow, snap_len, snap_take };
 use exchange_tif::Tif;
+
+const TICK : u64 = 1;
 
 fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) -> Resting
 {
@@ -37,10 +39,10 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
 fn empty_book_yields_empty_snap()
 {
   let book = Book::new();
-  let snap = snap_take( &book, InstrumentId( 7 ), Money::parse( "0.01" ).unwrap() );
+  let snap = snap_take( &book, InstrumentId( 7 ), 42 );
 
   assert_eq!( snap.instrument, InstrumentId( 7 ) );
-  assert_eq!( snap.tick, Money::parse( "0.01" ).unwrap() );
+  assert_eq!( snap.tick, 42 );
   assert!( snap.rows.is_empty() );
   assert_eq!( snap_len( &snap ), 0 );
 }
@@ -53,7 +55,7 @@ fn snap_take_copies_every_resting_order_with_its_remaining_quantity()
   assert!( book.insert( rest( 1, Side::Buy, "1.00", 5, 10 ) ), "fresh id, must succeed" );
   assert!( book.consume_best( InstrumentId( 1 ), Side::Buy, Quantity::from_int( 2 ).unwrap() ), "partial fill, 3 left" );
 
-  let snap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+  let snap = snap_take( &book, InstrumentId( 1 ), TICK );
 
   assert_eq!( snap.rows, vec!
   [
@@ -73,7 +75,7 @@ fn rows_preserve_the_books_priority_order()
   assert!( book.insert( rest( 3, Side::Sell, "4.00", 1, 30 ) ), "fresh id, must succeed" );
   assert!( book.insert( rest( 4, Side::Sell, "3.00", 1, 40 ) ), "fresh id, must succeed" );
 
-  let snap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+  let snap = snap_take( &book, InstrumentId( 1 ), TICK );
   let ids : Vec< u64 > = snap.rows.iter().map( | row | row.order.0 ).collect();
 
   assert_eq!( ids, vec![ 2, 1, 4, 3 ], "best bid first, then best ask first — exchange_book's own published order" );
@@ -87,7 +89,7 @@ fn snap_is_a_copy_not_a_view()
   let mut book = Book::new();
   assert!( book.insert( rest( 1, Side::Buy, "1.00", 5, 10 ) ), "fresh id, must succeed" );
 
-  let snap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+  let snap = snap_take( &book, InstrumentId( 1 ), TICK );
   assert!( book.cancel( InstrumentId( 1 ), OrderId( 1 ) ).is_some() );
 
   assert_eq!( snap.rows.len(), 1, "the live cancel must not reach back into the already-taken snapshot" );
@@ -99,7 +101,7 @@ fn snap_is_a_copy_not_a_view()
 fn book_snap_clones_independently()
 {
   let book = Book::new();
-  let snap : BookSnap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+  let snap : BookSnap = snap_take( &book, InstrumentId( 1 ), TICK );
   let cloned = snap.clone();
 
   assert_eq!( snap, cloned );
@@ -137,8 +139,7 @@ fn a_row_names_its_side()
   assert!( two_asks.insert( rest( 1, Side::Sell, "2.00", 1, 10 ) ), "fresh id, must succeed" );
   assert!( two_asks.insert( rest( 2, Side::Sell, "3.00", 1, 20 ) ), "fresh id, must succeed" );
 
-  let tick = Money::parse( "0.01" ).unwrap();
-  let sides = | book : &Book | snap_take( book, InstrumentId( 1 ), tick ).rows.iter().map( | row | row.side ).collect::< Vec< _ > >();
+  let sides = | book : &Book | snap_take( book, InstrumentId( 1 ), TICK ).rows.iter().map( | row | row.side ).collect::< Vec< _ > >();
   assert_eq!( sides( &bid_and_ask ), vec![ Side::Buy, Side::Sell ] );
   assert_eq!( sides( &two_asks ), vec![ Side::Sell, Side::Sell ] );
 }

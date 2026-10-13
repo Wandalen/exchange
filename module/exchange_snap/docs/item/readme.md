@@ -14,8 +14,8 @@ The exposed surface of `exchange_snap`, as built.
 | Item | Kind | Signature |
 |------|------|-----------|
 | `RestRow` | struct | `{ order : OrderId, side : Side, price : Price, qty : Quantity }` |
-| `BookSnap` | struct | `{ instrument : InstrumentId, tick : Money, rows : Vec<RestRow> }` |
-| `snap_take` | fn | `(&Book, InstrumentId, Money) -> BookSnap` |
+| `BookSnap` | struct | `{ instrument : InstrumentId, tick : u64, rows : Vec<RestRow> }` |
+| `snap_take` | fn | `(&Book, InstrumentId, u64) -> BookSnap` |
 | `snap_len` | fn | `(&BookSnap) -> usize` |
 
 ### Differs from the proposal
@@ -26,6 +26,8 @@ and `SnapError { Full }`.
 
 - **`RestRow::side`** is added. `rows` lists bids then asks with no marker
   between them, so without it a one-sided or crossed book reads two ways.
+- **`tick` is a `u64`**, the caller's step count. The proposal gives it no
+  type.
 
 Two divergences have their own decisions:
 

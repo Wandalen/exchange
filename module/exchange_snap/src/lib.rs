@@ -21,7 +21,7 @@
 //!
 //! See [`docs/decisions`](docs/decisions).
 
-use exact_arith::{ Money, Price, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
 use exchange_side::Side;
@@ -47,9 +47,9 @@ pub struct BookSnap
 {
   /// Which instrument this snapshot is of.
   pub instrument : InstrumentId,
-  /// The caller-supplied tick this snapshot was taken at — never read from a
-  /// clock; see this crate's own module doc.
-  pub tick : Money,
+  /// The caller's tick this snapshot was taken at — a step count it keeps,
+  /// never a clock reading.
+  pub tick : u64,
   /// Every resting order, bids then asks, each side in priority order.
   pub rows : Vec< RestRow >,
 }
@@ -60,7 +60,7 @@ pub struct BookSnap
 /// Reads `instrument`'s two sides, not the whole-book `Book::iter`, so no
 /// other instrument's orders get in.
 #[ must_use ]
-pub fn snap_take( book : &Book, instrument : InstrumentId, tick : Money ) -> BookSnap
+pub fn snap_take( book : &Book, instrument : InstrumentId, tick : u64 ) -> BookSnap
 {
   let to_row = | resting : &Resting | RestRow
   {

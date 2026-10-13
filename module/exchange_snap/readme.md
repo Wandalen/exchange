@@ -6,22 +6,25 @@ live `Book` once taken. Depends on `exchange_book`, `exchange_id`,
 22 (snapshot of a book), and feature 27 (book snapshot rows).
 
 ```rust
-use exact_arith::Money;
 use exchange_book::Book;
 use exchange_id::InstrumentId;
 use exchange_snap::{ snap_len, snap_take };
 
 let book = Book::new();
-let snap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+let snap = snap_take( &book, InstrumentId( 1 ), 0 );
 assert_eq!( snap_len( &snap ), 0 );
 ```
 
 ## Rows, not a save format
 
 `BookSnap` holds one row per resting order — id, side, price, remainder —
-copied out of the book, bids then asks, each side in priority order. A later cancel or fill cannot
-reach it, and two snapshots compare with `==`. It is the row shape another
-crate persists or diffs — not file format 012, which stores the rows.
+copied out of the book, bids then asks, each side in priority order. A later
+cancel or fill cannot reach it, and two snapshots compare with `==`. It is the
+row shape another crate persists or diffs — not file format 012, which stores
+the rows.
+
+`tick` is the caller's step count, stamped as given: the simulation's clock,
+not the exchange's, and never `Instant::now()`.
 
 ## Diverges from the proposal
 
