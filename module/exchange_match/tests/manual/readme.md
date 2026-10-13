@@ -10,7 +10,7 @@ below.
 ## M0 — the FOK probe-vs-commit gate is load-bearing
 
 ```bash
-# In substrate/exchange/module/exchange_match/src/lib.rs, in cross(),
+# In module/exchange_match/src/lib.rs, in cross(),
 # replace  if would_fill.remaining != Quantity::ZERO
 # with     if would_fill.remaining == Quantity::ZERO
 cargo test -p exchange_match --all-features 2>&1 | grep -E 'FAILED|test result'

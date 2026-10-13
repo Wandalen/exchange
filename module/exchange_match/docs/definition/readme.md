@@ -5,7 +5,7 @@
 - **Purpose**: Index every `pub` item this crate declares against the doc instance that explains it.
 - **Responsibility**: One row per public declaration, pointing at its owning collection — never restating what that collection already says.
 - **In Scope**: This crate's own `pub` surface, including `SelfMatchPolicy`, re-exported here from `exchange_stp` rather than declared.
-- **Out of Scope**: Items declared elsewhere and merely used here (`Book` from `exchange_book`; `tif_requires_full` from `exchange_tif`; `AccountId`/`OrderId` from `exchange_id`; `Order` from `exchange_order`; `Side` from `exchange_side`; `Trade` from `exchange_fill`; `Price`/`notional` from `exchange_types`; `Quantity`/`KindError` from `exact_arith`).
+- **Out of Scope**: Items declared elsewhere and merely used here (`Book` from `exchange_book`; `conserve_assert`/`ConserveError` from `exchange_conserve`; `tif_requires_full`/`tif_takes` from `exchange_tif`; `AccountId`/`OrderId` from `exchange_id`; `Order` from `exchange_order`; `side_accepts` from `exchange_side`; `Trade` from `exchange_fill`; `notional` from `exchange_types`; `Price`/`Quantity`/`KindError` from `exact_arith`).
 
 ### Module Index
 
@@ -20,8 +20,6 @@
 | `cross` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `would_take` | function | `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
-No decisions collection — the real build's divergences from the proposal
-(one `cross` entry point instead of four phase functions, a 2-variant
-`MatchError`, no `MatchOut::rejects`) are each already argued in
-`src/lib.rs`'s own module doc; see [`../item/readme.md`](../item/readme.md)
-for the comparison and its citations.
+No decisions collection: the divergences from the proposal — one `cross`
+instead of four phase functions, a different `MatchError`, no
+`MatchOut::rejects` — are listed in [`../item/readme.md`](../item/readme.md).
