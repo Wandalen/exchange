@@ -571,6 +571,36 @@ fn a_taking_buys_own_limit_is_checked_not_just_the_trade_price()
   assert_eq!( exchange.escrow().total_asset().unwrap(), asset_before );
 }
 
+/// A taking buy that can pay for a fill exactly takes it, rather than resting
+/// above the ask.
+///
+/// The facade side of `exchange_escrow`'s
+/// `a_partial_fill_settles_when_only_the_limit_notional_is_inexact`: the fill
+/// costs exactly 0.000001, and only 0.5 × 0.000005 is inexact. `settleable`
+/// declines it on that second notional, and the bid at 0.5 rests above the ask
+/// at 0.2: a crossed book.
+#[ test ]
+fn a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let ask = submit
+  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "0.2" ), Quantity::from_minor( 5 ).unwrap() )
+  .unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "0.5" ), qty( 2 ) ).unwrap();
+
+  assert_eq!( taking.trades.len(), 1, "the bid crossed the ask without taking it" );
+  assert_eq!( taking.trades[ 0 ].maker, ask.order );
+  assert_eq!( exchange.book().len(), 1, "only the rest of the bid is left" );
+
+  // Cancelling the rest returns everything but the 0.000001 paid.
+  exchange.cancel( taking.order ).unwrap();
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.available(), money( "999.999999" ) );
+}
+
 /// A negative price is refused before it can rest, on both sides.
 ///
 /// # Root Cause
