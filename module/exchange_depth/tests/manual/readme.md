@@ -7,7 +7,7 @@ whether each pin is actually load-bearing rather than redundant.
 ## M1 — same-price orders actually aggregate
 
 ```bash
-# In substrate/exchange/module/exchange_depth/src/lib.rs, in levels_top's
+# In module/exchange_depth/src/lib.rs, in levels_top's
 # aggregation arm, replace  top.qty = qty_saturating_add( top.qty, r.remaining );
 # with  let _ = qty_saturating_add( top.qty, r.remaining );
 cargo test -p exchange_depth --all-features 2>&1 | grep -E 'FAILED|test result'
