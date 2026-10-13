@@ -18,8 +18,8 @@ assert_eq!( snap_len( &snap ), 0 );
 
 ## Rows, not a save format
 
-`BookSnap` holds `Copy` values taken out of each resting order, bids then
-asks, each side in the book's priority order. A later cancel or fill cannot
+`BookSnap` holds one row per resting order — id, side, price, remainder —
+copied out of the book, bids then asks, each side in priority order. A later cancel or fill cannot
 reach it, and two snapshots compare with `==`. It is the row shape another
 crate persists or diffs — not file format 012, which stores the rows.
 

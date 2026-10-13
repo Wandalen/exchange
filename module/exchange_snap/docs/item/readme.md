@@ -13,7 +13,7 @@ The exposed surface of `exchange_snap`, as built.
 
 | Item | Kind | Signature |
 |------|------|-----------|
-| `RestRow` | struct | `{ order : OrderId, price : Price, qty : Quantity }` |
+| `RestRow` | struct | `{ order : OrderId, side : Side, price : Price, qty : Quantity }` |
 | `BookSnap` | struct | `{ instrument : InstrumentId, tick : Money, rows : Vec<RestRow> }` |
 | `snap_take` | fn | `(&Book, InstrumentId, Money) -> BookSnap` |
 | `snap_len` | fn | `(&BookSnap) -> usize` |
@@ -22,8 +22,12 @@ The exposed surface of `exchange_snap`, as built.
 
 The source design (`core_exchange.txt:641-645`) names `RestRow { order,
 price, qty }`, `BookSnap { instrument, tick, rows }`, `snap_take`, `snap_len`
-and `SnapError { Full }`. The fields are the proposal's. Two divergences have
-their own decisions:
+and `SnapError { Full }`.
+
+- **`RestRow::side`** is added. `rows` lists bids then asks with no marker
+  between them, so without it a one-sided or crossed book reads two ways.
+
+Two divergences have their own decisions:
 
 - No `exchange_order` dependency — [`../decisions/001_no_exchange_order_dependency.md`](../decisions/001_no_exchange_order_dependency.md).
 - No `SnapError { Full }` — [`../decisions/002_no_snap_error.md`](../decisions/002_no_snap_error.md).

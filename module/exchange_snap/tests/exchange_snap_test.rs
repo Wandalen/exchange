@@ -57,7 +57,7 @@ fn snap_take_copies_every_resting_order_with_its_remaining_quantity()
 
   assert_eq!( snap.rows, vec!
   [
-    RestRow { order : OrderId( 1 ), price : Price::parse( "1.00" ).unwrap(), qty : Quantity::from_int( 3 ).unwrap() },
+    RestRow { order : OrderId( 1 ), side : Side::Buy, price : Price::parse( "1.00" ).unwrap(), qty : Quantity::from_int( 3 ).unwrap() },
   ] );
   assert_eq!( snap_len( &snap ), 1 );
 }
@@ -103,4 +103,42 @@ fn book_snap_clones_independently()
   let cloned = snap.clone();
 
   assert_eq!( snap, cloned );
+}
+
+/// A row names its side.
+///
+/// # Root Cause
+///
+/// `RestRow` held the order, price and remainder, not the side, and `rows`
+/// lists bids then asks with nothing marking where one ends.
+///
+/// # Why Not Caught
+///
+/// The ordering test rests both sides, so prices alone told them apart there.
+///
+/// # Fix Applied
+///
+/// `RestRow::side`, copied from the order.
+///
+/// # Prevention
+///
+/// A flattened row carries every field a reader needs to put it back.
+///
+/// # Pitfall
+///
+/// A book holding one side, or crossed, gives rows that prices cannot split.
+#[ test ]
+fn a_row_names_its_side()
+{
+  let mut bid_and_ask = Book::new();
+  assert!( bid_and_ask.insert( rest( 1, Side::Buy, "2.00", 1, 10 ) ), "fresh id, must succeed" );
+  assert!( bid_and_ask.insert( rest( 2, Side::Sell, "3.00", 1, 20 ) ), "fresh id, must succeed" );
+  let mut two_asks = Book::new();
+  assert!( two_asks.insert( rest( 1, Side::Sell, "2.00", 1, 10 ) ), "fresh id, must succeed" );
+  assert!( two_asks.insert( rest( 2, Side::Sell, "3.00", 1, 20 ) ), "fresh id, must succeed" );
+
+  let tick = Money::parse( "0.01" ).unwrap();
+  let sides = | book : &Book | snap_take( book, InstrumentId( 1 ), tick ).rows.iter().map( | row | row.side ).collect::< Vec< _ > >();
+  assert_eq!( sides( &bid_and_ask ), vec![ Side::Buy, Side::Sell ] );
+  assert_eq!( sides( &two_asks ), vec![ Side::Sell, Side::Sell ] );
 }

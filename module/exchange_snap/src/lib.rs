@@ -32,6 +32,9 @@ pub struct RestRow
 {
   /// The resting order's identity.
   pub order : OrderId,
+  /// The side it rests on. `BookSnap::rows` lists bids then asks with
+  /// nothing between them, so the row says which.
+  pub side : Side,
   /// The price it rests at.
   pub price : Price,
   /// What remains of it, unfilled.
@@ -59,7 +62,13 @@ pub struct BookSnap
 #[ must_use ]
 pub fn snap_take( book : &Book, instrument : InstrumentId, tick : Money ) -> BookSnap
 {
-  let to_row = | resting : &Resting | RestRow { order : resting.order.id, price : resting.order.price, qty : resting.remaining };
+  let to_row = | resting : &Resting | RestRow
+  {
+    order : resting.order.id,
+    side : resting.order.side,
+    price : resting.order.price,
+    qty : resting.remaining,
+  };
   let rows = book.side( instrument, Side::Buy ).map( to_row )
   .chain( book.side( instrument, Side::Sell ).map( to_row ) )
   .collect();
