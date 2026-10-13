@@ -60,6 +60,18 @@ step, and `exchange_step` answers a drained `Replace` with
 `StepOutcome::ReplaceNotWired`. `exchange_inbound::inbound_apply` calls all
 three.
 
+## Not built: an amend
+
+`rest_replace` swaps orders on the book. An amend also moves the reservation
+in the same step and reports it
+(`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`);
+`Exchange` has neither the escrow side nor an event for it, so
+`exchange_step` answers `Replace` with `StepOutcome::ReplaceNotWired`. The
+priority rule — keep the place only for a smaller quantity at one price —
+rides on the replacement's `arrival`, which `rest_replace` takes as given,
+the same as `Book::insert` does for a new order: only the facade stamps
+arrivals, so only it can apply the rule.
+
 ## Responsibility Table
 
 | File | Responsibility |

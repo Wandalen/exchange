@@ -77,6 +77,34 @@ it. If the book refuses, the two disagree about what rests; that is an error
 rather than a clamp or a retry. It should be unreachable, and an error is what
 makes "should" checkable.
 
+## Not built: refusing an inexact tick and lot
+
+An unpayable fill — and the side it can block — needs, through `Exchange`, an
+instrument whose tick times lot is inexact at the money scale, such as a
+0.0001 tick with a 0.001 lot. An on-grid price is a whole number of ticks and
+an on-grid quantity a whole number of lots, so when one tick times one lot is
+exact, so is every fill. `exchange_spec::spec_new` does not refuse such a
+pair. The refusal is `exchange_spec`'s, and it would refuse the finest grid
+`exchange_core`'s tests register on, which they use to reach inexact fills.
+
+## Not built: market orders
+
+An order with no limit price. `exchange_escrow` reserves a buy at its limit,
+the most it can be asked to pay; a market buy has none, so nothing bounds what
+it reserves. It needs a reservation rule first — a protection price, or the
+account's whole available balance — and `Order::price` would become optional
+in every crate that reads it.
+
+## Not built: a FOK probe without a clone
+
+`cross` probes a FOK order against a clone of the whole book, every
+instrument, on top of the clone `exchange_core::step_place` takes for its dry
+run. A read-only walk of one side would do, but it is a second copy of the
+loop's rules — price, self-match, settleability — that must agree with
+`cross_inner` for good; the replay is safe today because it runs the same
+function. Worth it once the dry run stops cloning (`exchange_book`'s readme,
+"Not built: an id index").
+
 ## Responsibility Table
 
 | File | Responsibility |

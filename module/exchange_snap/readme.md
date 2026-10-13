@@ -33,6 +33,14 @@ No `exchange_order` dependency
 and no `SnapError { Full }`
 ([`docs/decisions/002_no_snap_error.md`](docs/decisions/002_no_snap_error.md)).
 
+## Not built: restoring a book
+
+A row holds the order's id, side, price and remainder, not its account,
+arrival, quantity, time in force or client id, so no book can be rebuilt from
+rows. Adding them is the easy half: restored orders need their reservations
+back, and `exchange_escrow` has no snapshot. Both belong in one consistent
+save, which is file format 012's design.
+
 ## Responsibility Table
 
 | File | Responsibility |
