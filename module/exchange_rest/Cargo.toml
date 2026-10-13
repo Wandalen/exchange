@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 exchange_book = { path = "../exchange_book" }
 exchange_id = { path = "../exchange_id" }
+exchange_side = { path = "../exchange_side" }
 
 [dev-dependencies]
 # The tests build a `Resting` by hand, which needs every field of the `Order`
@@ -16,7 +17,6 @@ exchange_id = { path = "../exchange_id" }
 exact_arith = { workspace = true }
 exchange_order = { path = "../exchange_order" }
 exchange_seq = { path = "../exchange_seq" }
-exchange_side = { path = "../exchange_side" }
 exchange_tif = { path = "../exchange_tif" }
 
 [lints]

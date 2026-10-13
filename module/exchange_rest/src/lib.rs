@@ -9,10 +9,12 @@
 //! a place, a refused replacement would leave neither order resting, and
 //! putting the original back would seat it behind every order sharing its
 //! arrival. So it checks the replacement first and touches nothing on a
-//! refusal.
+//! refusal. Nothing here matches, so a replacement that would trade is
+//! refused too, rather than rested across the opposite side.
 
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
+use exchange_side::side_accepts;
 
 /// Place `resting` on `book` — [`Book::insert`].
 ///
@@ -45,6 +47,9 @@ pub enum RestReplaceError
   /// [`Book::insert`] would refuse the replacement: a `remaining` of zero or
   /// above its order's quantity, or an `order.id` resting elsewhere.
   Refused,
+  /// The replacement's price reaches the best order on the opposite side.
+  /// Resting it would leave the book crossed; it has to be matched instead.
+  WouldTake,
 }
 
 impl core::fmt::Display for RestReplaceError
@@ -56,6 +61,7 @@ impl core::fmt::Display for RestReplaceError
       Self::InstrumentMismatch => write!( f, "new_resting's own instrument disagrees with the instrument argument" ),
       Self::Missing => write!( f, "no order with that id is resting on this instrument" ),
       Self::Refused => write!( f, "the replacement was refused; the original order is unchanged" ),
+      Self::WouldTake => write!( f, "the replacement would trade against the opposite side; the original order is unchanged" ),
     }
   }
 }
@@ -79,8 +85,9 @@ impl core::error::Error for RestReplaceError {}
 /// Checked in this order, each with nothing touched:
 /// [`RestReplaceError::InstrumentMismatch`] if `new_resting` names another
 /// instrument; [`RestReplaceError::Refused`] if [`Book::insert`] would refuse
-/// it; [`RestReplaceError::Missing`] if `old_id` does not rest on
-/// `instrument`.
+/// it; [`RestReplaceError::WouldTake`] if its price reaches the best opposite
+/// order, other than `old_id`; [`RestReplaceError::Missing`] if `old_id` does
+/// not rest on `instrument`.
 ///
 /// ```rust
 /// use exact_arith::{ Price, Quantity };
@@ -130,6 +137,20 @@ pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : Order
   if !book.insertable( &new_resting, Some( old_id ) )
   {
     return Err( RestReplaceError::Refused );
+  }
+
+  // Fix(rest_replace_refuses_a_replacement_that_would_take):
+  // Root cause: only `insert`'s checks ran, so a replacement priced into the
+  // opposite side rested there untraded and the book was left crossed.
+  // Pitfall: the original may sit on that side itself, under a replacement
+  // that changes side; it is about to leave and crosses nothing.
+  let side = new_resting.order.side;
+  let would_take = book.side( instrument, side.opposite() )
+    .find( | resting | resting.order.id != old_id )
+    .is_some_and( | best | side_accepts( side, new_resting.order.price, best.order.price ) );
+  if would_take
+  {
+    return Err( RestReplaceError::WouldTake );
   }
 
   let Some( old ) = book.cancel( instrument, old_id )

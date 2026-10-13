@@ -15,7 +15,7 @@ The exposed surface of `exchange_rest`, as built.
 |------|------|-----------|
 | `rest_place` | fn | `(&mut Book, Resting) -> bool` |
 | `rest_cancel` | fn | `(&mut Book, InstrumentId, OrderId) -> Option<Resting>` |
-| `RestReplaceError` | enum | `{ InstrumentMismatch, Missing, Refused }`, with `Display` and `Error` |
+| `RestReplaceError` | enum | `{ InstrumentMismatch, Missing, Refused, WouldTake }`, with `Display` and `Error` |
 | `rest_replace` | fn | `(&mut Book, InstrumentId, OrderId, Resting) -> Result<Resting, RestReplaceError>` |
 
 ### Differs from the proposal
@@ -29,8 +29,8 @@ Snap }`.
   `Option<Resting>`.
 - **`RestReplaceError` holds only what a book-level replace can tell
   apart:** a replacement naming another instrument, no original to replace,
-  or a replacement `Book::insert` would refuse. Caps, halt and escrow are the
-  caller's, checked before it calls here.
+  a replacement `Book::insert` would refuse, or one that would trade. Caps,
+  halt and escrow are the caller's, checked before it calls here.
 
 ### Sources
 

@@ -264,3 +264,62 @@ fn rest_replace_refuses_a_new_resting_for_a_different_instrument()
   assert_eq!( restored.order.id, OrderId( 1 ), "order 1 is back on its own instrument, unchanged" );
   assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap() );
 }
+
+// --- rest_replace: WouldTake ---------------------------------------------
+
+/// A replacement priced into the opposite side is refused, and the original
+/// stays.
+///
+/// # Root Cause
+///
+/// `rest_replace` checked only what `Book::insert` checks. A bid moved above
+/// the best ask rested there untraded, leaving the book crossed: the next
+/// seller traded against that bid at its price while the cheaper ask sat on.
+///
+/// # Why Not Caught
+///
+/// Every replacement in the suite moved an order away from the other side.
+///
+/// # Fix Applied
+///
+/// `rest_replace` refuses a replacement whose price reaches the best opposite
+/// order with `RestReplaceError::WouldTake`.
+///
+/// # Prevention
+///
+/// A move onto the book that does not match must be one that could not have.
+///
+/// # Pitfall
+///
+/// The opposite side counts every account: a crossing against one's own
+/// order is still a crossed book.
+#[ test ]
+fn rest_replace_refuses_a_replacement_that_would_take()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Buy, "2.40", 4, 10 ) ) );
+  assert!( rest_place( &mut book, resting( 2, Side::Sell, "2.50", 4, 20 ) ) );
+
+  for price in [ "2.50", "2.60" ]
+  {
+    let error = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Buy, price, 4, 30 ) ).unwrap_err();
+    assert_eq!( error, RestReplaceError::WouldTake, "a bid at {price} reaches the 2.50 ask" );
+  }
+
+  let bid = book.best( InstrumentId( 1 ), Side::Buy ).unwrap();
+  assert_eq!( bid.order.price, Price::parse( "2.40" ).unwrap(), "the original bid still rests" );
+  assert_eq!( bid.arrival, Sequence( 10 ) );
+}
+
+/// A replacement one tick short of the opposite side is not refused.
+#[ test ]
+fn rest_replace_up_to_the_opposite_side_is_accepted()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Buy, "2.40", 4, 10 ) ) );
+  assert!( rest_place( &mut book, resting( 2, Side::Sell, "2.50", 4, 20 ) ) );
+
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Buy, "2.49", 4, 30 ) ).unwrap();
+
+  assert_eq!( book.best( InstrumentId( 1 ), Side::Buy ).unwrap().order.price, Price::parse( "2.49" ).unwrap() );
+}

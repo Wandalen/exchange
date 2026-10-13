@@ -1,9 +1,9 @@
 # exchange_rest
 
 The three non-matching ways an order moves on the book: rest, cancel,
-replace. Depends on `exchange_book` and `exchange_id`. Closes hard problem 9
-(cancel and replace) and features 8 (`book_rest`, `book_cancel`) and 25
-(`book_replace`).
+replace. Depends on `exchange_book`, `exchange_id` and `exchange_side`.
+Closes hard problem 9 (cancel and replace) and features 8 (`book_rest`,
+`book_cancel`) and 25 (`book_replace`).
 
 ```rust
 use exact_arith::{ Price, Quantity };
@@ -44,6 +44,11 @@ seats it behind every order sharing its arrival. `rest_replace` asks
 `Book::insertable` first, counting the original as gone, and touches nothing
 on a refusal.
 
+Nothing here matches, so a replacement priced into the opposite side is
+refused (`WouldTake`) rather than rested there. Rested, it would leave the
+book crossed: the next order to arrive trades against it while the better
+price it crossed sits on.
+
 ## Who calls it
 
 `exchange_core::step_place` rests every remainder through `rest_place`.
@@ -56,7 +61,7 @@ three.
 
 | File | Responsibility |
 |------|-----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_id` |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_id`, `exchange_side` |
 | [`src/lib.rs`](src/lib.rs) | `rest_place`, `rest_cancel`, `rest_replace`, `RestReplaceError` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/pitfall/` | A replace leaving the old order resting; a replacement for another instrument |

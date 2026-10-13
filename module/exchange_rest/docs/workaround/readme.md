@@ -11,18 +11,17 @@ External constraints `exchange_rest` absorbs.
 
 ### Overview
 
-**None.** `exchange_rest` depends only on `exchange_book` and `exchange_id`
-(both in-workspace) — nothing external to work around. Verify with:
+**None.** `exchange_rest` depends on `exchange_book`, `exchange_id` and
+`exchange_side`, all in-workspace. Verify with:
 
 ```bash
 cd module/exchange_rest && cargo tree --depth 1
 ```
 
-**Expected:** `exchange_book` and `exchange_id` only, no third-party crate
-line.
+**Expected:** those three, no third-party crate line.
 
 ### Sources
 
 | File | Relationship |
 |------|--------------|
-| `Cargo.toml` | The dependency surface examined for this finding — two in-workspace crates |
+| `Cargo.toml` | The dependency surface examined for this finding — three in-workspace crates |
