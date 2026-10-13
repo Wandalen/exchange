@@ -23,7 +23,9 @@ adjacent. `depth_top` folds consecutive orders at one price into a
 `n`th, so the cost is the orders in the levels it returns, not the book.
 
 `n == 0` is refused (`DepthError::BadN`); an `n` above the number of levels
-returns fewer rows.
+returns fewer rows. A level whose orders together pass the quantity ceiling
+— two accounts each holding over half of it can rest that much — reads as
+`Quantity::MAX`, a lower bound, rather than failing the query.
 
 ## Responsibility Table
 

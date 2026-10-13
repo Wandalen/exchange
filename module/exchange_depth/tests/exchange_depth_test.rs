@@ -153,3 +153,20 @@ fn depth_is_a_snapshot_not_a_view()
 
   assert_eq!( depth.bids, vec![ level( "1.00", 5 ) ], "the live cancel must not reach the already-taken depth" );
 }
+
+/// Orders at one price can together hold more than one `Quantity` expresses;
+/// the level then reads as `Quantity::MAX`, a lower bound, rather than
+/// failing the whole query.
+#[ test ]
+fn a_level_past_the_quantity_ceiling_reads_as_the_ceiling()
+{
+  let mut book = Book::new();
+  for ( id, arrival ) in [ ( 1, 10 ), ( 2, 20 ) ]
+  {
+    let order = Order { quantity : Quantity::MAX, ..rest( id, Side::Buy, "1.00", 1, arrival ).order };
+    assert!( book.insert( Resting { order, remaining : Quantity::MAX, arrival : Sequence( arrival ) } ), "fresh id, must succeed" );
+  }
+
+  let depth = depth_top( &book, INSTRUMENT, 1 ).unwrap();
+  assert_eq!( depth.bids, vec![ LevelView { price : Price::parse( "1.00" ).unwrap(), qty : Quantity::MAX } ] );
+}

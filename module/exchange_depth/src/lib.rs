@@ -17,7 +17,10 @@ pub struct LevelView
 {
   /// The price every order aggregated into this level rests at.
   pub price : Price,
-  /// Total resting quantity across every order at `price`.
+  /// Total resting quantity across every order at `price`. Saturates at
+  /// `Quantity::MAX`: orders at one price can together hold more than one
+  /// `Quantity` expresses, and a depth read is a display, not a balance —
+  /// a lower bound beats failing the query.
   pub qty : Quantity,
 }
 
