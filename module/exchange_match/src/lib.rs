@@ -56,7 +56,7 @@ use exact_arith::{ KindError, Price, Quantity };
 use exchange_book::Book;
 use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;
-use exchange_id::{ AccountId, OrderId };
+use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_side::side_accepts;
 use exchange_tif::{ tif_requires_full, tif_takes };
@@ -125,8 +125,8 @@ pub enum MatchError
   /// incoming one — and returned rather than unwrapped, since a panic
   /// mid-match leaves a book no event describes.
   Quantity( KindError ),
-  /// The book refused a reduction the loop had decided on: the two disagree
-  /// about what rests.
+  /// The book refused a reduction or a self-match withdrawal the loop had
+  /// decided on: the two disagree about what rests.
   BookDesynchronized,
   /// `exchange_conserve::conserve_assert` refused this call's trades.
   /// Unreachable while both legs of a trade come from one price and
@@ -143,7 +143,7 @@ impl core::fmt::Display for MatchError
     match self
     {
       Self::Quantity( error ) => write!( f, "quantity arithmetic failed during matching: {error}" ),
-      Self::BookDesynchronized => write!( f, "the book refused a reduction the match loop had decided on" ),
+      Self::BookDesynchronized => write!( f, "the book refused a reduction or withdrawal the match loop had decided on" ),
       Self::Conservation( error ) => write!( f, "this batch of trades did not conserve: {error}" ),
       Self::PostOnlyWouldTake => write!( f, "a post-only order would have taken liquidity" ),
     }
@@ -286,7 +286,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       {
         SelfMatchPolicy::CancelResting =>
         {
-          let _ = book.cancel( instrument, best.order.id );
+          withdraw( book, instrument, best.order.id )?;
           cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
           // The passed-over order was cancelled, not skipped, so nothing
           // ranks ahead of it that did not before — resume at whatever is
@@ -300,7 +300,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
         },
         SelfMatchPolicy::CancelBoth =>
         {
-          let _ = book.cancel( instrument, best.order.id );
+          withdraw( book, instrument, best.order.id )?;
           cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
           cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining } );
           break;
@@ -344,4 +344,14 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
   conserve_assert( &trades )?;
 
   Ok( Crossing { trades, remaining, cancelled } )
+}
+
+/// Withdraw the self-matched resting order `id`, which the loop just read at
+/// the front of the book.
+///
+/// The book refusing means the two disagree about what rests. Ignored, the
+/// loop would read the same order again: under cancel-resting, forever.
+fn withdraw( book : &mut Book, instrument : InstrumentId, id : OrderId ) -> Result< (), MatchError >
+{
+  book.cancel( instrument, id ).map( drop ).ok_or( MatchError::BookDesynchronized )
 }
