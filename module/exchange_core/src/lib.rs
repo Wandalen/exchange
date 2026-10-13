@@ -1134,9 +1134,9 @@ impl< E : EscrowPort > Exchange< E >
       EscrowError::UnknownAccount( _ ) => RejectReason::UnknownAccount,
       EscrowError::Obligation( _ ) => RejectReason::ObligationUnrepresentable,
       // The account's funds were genuinely sufficient; a fixed-point ceiling
-      // was not. With `exchange_escrow::Escrow` that is a trade's proceeds
-      // carrying an account past it in the dry-run `settle`: escrow keeps a
-      // holding's total within the ceiling, so `reserve` never refuses on it.
+      // was not. With `exchange_escrow::Escrow` that is `reserve` finding no
+      // room for what the order brings in, or a taking sell paid above its
+      // limit past the room its ask kept, in the dry-run `settle`.
       EscrowError::Arithmetic => RejectReason::ReservationUnrepresentable,
       // `AlreadyReserved` and `Obligation` stay reserve-only regardless of
       // this function's now-wider callers: the order id is freshly claimed

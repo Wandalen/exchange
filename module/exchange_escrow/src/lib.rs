@@ -39,6 +39,14 @@
 //! and deposit, which enters the pair from outside ([`Escrow::open`]).
 //! In particular there is no path that debits `available` while an order
 //! rests.
+//!
+//! # Room for what a resting order brings in
+//!
+//! A holding's total stays under the representable ceiling. A resting ask will
+//! be paid and a resting bid will receive the asset, so each keeps room for
+//! that in its owner's `incoming` from the moment it is reserved. A deposit or
+//! proceeds that would take the room are refused instead, so a resting order
+//! can always settle.
 
 use std::collections::BTreeMap;
 
@@ -106,12 +114,14 @@ impl Conserved for Quantity
 }
 
 /// One account's holding of one thing, split into what it can spend and what
-/// it has already promised.
+/// it has already promised, plus room kept for what its resting orders bring
+/// in.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub struct Holding< T >
 {
   available : T,
   reserved : T,
+  incoming : T,
 }
 
 impl< T : Conserved > Holding< T >
@@ -119,7 +129,7 @@ impl< T : Conserved > Holding< T >
   /// A holding with `available` spendable and nothing promised.
   pub fn new( available : T ) -> Self
   {
-    Self { available, reserved : T::NOTHING }
+    Self { available, reserved : T::NOTHING, incoming : T::NOTHING }
   }
 
   /// What can still be committed.
@@ -134,14 +144,22 @@ impl< T : Conserved > Holding< T >
     self.reserved
   }
 
+  /// What this account's resting orders can still bring in: an ask's
+  /// proceeds at its limit, a bid's asset. Not held — room kept under the
+  /// ceiling beside [`Self::total`].
+  pub fn incoming( &self ) -> T
+  {
+    self.incoming
+  }
+
   /// `available + reserved` — invariant across every operation on the
   /// matching path, which is what a conservation test asserts.
   ///
   /// # Errors
   ///
   /// [`EscrowError::Arithmetic`] if the sum does not fit, which no sequence
-  /// of edges reaches: `receive` keeps it within the ceiling, and the other
-  /// three never grow it.
+  /// of edges reaches: `receive` keeps it, with `incoming`, within the
+  /// ceiling, and the other three never grow it.
   pub fn total( &self ) -> Result< T, EscrowError >
   {
     self.available.checked_plus( self.reserved ).ok_or( EscrowError::Arithmetic )
@@ -212,8 +230,36 @@ impl< T : Conserved > Holding< T >
   fn receive( &mut self, amount : T ) -> Result< (), EscrowError >
   {
     Self::movement( amount )?;
-    self.total()?.checked_plus( amount ).ok_or( EscrowError::Arithmetic )?;
+    self.room( amount )?;
     self.available = self.available.checked_plus( amount ).ok_or( EscrowError::Arithmetic )?;
+    Ok( () )
+  }
+
+  /// Keep room for `amount` a resting order will bring in.
+  fn incoming_add( &mut self, amount : T ) -> Result< (), EscrowError >
+  {
+    Self::movement( amount )?;
+    self.room( amount )?;
+    self.incoming = self.incoming.checked_plus( amount ).ok_or( EscrowError::Arithmetic )?;
+    Ok( () )
+  }
+
+  /// Give up room kept by `incoming_add`: the order filled or left the book.
+  fn incoming_sub( &mut self, amount : T ) -> Result< (), EscrowError >
+  {
+    Self::movement( amount )?;
+    self.incoming = self.incoming.checked_minus( amount ).ok_or( EscrowError::NotReserved )?;
+    Ok( () )
+  }
+
+  /// Refused unless `amount` more fits under the ceiling beside the total and
+  /// the room already kept.
+  fn room( &self, amount : T ) -> Result< (), EscrowError >
+  {
+    self.total()?
+      .checked_plus( self.incoming )
+      .and_then( | kept | kept.checked_plus( amount ) )
+      .ok_or( EscrowError::Arithmetic )?;
     Ok( () )
   }
 }
@@ -366,8 +412,9 @@ impl Escrow
   ///
   /// # Errors
   ///
-  /// [`EscrowError::Arithmetic`] if either holding's total would pass the
-  /// ceiling. [`EscrowError::NegativeAmount`] if `cash` is negative.
+  /// [`EscrowError::Arithmetic`] if either holding's total, with the room its
+  /// resting orders keep, would pass the ceiling.
+  /// [`EscrowError::NegativeAmount`] if `cash` is negative.
   ///
   /// Fix(open_wiped_reserved_out_from_under_a_live_reservation):
   /// Root cause: `open` inserted a fresh `Account` over an existing one,
@@ -442,9 +489,19 @@ impl Escrow
   ///
   /// [`EscrowError::UnknownAccount`], [`EscrowError::Insufficient`] when the
   /// balance does not cover it, [`EscrowError::AlreadyReserved`] on a repeat,
-  /// [`EscrowError::NegativeAmount`] when the obligation is negative — which a
-  /// buy's is exactly when its price is — or [`EscrowError::Obligation`] when
-  /// the obligation is not expressible.
+  /// [`EscrowError::NegativeAmount`] when the obligation or the proceeds are
+  /// negative — which they are exactly when the price is —,
+  /// [`EscrowError::Arithmetic`] when what the order brings in has no room
+  /// under the ceiling, or [`EscrowError::Obligation`] when the obligation is
+  /// not expressible.
+  ///
+  /// Fix(a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill):
+  /// Root cause: proceeds were checked against the ceiling only at `settle`.
+  /// An ask whose proceeds no longer fit rested at the front of its level,
+  /// and every buy crossing it was refused whole.
+  /// Pitfall: a check at placement alone is not enough; a later deposit can
+  /// take the room — see
+  /// `a_maker_reaching_the_ceiling_after_it_rests_does_not_block_a_buy`.
   pub fn reserve( &mut self, order : &Order ) -> Result< Obligation, EscrowError >
   {
     if self.reservations.contains_key( &order.id )
@@ -453,14 +510,23 @@ impl Escrow
     }
 
     let obligation = exchange_types::obligation( order )?;
-    let account = self.accounts.get_mut( &order.account ).ok_or( EscrowError::UnknownAccount( order.account ) )?;
+    let mut account = *self.accounts.get( &order.account ).ok_or( EscrowError::UnknownAccount( order.account ) )?;
 
     match obligation
     {
-      Obligation::Cash( amount ) => account.cash.reserve( amount )?,
-      Obligation::Asset( quantity ) => account.asset.reserve( quantity )?,
+      Obligation::Cash( amount ) =>
+      {
+        account.cash.reserve( amount )?;
+        account.asset.incoming_add( order.quantity )?;
+      },
+      Obligation::Asset( quantity ) =>
+      {
+        account.asset.reserve( quantity )?;
+        account.cash.incoming_add( Self::proceeds( order.price, order.quantity )? )?;
+      },
     }
 
+    *self.accounts.get_mut( &order.account ).expect( "looked up above" ) = account;
     self.reservations.insert( order.id, Reservation { account : order.account, limit : order.price, obligation, unfilled : order.quantity } );
     Ok( obligation )
   }
@@ -504,17 +570,26 @@ impl Escrow
     {
       return Err( EscrowError::NotOwner( order ) );
     }
-    let obligation = reservation.obligation;
-    let account = self.accounts.get_mut( &owner ).ok_or( EscrowError::UnknownAccount( owner ) )?;
+    let reservation = *reservation;
+    let mut account = *self.accounts.get( &owner ).ok_or( EscrowError::UnknownAccount( owner ) )?;
 
-    match obligation
+    match reservation.obligation
     {
-      Obligation::Cash( amount ) => account.cash.release( amount )?,
-      Obligation::Asset( quantity ) => account.asset.release( quantity )?,
+      Obligation::Cash( amount ) =>
+      {
+        account.cash.release( amount )?;
+        account.asset.incoming_sub( reservation.unfilled )?;
+      },
+      Obligation::Asset( quantity ) =>
+      {
+        account.asset.release( quantity )?;
+        account.cash.incoming_sub( Self::proceeds( reservation.limit, reservation.unfilled )? )?;
+      },
     }
 
+    *self.accounts.get_mut( &owner ).expect( "looked up above" ) = account;
     self.reservations.remove( &order );
-    Ok( obligation )
+    Ok( reservation.obligation )
   }
 
   /// Move the units `trade` names between its two parties, drawing from their
@@ -564,8 +639,10 @@ impl Escrow
   /// [`EscrowError`] if either party is unknown, holds no reservation, holds
   /// one of the wrong shape, or is not the account that reserved it
   /// ([`EscrowError::NotOwner`]); [`EscrowError::OutsideLimit`] if the
-  /// trade's price is above the buy's limit or below the sell's. On any
-  /// error, neither account and neither reservation is changed.
+  /// trade's price is above the buy's limit or below the sell's;
+  /// [`EscrowError::Arithmetic`] if a seller paid above its limit has no room
+  /// for the difference. On any error, neither account and neither
+  /// reservation is changed.
   pub fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
     let taker = *self.reservations.get( &trade.taker ).ok_or( EscrowError::NoReservation( trade.taker ) )?;
@@ -587,17 +664,22 @@ impl Escrow
     let taker_reservation = Self::reduced_obligation( taker, trade.taker, trade.taker_account, trade.taker_side, trade.quantity )?;
     let maker_reservation =
       Self::reduced_obligation( maker, trade.maker, trade.maker_account, trade.taker_side.opposite(), trade.quantity )?;
-    let buy_after = if trade.taker_side == Side::Buy { taker_reservation } else { maker_reservation };
+    let ( buy_after, sell_after ) =
+      if trade.taker_side == Side::Buy { ( taker_reservation, maker_reservation ) } else { ( maker_reservation, taker_reservation ) };
 
     // What the buy no longer keeps: the price to the seller, the rest back to
     // the buyer.
     let paid = notional( trade.price, trade.quantity )?;
     let freed = Self::cash_held( Some( buy ) ).checked_minus( Self::cash_held( buy_after ) ).ok_or( EscrowError::NotReserved )?;
     let improvement = freed.checked_minus( paid ).ok_or( EscrowError::NotReserved )?;
+    // The room the sell no longer keeps. A maker is paid exactly this; a
+    // taker paid above its limit needs the rest to fit beside it.
+    let proceeds_due = Self::proceeds_kept( Some( sell ) )?.checked_minus( Self::proceeds_kept( sell_after )? ).ok_or( EscrowError::NotReserved )?;
 
     let mut buyer_account = *self.accounts.get( &buyer ).ok_or( EscrowError::UnknownAccount( buyer ) )?;
     buyer_account.cash.deliver( paid )?;
     buyer_account.cash.release( improvement )?;
+    buyer_account.asset.incoming_sub( trade.quantity )?;
 
     // A self-trade is never produced by the matching engine's own self-match
     // prevention, but `Escrow` is public and defends against direct misuse
@@ -615,6 +697,7 @@ impl Escrow
       *self.accounts.get( &seller ).ok_or( EscrowError::UnknownAccount( seller ) )?
     };
     seller_account.asset.deliver( trade.quantity )?;
+    seller_account.cash.incoming_sub( proceeds_due )?;
     seller_account.cash.receive( paid )?;
 
     // Fix(a_self_trade_at_the_ceiling_was_refused):
@@ -722,6 +805,19 @@ impl Escrow
     let unfilled = unfilled.ok_or( EscrowError::NotReserved )?;
 
     Ok( ( unfilled != Quantity::ZERO ).then_some( Reservation { obligation, unfilled, ..reservation } ) )
+  }
+
+  /// What a sell of `quantity` at `limit` brings in, rounded up: the room it
+  /// keeps.
+  fn proceeds( limit : Price, quantity : Quantity ) -> Result< Money, EscrowError >
+  {
+    price_mul_qty( limit, quantity, Rounding::Up ).map_err( | _ | EscrowError::Arithmetic )
+  }
+
+  /// The room a sell's `reservation` keeps: nothing once it is discharged.
+  fn proceeds_kept( reservation : Option< Reservation > ) -> Result< Money, EscrowError >
+  {
+    reservation.map_or( Ok( Money::ZERO ), | reservation | Self::proceeds( reservation.limit, reservation.unfilled ) )
   }
 
   /// The currency `reservation` holds: nothing once it is discharged.

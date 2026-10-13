@@ -60,6 +60,14 @@ any edge runs — without it a negative price ran every edge backwards, and no
 balance went below zero to notice. `receive` keeps a holding's *total* within
 the ceiling, so a reservation always has room to come back.
 
+## Room for what a resting order brings in
+
+A resting ask will be paid and a resting bid will receive the asset. Each
+keeps room for that under the ceiling, in `Holding::incoming`, from `reserve`
+until it fills or is released. A deposit, proceeds or another order that
+would take the room is refused with `Arithmetic`, so a resting order can
+always settle and never blocks a level it cannot trade at.
+
 `Holding`'s edges are private. Value moves only through `Escrow`'s own
 methods, so nothing changes one side of the partition without the other.
 
