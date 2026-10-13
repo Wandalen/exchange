@@ -19,10 +19,13 @@
 //! the book for good. So the loop checks first and declines such a fill
 //! instead of generating it.
 //!
-//! The cost: two orders can rest at prices that cross, because the only fill
-//! between them cannot be paid exactly. Either side can cancel and recover
-//! its reservation. Closing it needs a minimum fill increment derived from
-//! the price, which is not decided.
+//! It stops at that order rather than skip past it to a worse price. The
+//! cost: a taker can rest across it, and a remainder no fill can pay — 0.001
+//! at 1.0001 — stops every taker on its side until its owner cancels it. A
+//! smaller fill might have been payable, but choosing one needs a minimum
+//! fill increment derived from the price, which is not decided. An
+//! instrument whose tick times lot is exact at the money scale never meets
+//! any of this.
 //!
 //! # Self-match prevention
 //!

@@ -23,8 +23,11 @@ no-cross case tells a matching engine from a machine that pairs whatever it is
 handed. It is asserted here and again as the control arm of the smoke lane.
 
 A fill whose price paid cannot be expressed exactly is declined the same way,
-before the book gives up the resting order. Two orders can then rest at
-prices that cross; see the module doc in [`src/lib.rs`](src/lib.rs).
+before the book gives up the resting order, and the loop stops there rather
+than skip to a worse price. A resting remainder no fill can pay then stops
+every taker on its side until it is cancelled
+(`an_unpayable_fill_at_the_front_stops_the_taker_there`); see the module doc
+in [`src/lib.rs`](src/lib.rs).
 
 ## Self-match prevention
 
