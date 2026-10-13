@@ -42,7 +42,7 @@
 
 use std::collections::BTreeMap;
 
-use exact_arith::{ Money, Price, Quantity };
+use exact_arith::{ Money, Price, Quantity, Rounding, price_mul_qty };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::{ Obligation, Order };
@@ -527,6 +527,10 @@ impl Escrow
   /// the order executable; returning the unused part is what stops the
   /// exchange quietly accumulating the spread.
   ///
+  /// What a buy keeps after a fill is `limit × unfilled` rounded down: every
+  /// fill pays an exact amount at a price within the limit, so the rest can
+  /// never spend more. The fill's own `limit × quantity` need not be exact.
+  ///
   /// Every step below runs against local copies of the two accounts and the
   /// two reservations before anything is written back into `self`, so a
   /// fallible step late in the sequence — an asset holding already at its
@@ -547,6 +551,13 @@ impl Escrow
   /// Root cause: only the buy's recorded limit was checked; a trade below an
   /// ask's limit settled.
   /// Pitfall: a guard written for one side of a symmetric pair.
+  ///
+  /// Fix(a_partial_fill_settles_when_only_the_limit_notional_is_inexact):
+  /// Root cause: the buy's share of a fill was `limit × quantity`, computed
+  /// exactly, so a fill paying an exact amount was refused whenever that
+  /// product was not.
+  /// Pitfall: the rest of such an order has an inexact notional too. What has
+  /// to be right is what the reservation keeps, not the fill's share of it.
   ///
   /// # Errors
   ///
@@ -573,28 +584,16 @@ impl Escrow
       return Err( EscrowError::OutsideLimit( sell_id ) );
     }
 
-    let paid = notional( trade.price, trade.quantity )?;
-    let reserved_for_this_fill = notional( buy.limit, trade.quantity )?;
-    let improvement = reserved_for_this_fill.checked_sub( paid ).map_err( | _ | EscrowError::Arithmetic )?;
+    let taker_reservation = Self::reduced_obligation( taker, trade.taker, trade.taker_account, trade.taker_side, trade.quantity )?;
+    let maker_reservation =
+      Self::reduced_obligation( maker, trade.maker, trade.maker_account, trade.taker_side.opposite(), trade.quantity )?;
+    let buy_after = if trade.taker_side == Side::Buy { taker_reservation } else { maker_reservation };
 
-    let taker_reservation = Self::reduced_obligation
-    (
-      taker,
-      trade.taker,
-      trade.taker_account,
-      trade.taker_side,
-      reserved_for_this_fill,
-      trade.quantity,
-    )?;
-    let maker_reservation = Self::reduced_obligation
-    (
-      maker,
-      trade.maker,
-      trade.maker_account,
-      trade.taker_side.opposite(),
-      reserved_for_this_fill,
-      trade.quantity,
-    )?;
+    // What the buy no longer keeps: the price to the seller, the rest back to
+    // the buyer.
+    let paid = notional( trade.price, trade.quantity )?;
+    let freed = Self::cash_held( Some( buy ) ).checked_minus( Self::cash_held( buy_after ) ).ok_or( EscrowError::NotReserved )?;
+    let improvement = freed.checked_minus( paid ).ok_or( EscrowError::NotReserved )?;
 
     let mut buyer_account = *self.accounts.get( &buyer ).ok_or( EscrowError::UnknownAccount( buyer ) )?;
     buyer_account.cash.deliver( paid )?;
@@ -674,15 +673,13 @@ impl Escrow
     } )
   }
 
-  /// Compute what `order`'s `reservation` becomes after taking out the filled
-  /// portion, without committing it — the compute half of `settle`'s
+  /// Compute what `order`'s `reservation` becomes after `filled` more of it
+  /// fills, without committing it — the compute half of `settle`'s
   /// compute-then-commit split. `Ok( None )` means fully discharged: nothing
-  /// held and nothing unfilled.
+  /// unfilled, and so nothing held.
   ///
-  /// Uses [`Conserved::checked_minus`] for both shapes uniformly, the same
-  /// abstraction every edge in [`Holding`] already uses — not the raw
-  /// per-type `checked_sub`, which for `Money` (signed, unlike `Quantity`)
-  /// does not itself refuse to go below zero.
+  /// A sell keeps the asset it has not delivered; a buy keeps `limit ×
+  /// unfilled` rounded down, the most the rest can spend.
   ///
   /// Fix(a_zero_price_buy_lost_its_reservation_on_a_partial_fill):
   /// Root cause: the entry was dropped once the held amount reached zero, and
@@ -696,16 +693,14 @@ impl Escrow
   ///
   /// [`EscrowError::NotOwner`] if `owner` did not reserve it,
   /// [`EscrowError::ObligationMismatch`] if the stored shape does not match
-  /// `side`, [`EscrowError::NotReserved`] if the amount or quantity named
-  /// exceeds what remains.
+  /// `side`, [`EscrowError::NotReserved`] if `filled` exceeds what remains.
   fn reduced_obligation
   (
     reservation : Reservation,
     order : OrderId,
     owner : AccountId,
     side : Side,
-    cash_spent : Money,
-    asset_delivered : Quantity,
+    filled : Quantity,
   ) -> Result< Option< Reservation >, EscrowError >
   {
     if reservation.account != owner
@@ -713,23 +708,30 @@ impl Escrow
       return Err( EscrowError::NotOwner( order ) );
     }
 
-    let ( obligation, drained ) = match ( side, reservation.obligation )
+    let unfilled = reservation.unfilled.checked_minus( filled );
+    let obligation = match ( side, reservation.obligation )
     {
-      ( Side::Buy, Obligation::Cash( held ) ) =>
+      ( Side::Buy, Obligation::Cash( _ ) ) =>
       {
-        let remaining = held.checked_minus( cash_spent ).ok_or( EscrowError::NotReserved )?;
-        ( Obligation::Cash( remaining ), remaining == Money::ZERO )
+        let rest = unfilled.ok_or( EscrowError::NotReserved )?;
+        Obligation::Cash( price_mul_qty( reservation.limit, rest, Rounding::Down ).map_err( | _ | EscrowError::Arithmetic )? )
       },
-      ( Side::Sell, Obligation::Asset( held ) ) =>
-      {
-        let remaining = held.checked_minus( asset_delivered ).ok_or( EscrowError::NotReserved )?;
-        ( Obligation::Asset( remaining ), remaining == Quantity::ZERO )
-      },
+      ( Side::Sell, Obligation::Asset( held ) ) => Obligation::Asset( held.checked_minus( filled ).ok_or( EscrowError::NotReserved )? ),
       _ => return Err( EscrowError::ObligationMismatch ),
     };
-    let unfilled = reservation.unfilled.checked_minus( asset_delivered ).ok_or( EscrowError::NotReserved )?;
+    let unfilled = unfilled.ok_or( EscrowError::NotReserved )?;
 
-    Ok( if drained && unfilled == Quantity::ZERO { None } else { Some( Reservation { obligation, unfilled, ..reservation } ) } )
+    Ok( ( unfilled != Quantity::ZERO ).then_some( Reservation { obligation, unfilled, ..reservation } ) )
+  }
+
+  /// The currency `reservation` holds: nothing once it is discharged.
+  fn cash_held( reservation : Option< Reservation > ) -> Money
+  {
+    match reservation.map( | reservation | reservation.obligation )
+    {
+      Some( Obligation::Cash( held ) ) => held,
+      _ => Money::ZERO,
+    }
   }
 
   /// Write a previously-computed reservation update, dropping the record

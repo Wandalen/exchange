@@ -742,8 +742,30 @@ fn a_seller_is_never_paid_below_its_own_limit()
 /// Limit 0.5 for 2 reserves exactly 1. A fill of 0.000005 at 0.2 costs
 /// exactly 0.000001, but 0.5 × 0.000005 = 0.0000025 needs a seventh decimal
 /// digit `Money` (scale 6) cannot hold.
+///
+/// # Root Cause
+///
+/// `settle` took the buy's share of a fill as `limit × quantity`, computed
+/// exactly, and refused the fill when that was inexact.
+///
+/// # Why Not Caught
+///
+/// Every limit and fill in the suite multiplied out exactly.
+///
+/// # Fix Applied
+///
+/// The buy keeps `limit × unfilled` rounded down. Its fills pay exact amounts
+/// at prices within the limit, so the rest can never spend more.
+///
+/// # Prevention
+///
+/// Bound what a reservation keeps, not each fill's share of it.
+///
+/// # Pitfall
+///
+/// The rest, 0.5 × 1.999995, is inexact too: no exact share of the fill
+/// leaves it covered and nothing over.
 #[ test ]
-#[ ignore = "F4: settle needs limit × fill to be exact" ]
 fn a_partial_fill_settles_when_only_the_limit_notional_is_inexact()
 {
   let mut escrow = two_sided();

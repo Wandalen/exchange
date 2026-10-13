@@ -110,7 +110,7 @@ use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, OrderId };
 use exchange_order::Order;
-use exchange_side::{ Side, side_accepts };
+use exchange_side::side_accepts;
 use exchange_tif::{ tif_requires_full, tif_takes };
 use exchange_types::notional;
 
@@ -256,33 +256,22 @@ pub fn would_take( book : &Book, incoming : &Order ) -> bool
     .is_some_and( | best | side_accepts( incoming.side, incoming.price, best.order.price ) )
 }
 
-/// Whether every currency amount this fill implies can be expressed exactly.
-///
-/// Two amounts, not one. The trade settles at the maker's price, and a *taking
-/// buy* is additionally handed back the difference between its own limit and
-/// that price — a second notional, at a second price. Settlement computes both
-/// before it moves anything, so either being inexpressible makes the whole fill
-/// unsettleable.
+/// Whether the amount this fill pays can be expressed exactly.
 ///
 /// Checked here, before the book is touched, for the same reason the submission
 /// path reserves before it matches: `consume_best` is not undoable, so a fill
 /// generated against a notional that cannot be expressed takes a resting order
 /// off the book and gets nothing in return for it.
 ///
-/// A taking *sell* needs only the one check: the maker is the buyer then, and a
-/// maker executes at its own price, so the two notionals coincide.
-fn settleable( incoming : &Order, executed : Price, taken : Quantity ) -> bool
+/// Fix(a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for):
+/// Root cause: a taking buy's `limit × quantity` was checked too, because
+/// settlement computed it exactly. A fill paying an exact amount was declined,
+/// and the buy rested above the ask.
+/// Pitfall: settlement now rounds that product down; a check mirroring what
+/// settlement computes has to change with it.
+fn settleable( executed : Price, taken : Quantity ) -> bool
 {
-  if notional( executed, taken ).is_err()
-  {
-    return false;
-  }
-
-  match incoming.side
-  {
-    Side::Buy => notional( incoming.price, taken ).is_ok(),
-    Side::Sell => true,
-  }
+  notional( executed, taken ).is_ok()
 }
 
 /// Cross `incoming` against `book`, consuming what it matches.
@@ -397,7 +386,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
     // Declining an unsettleable fill is the third documented outcome — no
     // cross — reached for a second reason. Anything else would consume the
     // resting order below and then fail to pay for it.
-    if !settleable( incoming, price, taken )
+    if !settleable( price, taken )
     {
       break;
     }

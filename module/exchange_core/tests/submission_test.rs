@@ -494,10 +494,10 @@ fn replaying_the_same_submissions_from_empty_gives_the_same_result()
 /// `submit`'s own doc asserted `ExchangeError::Escrow` was unreachable here, so
 /// no test looked for it.
 ///
-/// **Fix Applied.** `exchange_match::settleable` checks both notionals
-/// settlement will compute — the trade price, and for a taking buy its own
-/// limit as well — before `consume_best`. An unsettleable fill breaks the loop,
-/// reaching the already-documented "no cross" outcome.
+/// **Fix Applied.** `exchange_match::settleable` checks the notional
+/// settlement will compute exactly — the trade price — before `consume_best`.
+/// An unsettleable fill breaks the loop, reaching the already-documented "no
+/// cross" outcome.
 ///
 /// **Prevention.** The check sits before the irreversible step, matching the
 /// submission path's own reserve-before-match rule. Anything that later widens
@@ -544,45 +544,39 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().asset.available(), qty( 100 ) );
 }
 
-/// The second notional settlement computes is checked too.
-///
-/// A taking buy is handed back the difference between its own limit and the
-/// maker's price, which is a notional at the *taker's* price. Checking only the
-/// trade price leaves this half reachable: 1.0 × one minor unit is exact, 1.5 ×
-/// one minor unit is not, so this fill passes the first check and fails the
-/// second.
-#[ test ]
-fn a_taking_buys_own_limit_is_checked_not_just_the_trade_price()
-{
-  let mut exchange = market();
-  let mut ring = inbound_ring( 8 ).unwrap();
-  let mut ends = ring.ends();
-  let ( mut producer, mut consumer ) = ends.split();
-
-  submit
-  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), Quantity::from_minor( 1 ).unwrap() )
-  .unwrap();
-
-  let asset_before = exchange.escrow().total_asset().unwrap();
-  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "1.50" ), qty( 1 ) ).unwrap();
-
-  // This leaves the bid at 1.50 resting above the ask at 1.00. The fix for
-  // `a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for` makes it fill.
-  assert!( taking.trades.is_empty(), "the improvement notional is inexpressible" );
-  assert_eq!( exchange.book().len(), 2 );
-  assert_eq!( exchange.escrow().total_asset().unwrap(), asset_before );
-}
-
 /// A taking buy that can pay for a fill exactly takes it, rather than resting
 /// above the ask.
 ///
 /// The facade side of `exchange_escrow`'s
-/// `a_partial_fill_settles_when_only_the_limit_notional_is_inexact`: the fill
-/// costs exactly 0.000001, and only 0.5 × 0.000005 is inexact. `settleable`
-/// declines it on that second notional, and the bid at 0.5 rests above the ask
-/// at 0.2: a crossed book.
+/// `a_partial_fill_settles_when_only_the_limit_notional_is_inexact`.
+///
+/// # Root Cause
+///
+/// `settle` computed the buy's `limit × quantity` exactly, and `settleable`
+/// mirrored it. The fill costs exactly 0.000001, but 0.5 × 0.000005 is
+/// inexact, so the fill was declined and the bid at 0.5 rested above the ask
+/// at 0.2.
+///
+/// # Why Not Caught
+///
+/// `a_taking_buys_own_limit_is_checked_not_just_the_trade_price` pinned the
+/// decline as correct. It asserted no trade and two orders on the book, not
+/// that the two crossed.
+///
+/// # Fix Applied
+///
+/// `settle` keeps `limit × unfilled` rounded down for the rest of the buy, so
+/// only the price paid has to be exact, and `settleable` checks only that.
+///
+/// # Prevention
+///
+/// A declined fill leaves the book crossed; a test of one asserts what rests.
+///
+/// # Pitfall
+///
+/// A fill whose price paid is inexact is still declined, and still leaves the
+/// book crossed — see `a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact`.
 #[ test ]
-#[ ignore = "F4: settleable declines a fill whose limit notional is inexact" ]
 fn a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for()
 {
   let mut exchange = market();
