@@ -44,10 +44,13 @@ seats it behind every order sharing its arrival. `rest_replace` asks
 `Book::insertable` first, counting the original as gone, and touches nothing
 on a refusal.
 
-Nothing here matches, so a replacement priced into the opposite side is
-refused (`WouldTake`) rather than rested there. Rested, it would leave the
-book crossed: the next order to arrive trades against it while the better
-price it crossed sits on.
+A replacement is the same order, amended: another side, account or time in
+force is refused (`NotAnAmend`), as the family's amend rule has it
+(`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`). The id
+may change. And nothing here matches, so a replacement priced into the
+opposite side is refused (`WouldTake`) rather than rested there. Rested, it
+would leave the book crossed: the next order to arrive trades against it
+while the better price it crossed sits on.
 
 ## Who calls it
 

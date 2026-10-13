@@ -323,3 +323,66 @@ fn rest_replace_up_to_the_opposite_side_is_accepted()
 
   assert_eq!( book.best( InstrumentId( 1 ), Side::Buy ).unwrap().order.price, Price::parse( "2.49" ).unwrap() );
 }
+
+// --- rest_replace: NotAnAmend --------------------------------------------
+
+/// A replacement with another side, account or time in force is refused,
+/// and the original stays.
+///
+/// # Root Cause
+///
+/// Nothing compared the replacement with the order it replaces. A replace
+/// could turn a bid into an ask, hand the order and its place in the queue to
+/// another account, or make it an IOC left resting on the book.
+///
+/// # Why Not Caught
+///
+/// Every replacement in the suite came from the same helper as its original,
+/// differing only in price and quantity.
+///
+/// # Fix Applied
+///
+/// `rest_replace` looks the original up first and refuses any of the three
+/// changes with `RestReplaceError::NotAnAmend`.
+///
+/// # Prevention
+///
+/// `exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md` lists
+/// what an amend may change; test each thing it may not.
+///
+/// # Pitfall
+///
+/// The id may change in a replace, so it cannot be what says "the same order".
+#[ test ]
+fn rest_replace_refuses_a_replacement_that_is_another_order()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
+  let replacement = resting( 1, Side::Sell, "2.60", 4, 20 );
+
+  let other_side = Resting { order : Order { side : Side::Buy, price : Price::parse( "2.40" ).unwrap(), ..replacement.order }, ..replacement };
+  let other_account = Resting { order : Order { account : AccountId( 9 ), ..replacement.order }, ..replacement };
+  let ioc = Resting { order : Order { tif : Tif::Ioc, ..replacement.order }, ..replacement };
+
+  for changed in [ other_side, other_account, ioc ]
+  {
+    assert_eq!( rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), changed ), Err( RestReplaceError::NotAnAmend ) );
+    let original = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
+    assert_eq!( ( original.order.price, original.order.tif ), ( Price::parse( "2.50" ).unwrap(), Tif::Gtc ) );
+    assert_eq!( book.len(), 1 );
+  }
+}
+
+/// A replacement under a new id is still the same order.
+#[ test ]
+fn rest_replace_may_rename_the_order()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
+  let renamed = Resting { order : Order { id : OrderId( 7 ), ..resting( 1, Side::Sell, "2.60", 4, 20 ).order }, ..resting( 1, Side::Sell, "2.60", 4, 20 ) };
+
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), renamed ).unwrap();
+
+  assert_eq!( book.best( InstrumentId( 1 ), Side::Sell ).unwrap().order.id, OrderId( 7 ) );
+  assert_eq!( book.len(), 1 );
+}
