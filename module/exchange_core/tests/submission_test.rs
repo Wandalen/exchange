@@ -862,6 +862,37 @@ fn a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill()
   assert_eq!( exchange.escrow().account( AccountId( 3 ) ).unwrap().cash.available(), money( "6" ) );
 }
 
+/// Same, when account 1 reaches the ceiling only after its ask rests.
+///
+/// A check at placement passes the ask; the deposit after it is what leaves
+/// no room for its proceeds.
+#[ test ]
+fn a_maker_reaching_the_ceiling_after_it_rests_does_not_block_a_buy()
+{
+  let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
+  exchange.open_account( AccountId( 1 ), money( "1000" ), qty( 10 ) ).unwrap();
+  exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
+  exchange.open_account( AccountId( 3 ), Money::ZERO, qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  // Account 1: an ask of 2 at $2, with room for its $4 when placed. Account 3:
+  // an ask of 2 at $3.
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Sell, price( "3" ), qty( 2 ) ).unwrap();
+  // Takes account 1 to $8999999997, $3 short of the ceiling. A fix may refuse
+  // this deposit instead, which leaves account 1's ask fillable.
+  let _ = exchange.open_account( AccountId( 1 ), money( "8999998997" ), Quantity::ZERO );
+
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3" ), qty( 2 ) );
+
+  let taking = taking.expect( "the buy can be filled in full" );
+  assert!( taking.is_complete() );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().asset.available(), qty( 2 ) );
+}
+
 /// A crossing whose second trade cannot settle commits nothing at all — not
 /// the first trade, not the incoming order's own reservation, and not the
 /// resting orders `cross` already consumed to produce both trades.
