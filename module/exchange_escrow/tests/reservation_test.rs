@@ -426,6 +426,7 @@ fn every_refusal_names_itself()
     EscrowError::NotReserved,
     EscrowError::NoReservation( OrderId( 9 ) ),
     EscrowError::AlreadyReserved( OrderId( 9 ) ),
+    EscrowError::OutsideLimit( OrderId( 9 ) ),
     EscrowError::ObligationMismatch,
     EscrowError::NegativeAmount,
     EscrowError::Arithmetic,
@@ -621,7 +622,7 @@ fn a_settlement_naming_more_than_the_orders_own_reservation_is_refused()
 /// # Fix Applied
 ///
 /// The reservation records its order's limit, and `settle` reads it from
-/// there for either role; a trade above it is refused as `NotReserved`.
+/// there for either role; a trade above it is refused as `OutsideLimit`.
 ///
 /// # Prevention
 ///
@@ -652,7 +653,7 @@ fn a_buyer_is_never_charged_above_its_own_limit()
     price : price( "15" ),
     quantity : qty( 1 ),
   };
-  assert_eq!( escrow.settle( &as_maker ), Err( EscrowError::NotReserved ) );
+  assert_eq!( escrow.settle( &as_maker ), Err( EscrowError::OutsideLimit( bid.id ) ) );
   assert_eq!( escrow, before );
 
   let as_taker = Trade
@@ -665,16 +666,37 @@ fn a_buyer_is_never_charged_above_its_own_limit()
     price : price( "15" ),
     quantity : qty( 1 ),
   };
-  assert_eq!( escrow.settle( &as_taker ), Err( EscrowError::NotReserved ) );
+  assert_eq!( escrow.settle( &as_taker ), Err( EscrowError::OutsideLimit( bid.id ) ) );
   assert_eq!( escrow, before );
 }
 
 /// A seller is never paid below its own limit, as maker or as taker.
 ///
-/// The seller's mirror of `a_buyer_is_never_charged_above_its_own_limit`:
-/// the reservation records the ask's limit, and a trade below it is refused.
+/// The seller's mirror of `a_buyer_is_never_charged_above_its_own_limit`.
+///
+/// # Root Cause
+///
+/// `settle` checked the trade price against the buy's recorded limit only.
+/// The ask's limit was recorded beside it and never read.
+///
+/// # Why Not Caught
+///
+/// `exchange_match` executes at the maker's own price, inside both limits, so
+/// only a direct `Escrow` caller reaches this.
+///
+/// # Fix Applied
+///
+/// A trade below the sell's limit is refused as `OutsideLimit`, as one above
+/// the buy's is.
+///
+/// # Prevention
+///
+/// A limit is checked wherever it is recorded.
+///
+/// # Pitfall
+///
+/// Neither account goes short: the seller is simply paid less than it asked.
 #[ test ]
-#[ ignore = "F2: settle checks the limit for the buyer only" ]
 fn a_seller_is_never_paid_below_its_own_limit()
 {
   let mut escrow = two_sided();
@@ -694,7 +716,7 @@ fn a_seller_is_never_paid_below_its_own_limit()
     price : price( "1" ),
     quantity : qty( 1 ),
   };
-  assert!( escrow.settle( &as_maker ).is_err(), "the ask sold at 1 against its limit of 15" );
+  assert_eq!( escrow.settle( &as_maker ), Err( EscrowError::OutsideLimit( ask.id ) ) );
   assert_eq!( escrow, before );
 
   let as_taker = Trade
@@ -707,11 +729,9 @@ fn a_seller_is_never_paid_below_its_own_limit()
     price : price( "1" ),
     quantity : qty( 1 ),
   };
-  assert!( escrow.settle( &as_taker ).is_err(), "the ask sold at 1 against its limit of 15" );
+  assert_eq!( escrow.settle( &as_taker ), Err( EscrowError::OutsideLimit( ask.id ) ) );
   assert_eq!( escrow, before );
 
-  // The same trade at the ask's own limit settles, so the refusals above are
-  // about the price and nothing else.
   let at_limit = Trade { price : price( "15" ), ..as_maker };
   assert_eq!( escrow.settle( &at_limit ), Ok( () ) );
 }

@@ -1155,7 +1155,8 @@ impl< E : EscrowPort > Exchange< E >
       // so a later self-match release always finds a still-live,
       // correctly-shaped reservation for whatever `settle` left behind.
       // `NotOwner` is foreclosed too: every account named comes from the
-      // order or the resting order it traded with.
+      // order or the resting order it traded with. So is `OutsideLimit`:
+      // `cross` executes at the maker's own price, inside both limits.
       // Reported as insufficient funds rather than given a reason variant of
       // its own, because a reason no code path produces through this
       // function is a claim the code does not back.
@@ -1164,6 +1165,7 @@ impl< E : EscrowPort > Exchange< E >
       | EscrowError::NoReservation( _ )
       | EscrowError::AlreadyReserved( _ )
       | EscrowError::NotOwner( _ )
+      | EscrowError::OutsideLimit( _ )
       | EscrowError::ObligationMismatch
       | EscrowError::NegativeAmount => RejectReason::InsufficientFunds,
     }

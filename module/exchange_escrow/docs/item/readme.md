@@ -16,7 +16,7 @@ The exposed surface of `exchange_escrow`, as built.
 | `Conserved` | trait | `const NOTHING: Self; fn checked_plus(self, rhs: Self) -> Option<Self>; fn checked_minus(self, rhs: Self) -> Option<Self>` |
 | `Holding<T: Conserved>` | struct | `fn new(available: T) -> Self; fn available(&self) -> T; fn reserved(&self) -> T; fn total(&self) -> Result<T, EscrowError>` — the four edges that move value (`reserve`/`release`/`deliver`/`receive`) are private to this crate |
 | `Account` | struct | `{ pub cash: Holding<Money>, pub asset: Holding<Quantity> }` |
-| `EscrowError` | enum | `UnknownAccount(AccountId) \| Insufficient \| NotReserved \| NoReservation(OrderId) \| AlreadyReserved(OrderId) \| NotOwner(OrderId) \| ObligationMismatch \| NegativeAmount \| Arithmetic \| Obligation(TypeError)` |
+| `EscrowError` | enum | `UnknownAccount(AccountId) \| Insufficient \| NotReserved \| NoReservation(OrderId) \| AlreadyReserved(OrderId) \| NotOwner(OrderId) \| OutsideLimit(OrderId) \| ObligationMismatch \| NegativeAmount \| Arithmetic \| Obligation(TypeError)` |
 | `Escrow` | struct | `fn new() -> Self; fn open(&mut self, AccountId, Money, Quantity) -> Result<(), EscrowError>; fn account(&self, AccountId) -> Option<&Account>; fn reserved_for(&self, OrderId) -> Option<Obligation>; fn reservation_count(&self) -> usize; fn reserve(&mut self, &Order) -> Result<Obligation, EscrowError>; fn release(&mut self, AccountId, OrderId) -> Result<Obligation, EscrowError>; fn settle(&mut self, &Trade) -> Result<(), EscrowError>; fn total_cash(&self) -> Result<Money, EscrowError>; fn total_asset(&self) -> Result<Quantity, EscrowError>` |
 
 ### Differs from the proposal

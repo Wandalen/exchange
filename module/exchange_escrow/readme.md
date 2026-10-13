@@ -27,8 +27,9 @@ order reaches the book, and refuses the order whole.
 
 Each reservation records its order's account and limit. `release` and
 `settle` refuse any account but the one that reserved
-(`EscrowError::NotOwner`), and `settle` takes the buyer's limit from its
-reservation, refusing a trade priced above it (`NotReserved`).
+(`EscrowError::NotOwner`), and `settle` takes both limits from the
+reservations, refusing a trade above the buy's or below the sell's
+(`OutsideLimit`).
 
 ## Price improvement, released
 

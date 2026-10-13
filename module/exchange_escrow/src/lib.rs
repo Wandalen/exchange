@@ -246,6 +246,9 @@ pub enum EscrowError
   AlreadyReserved( OrderId ),
   /// This order's reservation belongs to another account than the one named.
   NotOwner( OrderId ),
+  /// The trade's price is outside this order's own limit: above it for a
+  /// buy, below it for a sell.
+  OutsideLimit( OrderId ),
   /// A reservation of the wrong shape for what is being settled — cash where
   /// the asset was expected, or the reverse.
   ObligationMismatch,
@@ -274,6 +277,7 @@ impl core::fmt::Display for EscrowError
       Self::NoReservation( id ) => write!( f, "order {} holds no reservation", id.0 ),
       Self::AlreadyReserved( id ) => write!( f, "order {} already holds a reservation", id.0 ),
       Self::NotOwner( id ) => write!( f, "order {} is reserved by another account", id.0 ),
+      Self::OutsideLimit( id ) => write!( f, "the trade's price is outside order {}'s limit", id.0 ),
       Self::ObligationMismatch => write!( f, "the reservation is not of the shape this settlement needs" ),
       Self::NegativeAmount => write!( f, "a negative amount is not something an account can move" ),
       Self::Arithmetic => write!( f, "a value step did not fit its type" ),
@@ -301,8 +305,8 @@ impl core::error::Error for EscrowError
     {
       Self::Obligation( error ) => Some( error ),
       Self::UnknownAccount( _ ) | Self::Insufficient | Self::NotReserved | Self::NoReservation( _ )
-      | Self::AlreadyReserved( _ ) | Self::NotOwner( _ ) | Self::ObligationMismatch | Self::NegativeAmount
-      | Self::Arithmetic => None,
+      | Self::AlreadyReserved( _ ) | Self::NotOwner( _ ) | Self::OutsideLimit( _ ) | Self::ObligationMismatch
+      | Self::NegativeAmount | Self::Arithmetic => None,
     }
   }
 }
@@ -539,32 +543,39 @@ impl Escrow
   /// second source of truth, and the two only disagree when a caller is
   /// wrong.
   ///
+  /// Fix(a_seller_is_never_paid_below_its_own_limit):
+  /// Root cause: only the buy's recorded limit was checked; a trade below an
+  /// ask's limit settled.
+  /// Pitfall: a guard written for one side of a symmetric pair.
+  ///
   /// # Errors
   ///
   /// [`EscrowError`] if either party is unknown, holds no reservation, holds
   /// one of the wrong shape, or is not the account that reserved it
-  /// ([`EscrowError::NotOwner`]); [`EscrowError::NotReserved`] if the trade's
-  /// price is above the buyer's limit. On any error, neither account and
-  /// neither reservation is changed.
+  /// ([`EscrowError::NotOwner`]); [`EscrowError::OutsideLimit`] if the
+  /// trade's price is above the buy's limit or below the sell's. On any
+  /// error, neither account and neither reservation is changed.
   pub fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
   {
     let taker = *self.reservations.get( &trade.taker ).ok_or( EscrowError::NoReservation( trade.taker ) )?;
     let maker = *self.reservations.get( &trade.maker ).ok_or( EscrowError::NoReservation( trade.maker ) )?;
-    let ( buyer_limit, buyer, seller ) = match trade.taker_side
+    let ( ( buy_id, buy, buyer ), ( sell_id, sell, seller ) ) = match trade.taker_side
     {
-      Side::Buy => ( taker.limit, trade.taker_account, trade.maker_account ),
-      Side::Sell => ( maker.limit, trade.maker_account, trade.taker_account ),
+      Side::Buy => ( ( trade.taker, taker, trade.taker_account ), ( trade.maker, maker, trade.maker_account ) ),
+      Side::Sell => ( ( trade.maker, maker, trade.maker_account ), ( trade.taker, taker, trade.taker_account ) ),
     };
+    if trade.price > buy.limit
+    {
+      return Err( EscrowError::OutsideLimit( buy_id ) );
+    }
+    if trade.price < sell.limit
+    {
+      return Err( EscrowError::OutsideLimit( sell_id ) );
+    }
 
     let paid = notional( trade.price, trade.quantity )?;
-    let reserved_for_this_fill = notional( buyer_limit, trade.quantity )?;
+    let reserved_for_this_fill = notional( buy.limit, trade.quantity )?;
     let improvement = reserved_for_this_fill.checked_sub( paid ).map_err( | _ | EscrowError::Arithmetic )?;
-    if improvement < Money::ZERO
-    {
-      // Above the buyer's limit: the fill would spend what backs the rest of
-      // its order.
-      return Err( EscrowError::NotReserved );
-    }
 
     let taker_reservation = Self::reduced_obligation
     (
