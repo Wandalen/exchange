@@ -708,6 +708,11 @@ fn a_seller_is_never_paid_below_its_own_limit()
   };
   assert!( escrow.settle( &as_taker ).is_err(), "the ask sold at 1 against its limit of 15" );
   assert_eq!( escrow, before );
+
+  // The same trade at the ask's own limit settles, so the refusals above are
+  // about the price and nothing else.
+  let at_limit = Trade { price : price( "15" ), ..as_maker };
+  assert_eq!( escrow.settle( &at_limit ), Ok( () ) );
 }
 
 /// A buyer's partial fill settles even when its limit times the fill is not
