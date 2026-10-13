@@ -848,9 +848,8 @@ fn a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  // Account 1: a buy reserving 1, and an ask of 2 at $2 whose $4 of proceeds
-  // would carry its cash past the ceiling. Account 3: an ask of 2 at $3.
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1" ), qty( 1 ) ).unwrap();
+  // Account 1: an ask of 2 at $2 whose $4 of proceeds would carry its cash
+  // past the ceiling. Account 3: an ask of 2 at $3.
   // A fix may refuse this ask up front instead; either way it must not block the buy below.
   let _ = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) );
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Sell, price( "3" ), qty( 2 ) ).unwrap();
