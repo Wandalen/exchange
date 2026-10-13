@@ -34,6 +34,13 @@ Three clauses:
   pairs. Summed over all accounts, per asset, `available + reserved` is
   constant across the entire matching path.
 
+**`incoming` is not a third side.** `Holding< T >` also stores `incoming`:
+room kept under the ceiling for what the account's resting orders bring in
+(an ask's proceeds at its limit, a bid's asset). It holds no value.
+`incoming_add` on reserve and `incoming_sub` on fill or cancel move nothing
+across the partition and leave `available + reserved` alone, so they are not
+edges and the count above stays four.
+
 **This is the mechanism, not a check.** A check-then-place design reads
 `available`, finds it sufficient, and lets the order rest; a second order
 reads the same `available` and finds it sufficient too. That is a
@@ -185,7 +192,7 @@ right one. Recovery is not a repair mechanism for this class.
 
 | File | Relationship |
 |------|--------------|
-| [https://github.com/Wandalen/exact/blob/master/module/exact_minor/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_minor/readme.md) | The ceiling binding both sides of this partition's sum, not each side separately |
+| [https://github.com/Wandalen/exact/blob/master/module/exact_minor/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_minor/readme.md) | The ceiling binding `available + reserved + incoming`, not each field separately |
 
 ### Pitfalls
 
@@ -217,7 +224,7 @@ right one. Recovery is not a repair mechanism for this class.
 |------|--------------|
 | `ecs_component/023_wallet.md` (design corpus) | The single-field holding this two-sided pair diverges from, recorded so the divergence is not read as a transcription error |
 | `initial_design_message/643_yes_uh_right_now_do.md` (design corpus) | The two-field model and its worked trace, and the time-of-check rationale for reserving rather than asking |
-| `../../../exchange_escrow/src/lib.rs` | `Holding< T >` — the stored `( available, reserved )` pair and its four private edges |
+| `../../../exchange_escrow/src/lib.rs` | `Holding< T >` — the stored `( available, reserved )` pair, its four private edges, and the `incoming` room beside them |
 
 ### Tests
 

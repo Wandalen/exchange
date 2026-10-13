@@ -46,7 +46,8 @@
 //! be paid and a resting bid will receive the asset, so each keeps room for
 //! that in its owner's `incoming` from the moment it is reserved. A deposit or
 //! proceeds that would take the room are refused instead, so a resting order
-//! can always settle.
+//! can always settle. `incoming` holds no value and is outside the pair, so
+//! keeping or giving up room is not a fifth edge.
 
 use std::collections::BTreeMap;
 
