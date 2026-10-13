@@ -16,14 +16,17 @@ cargo test -p exchange_depth --all-features 2>&1 | grep -E 'FAILED|test result'
 **Expected:** `same_price_orders_aggregate_into_one_level` fails — the
 second order's quantity never joins the level's running total.
 
-**Observed 2026-10-02:** exactly that —
+**Observed 2026-10-13:** exactly that —
 
 ```
 failures:
     same_price_orders_aggregate_into_one_level
 
-test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
 ```
+
+`a_level_past_the_quantity_ceiling_reads_as_the_ceiling` still passes: its
+level reads `Quantity::MAX` with or without the second order.
 
 Reverted; see Run Record.
 
@@ -38,14 +41,14 @@ cargo test -p exchange_depth --all-features 2>&1 | grep -E 'FAILED|test result'
 `truncation_drops_every_order_behind_the_cut_price` both fail — every
 distinct price now joins the result, however many there are.
 
-**Observed 2026-10-02:** exactly that —
+**Observed 2026-10-13:** exactly that —
 
 ```
 failures:
     truncates_to_n_distinct_levels
     truncation_drops_every_order_behind_the_cut_price
 
-test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out
+test result: FAILED. 9 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out
 ```
 
 Reverted; see Run Record.
@@ -60,19 +63,20 @@ cargo test -p exchange_depth --all-features 2>&1 | grep -E 'FAILED|test result'
 **Expected:** only `zero_n_is_refused` fails — every other test asks for
 `n >= 1` and is unaffected.
 
-**Observed 2026-10-02:** exactly that —
+**Observed 2026-10-13:** exactly that —
 
 ```
 failures:
     zero_n_is_refused
 
-test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
 ```
 
-Reverted; a final run confirmed 9/9 tests pass again.
+Reverted; a final run confirmed 11/11 tests pass again.
 
 ## Run Record
 
 | Date | Checks | Result |
 |------|--------|--------|
 | 2026-10-02 | M1, M2, M3 | Disproved-by-mutation that all three pins are redundant — each of three independent mutations (no-op aggregation, disabled truncation, disabled `BadN` guard) is caught immediately, by exactly the tests expected to catch it and no others. |
+| 2026-10-13 | M1, M2, M3 | Re-run with the saturation test added: each mutation is caught by the same tests as before, and only those. |
