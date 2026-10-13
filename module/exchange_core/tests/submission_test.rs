@@ -566,6 +566,8 @@ fn a_taking_buys_own_limit_is_checked_not_just_the_trade_price()
   let asset_before = exchange.escrow().total_asset().unwrap();
   let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "1.50" ), qty( 1 ) ).unwrap();
 
+  // This leaves the bid at 1.50 resting above the ask at 1.00. The fix for
+  // `a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for` makes it fill.
   assert!( taking.trades.is_empty(), "the improvement notional is inexpressible" );
   assert_eq!( exchange.book().len(), 2 );
   assert_eq!( exchange.escrow().total_asset().unwrap(), asset_before );
@@ -849,6 +851,8 @@ fn a_resting_order_stays_cancellable_at_the_ceiling()
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) ).unwrap();
 
   // Account 2's $4 would carry account 1's cash one unit past the ceiling.
+  // The fix for `a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill`
+  // changes this: the ask is refused when placed, or the buy no longer is.
   let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2" ), qty( 2 ) );
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ) );
 
