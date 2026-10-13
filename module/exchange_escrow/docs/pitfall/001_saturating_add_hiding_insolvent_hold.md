@@ -4,7 +4,7 @@
 
 - **Purpose**: Name a specific mistake this crate must avoid.
 - **Responsibility**: Using a saturating arithmetic operation where a hold's insufficiency should instead be a hard error.
-- **In Scope**: `Holding`'s four edges, and `Escrow::reserve`/`release`/`settle`.
+- **In Scope**: `Holding`'s edges, and `Escrow::reserve`/`release`/`settle`.
 
 ### Statement
 
