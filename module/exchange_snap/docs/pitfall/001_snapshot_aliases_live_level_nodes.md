@@ -15,14 +15,12 @@ snapshot was taken.
 
 ### How this crate avoids it
 
-`RestRow { order : OrderId, price : Money, qty : Quantity }` holds only
-`Copy` values taken *out of* each `exchange_book::Resting`, never a reference
-into `Book`'s own storage. `snap_take` cannot return anything that aliases
-the book by construction — there is no reference-typed field for it to leak
-through. Verified directly:
+`RestRow` holds only `Copy` values taken out of each `exchange_book::Resting`,
+never a reference into the book, so there is no field an alias could leak
+through.
 [`tests/exchange_snap_test.rs`](../../tests/exchange_snap_test.rs)'s
-`snap_is_a_copy_not_a_view` cancels the only resting order immediately after
-taking a snapshot of it and asserts the snapshot still shows it.
+`snap_is_a_copy_not_a_view` cancels the only resting order right after the
+snapshot and checks the snapshot still shows it.
 
 ### Sources
 

@@ -1,38 +1,36 @@
 # item
 
-The exposed surface of `exchange_snap`, as built — a consolidated index
-rather than one file per declaration (the lighter-pass choice; see this
-family's own `docs/research/` for why a fuller `item_des.rulebook.md`
-per-declaration split is deferred).
+The exposed surface of `exchange_snap`, as built.
 
 ### Scope
 
-- **Purpose**: What this crate actually exports, and how it differs from the source design's own exposed-item list for it.
-- **Responsibility**: One table, every `pub` item, with a short note where the real shape diverges from the proposal.
+- **Purpose**: What this crate exports, and how it differs from the source design's exposed-item list for it.
+- **Responsibility**: One table, every `pub` item, with a note where the shape diverges from the proposal.
 - **In Scope**: This crate's own public surface.
-- **Out of Scope**: Full `item_des.rulebook.md`-style per-declaration files (deferred, see above).
+- **Out of Scope**: Per-declaration files.
 
 ### Overview Table
 
 | Item | Kind | Signature |
 |------|------|-----------|
-| `RestRow` | struct | `{ order : OrderId, price : Money, qty : Quantity }` |
+| `RestRow` | struct | `{ order : OrderId, price : Price, qty : Quantity }` |
 | `BookSnap` | struct | `{ instrument : InstrumentId, tick : Money, rows : Vec<RestRow> }` |
 | `snap_take` | fn | `(&Book, InstrumentId, Money) -> BookSnap` |
 | `snap_len` | fn | `(&BookSnap) -> usize` |
 
 ### Differs from the proposal
 
-The source design's own `RestRow { order, price, qty }` and
-`BookSnap { instrument, tick, rows }` shapes
-(`../../../../../../codename_space_sandbox/intake/core_exchange.txt:641-645`,
-also catalogued centrally at
-[`../../../../docs/exposed_item/020_exchange_snap_items.md`](../../../../docs/exposed_item/020_exchange_snap_items.md))
-are matched exactly here — `order`/`instrument`/`tick`/`rows` are all
-present, nothing added or dropped from either struct.
-
-Two divergences do exist, both large enough to warrant their own ADRs
-rather than a line here:
+The source design (`core_exchange.txt:641-645`) names `RestRow { order,
+price, qty }`, `BookSnap { instrument, tick, rows }`, `snap_take`, `snap_len`
+and `SnapError { Full }`. The fields are the proposal's. Two divergences have
+their own decisions:
 
 - No `exchange_order` dependency — [`../decisions/001_no_exchange_order_dependency.md`](../decisions/001_no_exchange_order_dependency.md).
 - No `SnapError { Full }` — [`../decisions/002_no_snap_error.md`](../decisions/002_no_snap_error.md).
+
+### Sources
+
+| File | Relationship |
+|------|--------------|
+| `../../../../../../codename_space_sandbox/intake/core_exchange.txt:641-645` | Crate `exchange_snap`'s exposed-item list in the source's Prompt 3 answer |
+| [`../../src/lib.rs`](../../src/lib.rs) | The built shape this table describes |

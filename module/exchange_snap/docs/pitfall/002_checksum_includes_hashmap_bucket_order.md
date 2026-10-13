@@ -8,25 +8,20 @@
 
 ### Statement
 
-A determinism checksum is only meaningful if it is itself deterministic —
-folding in a hash map's bucket order means the checksum can differ between
-two runs of identical input for a reason that has nothing to do with whether
-the actual trading outcome was the same, defeating the two-run equality check
-the design relies on. This crate doesn't compute a checksum itself (that's a
-later consumer's job, likely the P30 wall smoke's `a==b` check), but it owns
-the one input such a checksum would be built over.
+A determinism checksum is only meaningful if it is itself deterministic.
+Folding in a hash map's bucket order lets two runs of identical input differ
+for a reason unrelated to the trading outcome, defeating the two-run equality
+check. This crate computes no checksum, but it owns the rows one would be
+built over.
 
 ### How this crate avoids contributing to it
 
-`exchange_book::Book`'s own representation is sorted levels per side, never a
-`HashMap`; `snap_take` reads it via `Book::iter()`, so `BookSnap::rows`
-inherits the same hash-free, deterministic order — bids best-first, then
-asks best-first, each side still ranked by the book's own price-time
-priority. A checksum built over `BookSnap::rows` later is sound on this
-count without that later code having to re-establish it. Verified directly:
+`exchange_book::Book` keeps sorted levels per side, never a `HashMap`, and
+`snap_take` reads it through `Book::side`, so `BookSnap::rows` comes out in
+the book's own order: bids best first, then asks best first.
 [`tests/exchange_snap_test.rs`](../../tests/exchange_snap_test.rs)'s
-`rows_preserve_the_books_priority_order` asserts the exact published
-sequence, not merely that the right rows are present.
+`rows_preserve_the_books_priority_order` asserts the exact sequence, not only
+that the right rows are present.
 
 ### Sources
 

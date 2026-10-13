@@ -9,8 +9,8 @@ load-bearing rather than redundant with something else in the suite.
 ## M1 — rows actually carry remaining, not submitted, quantity
 
 ```bash
-# In substrate/exchange/module/exchange_snap/src/lib.rs, in snap_take's
-# closure, replace  qty : resting.remaining  with  qty : resting.order.quantity
+# In module/exchange_snap/src/lib.rs, in snap_take's to_row closure,
+# replace  qty : resting.remaining  with  qty : resting.order.quantity
 cargo test -p exchange_snap --all-features 2>&1 | grep -E 'FAILED|test result'
 ```
 
@@ -33,8 +33,8 @@ Reverted; see Run Record.
 ## M2 — row order actually matches the book's priority order
 
 ```bash
-# In snap_take, after `.collect()`, insert a line reversing the Vec:
-#   let mut rows : Vec< RestRow > = book.iter()....collect();
+# In snap_take, bind the collected rows mutably and reverse them:
+#   let mut rows : Vec< RestRow > = book.side( ... ).map( to_row ).chain( ... ).collect();
 #   rows.reverse();
 cargo test -p exchange_snap --all-features 2>&1 | grep -E 'FAILED|test result'
 ```

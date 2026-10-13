@@ -5,7 +5,7 @@
 - **Purpose**: Index every `pub` item this crate declares against the doc instance that explains it.
 - **Responsibility**: One row per public declaration, pointing at its owning collection — never restating what that collection already says.
 - **In Scope**: This crate's own `pub` surface.
-- **Out of Scope**: Items declared elsewhere and merely used here.
+- **Out of Scope**: Items declared elsewhere and merely used here (`Book`/`Resting` from `exchange_book`; `InstrumentId`/`OrderId` from `exchange_id`; `Side` from `exchange_side`; `Money`/`Price`/`Quantity` from `exact_arith`).
 
 ### Module Index
 
