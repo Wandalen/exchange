@@ -74,8 +74,9 @@ methods, so nothing changes one side of the partition without the other.
 ## Not built: per-asset holdings
 
 `Account` holds one cash and one asset `Holding`, whatever the instrument, so
-two instruments on one exchange draw on the same holdings — hard problem 19
-stays open. Keying holdings by `AssetId` needs each order's base and quote
+two instruments on one exchange draw on the same holdings, and
+`exchange_core::Exchange::spec_register` therefore admits one asset pair. Hard
+problem 19 stays open. Keying holdings by `AssetId` needs each order's base and quote
 asset at `reserve` and each trade's at `settle`. `Order` carries only its instrument,
 the instrument's assets live in `exchange_core`'s specs, and `Trade` carries
 no instrument at all (`exchange_fill`'s readme). Until one of them does, an

@@ -282,6 +282,11 @@ pub enum ExchangeError
   /// silently changing a live grid would strand every order already resting
   /// against the old one.
   SpecAlreadyRegistered( InstrumentId ),
+  /// [`Exchange::spec_register`] was asked to register an instrument on an
+  /// asset pair other than the one already registered. Escrow keeps one cash
+  /// and one asset holding per account, so a second pair would share both
+  /// with the first, and [`verify`] could not tell them apart.
+  SecondAssetPair( InstrumentId ),
   /// [`Exchange::depth_get`] was asked for the top zero levels.
   Depth( DepthError ),
   /// [`Exchange::halt_set`]/[`Exchange::halt_clear`] asked for a state the
@@ -302,6 +307,7 @@ impl core::fmt::Display for ExchangeError
       Self::UnknownInstrument( id ) => write!( f, "instrument {} has no registered spec", id.0 ),
       Self::Spec( error ) => write!( f, "spec refused: {error}" ),
       Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
+      Self::SecondAssetPair( id ) => write!( f, "instrument {} trades a second asset pair", id.0 ),
       Self::Depth( error ) => write!( f, "depth refused: {error}" ),
       Self::Halt( error ) => write!( f, "halt refused: {error}" ),
     }
@@ -320,7 +326,7 @@ impl core::error::Error for ExchangeError
       Self::Depth( error ) => Some( error ),
       Self::Halt( error ) => Some( error ),
       Self::Rejected( _ ) | Self::NotResting( _ ) | Self::UnknownInstrument( _ )
-      | Self::SpecAlreadyRegistered( _ ) => None,
+      | Self::SpecAlreadyRegistered( _ ) | Self::SecondAssetPair( _ ) => None,
     }
   }
 }
@@ -393,8 +399,9 @@ pub enum StepOutcome
 /// [`verify`] nets separately.
 ///
 /// Escrow's own partition, not an instrument's [`AssetId`]s: escrow keeps one
-/// cash and one asset holding per account for every instrument, so two
-/// instruments' base assets are one balance there, and a posting keyed finer
+/// cash and one asset holding per account for every instrument. That is
+/// sound only because [`Exchange::spec_register`] admits one asset pair, so
+/// `Cash` is that pair's quote and `Asset` its base. A posting keyed finer
 /// than the balance it moves would audit a separation that does not exist.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord ) ]
 pub enum PostingAsset
@@ -494,7 +501,9 @@ impl< E : EscrowPort > Exchange< E >
   /// [`ExchangeError::SpecAlreadyRegistered`] if `id` is already registered —
   /// refused rather than overwritten, since replacing a live tick/lot grid
   /// would silently change the terms under orders already resting against the
-  /// old one. [`ExchangeError::Spec`] if `tick` or `lot` is zero.
+  /// old one. [`ExchangeError::SecondAssetPair`] if another instrument is
+  /// registered on a different `( base, quote )`: v0.1 trades one pair.
+  /// [`ExchangeError::Spec`] if `tick` or `lot` is zero.
   pub fn spec_register
   (
     &mut self,
@@ -508,6 +517,10 @@ impl< E : EscrowPort > Exchange< E >
     if self.specs.contains_key( &id )
     {
       return Err( ExchangeError::SpecAlreadyRegistered( id ) );
+    }
+    if self.specs.values().next().is_some_and( | held | ( held.base, held.quote ) != ( base, quote ) )
+    {
+      return Err( ExchangeError::SecondAssetPair( id ) );
     }
     let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
     self.specs.insert( id, spec );
