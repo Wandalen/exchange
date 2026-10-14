@@ -11,7 +11,10 @@
 //! export crates only, so a ring has exactly one producer. Many producers are
 //! many rings, each raced from its own thread and drained in a lane order the
 //! caller fixes ahead of time, never in the order the threads finished
-//! (`docs/decisions/001_two_producers_is_two_rings.md`).
+//! (`docs/decisions/001_two_producers_is_two_rings.md`). The combined order
+//! repeats from run to run only if each lane is drained once its producer has
+//! stopped: [`inbound_drain`] takes what was published before the call, so a
+//! live lane is cut wherever its producer happens to be.
 //!
 //! # Overflow is a reject
 //!
@@ -175,8 +178,9 @@ impl Claims
 ///
 /// # Errors
 ///
-/// [`BuildError`] on a `capacity` of zero or not a power of two. Every
-/// backend accepts [`OverflowPolicy::Fail`].
+/// [`BuildError::Unsupported`], carrying the ring's own error, on a
+/// `capacity` of zero or not a power of two. Every backend accepts
+/// [`OverflowPolicy::Fail`].
 pub fn inbound_ring( capacity : usize ) -> Result< Split< InboundCmd >, BuildError >
 {
   let cfg = RingConfig::new( capacity ).map_err( BuildError::Unsupported )?.with_overflow( OverflowPolicy::Fail );

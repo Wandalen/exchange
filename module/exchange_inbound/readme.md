@@ -41,7 +41,9 @@ then rest or match) and 30 (overflow is reject).
 
 `ring_handle::Producer` cannot be cloned, so "two producers" is two rings,
 each raced from its own thread and drained in a lane order fixed ahead of
-time, never by which thread finished first. See
+time, never by which thread finished first. The order repeats only if each
+lane is drained after its producer stops; a drain of a live lane takes
+whatever was published by then. See
 [`docs/decisions/001_two_producers_is_two_rings.md`](docs/decisions/001_two_producers_is_two_rings.md).
 
 `inbound_ring` always sets `OverflowPolicy::Fail`. Under the ring family's

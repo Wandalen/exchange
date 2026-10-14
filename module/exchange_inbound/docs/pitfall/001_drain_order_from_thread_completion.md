@@ -17,7 +17,9 @@ A ring has one producer: `ring_handle::Producer` has no `Clone` or
 second producer to race. Many producers are many rings, one
 [`inbound_ring`] each, and the caller concatenates their
 [`inbound_drain`]s in a lane order fixed ahead of time
-([`../decisions/001_two_producers_is_two_rings.md`](../decisions/001_two_producers_is_two_rings.md)).
+([`../decisions/001_two_producers_is_two_rings.md`](../decisions/001_two_producers_is_two_rings.md)),
+each once its producer has stopped. A drain takes what was published
+before the call, so draining a live lane brings the timing back in.
 
 [`tests/exchange_inbound_test.rs`](../../tests/exchange_inbound_test.rs)'s
 `a_pushed_command_drains_in_the_same_order_it_was_pushed` pins FIFO through

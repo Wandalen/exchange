@@ -36,7 +36,10 @@ then ring B's") — never by which thread happened to finish publishing
 first. Real concurrency exists at the push side (two threads genuinely
 race); the result is insensitive to that race's outcome at the drain side,
 which is exactly what "deterministic... not thread-completion-order-
-dependent" asks for.
+dependent" asks for — provided each lane is drained after its producer has
+stopped, as P28 does once its thread scope joins. `Consumer::drain` takes
+what was published before the call, so a drain of a live lane cuts it at a
+point the race decides.
 
 This combining step lives in the P28 phase-smoke itself, not as library API
 — how many lanes, and in what order, is a caller/deployment decision this
