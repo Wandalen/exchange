@@ -281,6 +281,10 @@ pub enum ExchangeError
   /// silently changing a live grid would strand every order already resting
   /// against the old one.
   SpecAlreadyRegistered( InstrumentId ),
+  /// [`Exchange::spec_register`] was asked to register an instrument whose
+  /// base asset is its quote asset. Escrow would hold the one asset as two
+  /// balances, cash and asset, and [`verify`] would audit them apart.
+  BaseIsQuote( InstrumentId ),
   /// [`Exchange::spec_register`] was asked to register an instrument on an
   /// asset pair other than the one already registered. Escrow keeps one cash
   /// and one asset holding per account, so a second pair would share both
@@ -314,6 +318,7 @@ impl core::fmt::Display for ExchangeError
       Self::UnknownInstrument( id ) => write!( f, "instrument {} has no registered spec", id.0 ),
       Self::Spec( error ) => write!( f, "spec refused: {error}" ),
       Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
+      Self::BaseIsQuote( id ) => write!( f, "instrument {} trades an asset for itself", id.0 ),
       Self::SecondAssetPair { id, held, asked } => write!
       (
         f,
@@ -338,7 +343,7 @@ impl core::error::Error for ExchangeError
       Self::Depth( error ) => Some( error ),
       Self::Halt( error ) => Some( error ),
       Self::Rejected( _ ) | Self::NotResting( _ ) | Self::UnknownInstrument( _ )
-      | Self::SpecAlreadyRegistered( _ ) | Self::SecondAssetPair { .. } => None,
+      | Self::SpecAlreadyRegistered( _ ) | Self::BaseIsQuote( _ ) | Self::SecondAssetPair { .. } => None,
     }
   }
 }
@@ -513,7 +518,8 @@ impl< E : EscrowPort > Exchange< E >
   /// [`ExchangeError::SpecAlreadyRegistered`] if `id` is already registered —
   /// refused rather than overwritten, since replacing a live tick/lot grid
   /// would silently change the terms under orders already resting against the
-  /// old one. [`ExchangeError::SecondAssetPair`] if another instrument is
+  /// old one. [`ExchangeError::BaseIsQuote`] if `base` is `quote`.
+  /// [`ExchangeError::SecondAssetPair`] if another instrument is
   /// registered on a different `( base, quote )`: v0.1 trades one pair.
   /// [`ExchangeError::Spec`] if `tick` or `lot` is zero.
   pub fn spec_register
@@ -529,6 +535,10 @@ impl< E : EscrowPort > Exchange< E >
     if self.specs.contains_key( &id )
     {
       return Err( ExchangeError::SpecAlreadyRegistered( id ) );
+    }
+    if base == quote
+    {
+      return Err( ExchangeError::BaseIsQuote( id ) );
     }
     if let Some( held ) = self.specs.values().next().map( | held | ( held.base, held.quote ) )
       && held != ( base, quote )

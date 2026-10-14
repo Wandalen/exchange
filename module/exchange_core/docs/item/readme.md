@@ -16,7 +16,7 @@ with `exchange_id`'s/`exchange_escrow`'s own `docs/item/readme.md`).
 | Item | Kind | Signature |
 |------|------|-----------|
 | `Receipt` | struct | `{ pub order: OrderId, pub trades: Vec<Trade>, pub resting: Quantity, pub self_match_cancelled: bool }`, plus `fn is_complete(&self) -> bool` |
-| `ExchangeError` | enum | `Rejected(RejectReason) \| Escrow(EscrowError) \| Matching(MatchError) \| NotResting(OrderId) \| UnknownInstrument(InstrumentId) \| Spec(SpecError) \| SpecAlreadyRegistered(InstrumentId) \| SecondAssetPair { id, held, asked } \| Depth(DepthError) \| Halt(HaltError)` |
+| `ExchangeError` | enum | `Rejected(RejectReason) \| Escrow(EscrowError) \| Matching(MatchError) \| NotResting(OrderId) \| UnknownInstrument(InstrumentId) \| Spec(SpecError) \| SpecAlreadyRegistered(InstrumentId) \| BaseIsQuote(InstrumentId) \| SecondAssetPair { id, held, asked } \| Depth(DepthError) \| Halt(HaltError)` |
 | `StepOutcome` | enum, `#[must_use]` | `Placed(Result<Receipt, ExchangeError>) \| Cancelled(Result<Quantity, ExchangeError>) \| ReplaceNotWired` — what one drained `InboundCmd` produced; `ReplaceNotWired` is a deliberate deferral, not an error (see "Differs from the proposal") |
 | `PostingAsset` | enum | `Cash \| Asset` — the asset key `postings()` tags each entry with, so `verify` nets cash and asset separately; escrow's own two holdings, not an instrument's `AssetId`s |
 | `postings` | function | `fn postings(&[Event]) -> Result<Vec<Entry<AccountId, PostingAsset>>, ExchangeError>` — every trade in the slice as a cash pair and an asset pair for `verify`; `Exchange::postings` passes it the undrained stream, a caller passes it a drained batch |

@@ -5,8 +5,9 @@ assets, but `exchange_escrow` keeps one cash and one asset holding per
 account, shared by every instrument — see
 [`../../module/exchange_escrow/readme.md`](../../module/exchange_escrow/readme.md).
 v0.1 trades one pair: `Exchange::spec_register` refuses an instrument on any
-other pair with `ExchangeError::SecondAssetPair`, so the shared holdings and
-the conservation audit stay exact.
+other pair with `ExchangeError::SecondAssetPair`, and one whose base is its
+quote with `ExchangeError::BaseIsQuote`, so the shared holdings and the
+conservation audit stay exact.
 
 ### Sources
 

@@ -55,3 +55,16 @@ fn a_second_pair_refusal_names_the_held_and_the_asked_pair()
 
   assert_eq!( refused.to_string(), "instrument 2 trades asset 2 for asset 1; this exchange trades asset 1 for asset 2" );
 }
+
+/// An instrument whose base is its quote would audit one asset as two
+/// balances, cash and asset; it is refused and registers nothing.
+#[ test ]
+fn an_instrument_whose_base_is_its_quote_is_refused()
+{
+  let mut exchange = Exchange::new();
+  let ( tick, lot ) = grid();
+  let id = InstrumentId( 1 );
+
+  assert_eq!( exchange.spec_register( id, AssetId( 1 ), AssetId( 1 ), tick, lot ), Err( ExchangeError::BaseIsQuote( id ) ) );
+  assert_eq!( exchange.halt_is( id ), Err( ExchangeError::UnknownInstrument( id ) ) );
+}
