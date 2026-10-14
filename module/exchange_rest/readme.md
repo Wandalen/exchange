@@ -44,10 +44,10 @@ seats it behind every order sharing its arrival. `rest_replace` asks
 `Book::insertable` first, counting the original as gone, and touches nothing
 on a refusal.
 
-A replacement is the same order, amended: another side, account or time in
-force is refused (`NotAnAmend`), as the family's amend rule has it
-(`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`). The id
-may change. Its `arrival` follows the rule's priority table: a larger
+A replacement is the same order, amended: another side, account, time in
+force or client id is refused (`NotAnAmend`), as the family's amend rule has
+it (`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`). The
+id may change. Its `arrival` follows the rule's priority table: a larger
 quantity or another price arrives after the original, a smaller or equal
 quantity at the same price no earlier (`JumpsQueue`). And nothing here
 matches, so a replacement priced into the opposite side is refused

@@ -233,8 +233,8 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   // rest_replace( book: &mut Book, instrument, old_id: OrderId, new_resting: Resting )
   //   -> Result<Resting, RestReplaceError>
   // Refuses, touching nothing, a replacement for another instrument, one
-  // Book::insert would refuse, a missing original, another side, account or
-  // time in force (NotAnAmend), an arrival the amend rule forbids
+  // Book::insert would refuse, a missing original, another side, account,
+  // time in force or client id (NotAnAmend), an arrival the amend rule forbids
   // (JumpsQueue), or a price that would take (WouldTake).
   ```
 - **`exchange_snap`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `snap_take(book, instrument, tick)`: one copied row per resting order — id, side, price, remainder — independent of the live book once taken; `tick` is the caller's step count. `Exchange::snap_take` calls it.

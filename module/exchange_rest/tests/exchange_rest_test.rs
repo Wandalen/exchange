@@ -10,7 +10,7 @@
 
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
-use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_rest::{ RestReplaceError, rest_cancel, rest_place, rest_replace };
 use exchange_seq::Sequence;
@@ -369,6 +369,51 @@ fn rest_replace_refuses_a_replacement_that_is_another_order()
     assert_eq!( ( original.order.price, original.order.tif ), ( Price::parse( "2.50" ).unwrap(), Tif::Gtc ) );
     assert_eq!( book.len(), 1 );
   }
+}
+
+/// A replacement under another client id is refused, and the original
+/// stays.
+///
+/// # Root Cause
+///
+/// The client id was left out of the comparison with the original. A caller
+/// that claims client ids per order, as `exchange_inbound::inbound_apply`
+/// does, never claimed the new one, so a later order could reuse it while the
+/// replacement rested under it.
+///
+/// # Why Not Caught
+///
+/// Every order in the suite has no client id.
+///
+/// # Fix Applied
+///
+/// `rest_replace` compares the client id along with side, account and time in
+/// force, and refuses a change with `RestReplaceError::NotAnAmend`.
+///
+/// # Prevention
+///
+/// Test each field that names an order to its owner, not only the book's.
+///
+/// # Pitfall
+///
+/// Dropping the client id is a change too.
+#[ test ]
+fn rest_replace_refuses_a_replacement_under_another_client_id()
+{
+  let mut book = Book::new();
+  let with_client = | resting : Resting, client | Resting { order : Order { client, ..resting.order }, ..resting };
+  let original = with_client( resting( 1, Side::Sell, "2.50", 4, 10 ), Some( ClientOrderId( 5 ) ) );
+  assert!( rest_place( &mut book, original ) );
+
+  for client in [ Some( ClientOrderId( 6 ) ), None ]
+  {
+    let changed = with_client( resting( 1, Side::Sell, "2.60", 4, 20 ), client );
+    assert_eq!( rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), changed ), Err( RestReplaceError::NotAnAmend ) );
+    assert_eq!( book.best( InstrumentId( 1 ), Side::Sell ).unwrap().order, original.order );
+  }
+
+  let kept = with_client( resting( 1, Side::Sell, "2.60", 4, 20 ), Some( ClientOrderId( 5 ) ) );
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), kept ).unwrap();
 }
 
 /// A replacement under a new id is still the same order.

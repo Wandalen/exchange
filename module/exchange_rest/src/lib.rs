@@ -10,8 +10,8 @@
 //! putting the original back would seat it behind every order sharing its
 //! arrival. So it checks the replacement first and touches nothing on a
 //! refusal. A replacement must be the same order, amended — same side,
-//! account and time in force, arriving as the amend rule allows — and, since
-//! nothing here matches, must not reach the opposite side.
+//! account, time in force and client id, arriving as the amend rule allows —
+//! and, since nothing here matches, must not reach the opposite side.
 
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
@@ -45,8 +45,9 @@ pub enum RestReplaceError
   InstrumentMismatch,
   /// `old_id` does not rest on `instrument`.
   Missing,
-  /// The replacement has another side, account or time in force than the
-  /// order it replaces: that is a cancel and a new order, not an amend.
+  /// The replacement has another side, account, time in force or client id
+  /// than the order it replaces: that is a cancel and a new order, not an
+  /// amend.
   NotAnAmend,
   /// The replacement's `arrival` ranks it ahead of where the amend rule puts
   /// it: a larger quantity or another price must arrive after the original,
@@ -68,7 +69,7 @@ impl core::fmt::Display for RestReplaceError
     {
       Self::InstrumentMismatch => write!( f, "new_resting's own instrument disagrees with the instrument argument" ),
       Self::Missing => write!( f, "no order with that id is resting on this instrument" ),
-      Self::NotAnAmend => write!( f, "the replacement changes the order's side, account or time in force" ),
+      Self::NotAnAmend => write!( f, "the replacement changes the order's side, account, time in force or client id" ),
       Self::JumpsQueue => write!( f, "the replacement's arrival ranks it ahead of where the amend rule allows; the original order is unchanged" ),
       Self::Refused => write!( f, "the replacement was refused; the original order is unchanged" ),
       Self::WouldTake => write!( f, "the replacement would trade against the opposite side; the original order is unchanged" ),
@@ -98,9 +99,10 @@ impl core::error::Error for RestReplaceError {}
 /// instrument; [`RestReplaceError::Refused`] if [`Book::insert`] would refuse
 /// it; [`RestReplaceError::Missing`] if `old_id` does not rest on
 /// `instrument`; [`RestReplaceError::NotAnAmend`] if it changes the order's
-/// side, account or time in force; [`RestReplaceError::JumpsQueue`] if its
-/// arrival breaks the amend rule; [`RestReplaceError::WouldTake`] if its
-/// price reaches the best opposite order.
+/// side, account, time in force or client id;
+/// [`RestReplaceError::JumpsQueue`] if its arrival breaks the amend rule;
+/// [`RestReplaceError::WouldTake`] if its price reaches the best opposite
+/// order.
 ///
 /// ```rust
 /// use exact_arith::{ Price, Quantity };
@@ -165,8 +167,14 @@ pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : Order
   // so a replace could flip its side, hand it to another account, or turn it
   // into an IOC left resting.
   // Pitfall: a replace may rename the order; it may not make it another one.
+  //
+  // Fix(rest_replace_refuses_a_replacement_under_another_client_id):
+  // Root cause: the client id was not compared, so a replace could move the
+  // order to a client id its caller's idempotency record never claimed.
+  // Pitfall: the order id is the book's and may change; the client id is the
+  // owner's handle on the order and may not.
   let ( was, new ) = ( old.order, new_resting.order );
-  if ( new.side, new.account, new.tif ) != ( was.side, was.account, was.tif )
+  if ( new.side, new.account, new.tif, new.client ) != ( was.side, was.account, was.tif, was.client )
   {
     return Err( RestReplaceError::NotAnAmend );
   }
