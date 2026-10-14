@@ -5,7 +5,7 @@
 - **Purpose**: Fix the single point in the matching path at which a fee is assessed, before an implementation puts it somewhere that turns cancelling into a revenue event or charges a partial-fill sequence twice.
 - **Responsibility**: State the assessment point and its argument, require the maker/taker classification without fixing a rate, and route the split arithmetic to the crate that owns exactness.
 - **In Scope**: Where a fee is computed, what it is computed against, which side is which, and where the assessed amount is recorded.
-- **Out of Scope**: The rate and its schedule, which are policy inputs and not this crate's to choose; the arithmetic of an uneven split (→ [Conservation-Exact Split](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md)); the executed price a notional is computed from, which stays open (→ [Price-Time Priority Matching](001_price_time_priority_matching.md)); how the fee amount is written down (no successor doc — the old `exact_arithmetic` crate's transaction-log-encoding design was never carried into the real 16-crate [exact](https://github.com/Wandalen/exact) family).
+- **Out of Scope**: The rate and its schedule, which are policy inputs and not this crate's to choose; the arithmetic of the fee and its uneven split (→ [Conservation-Exact Split](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md), [Exact Ratio](https://github.com/Wandalen/exact/blob/master/module/exact_ratio/readme.md)); the executed price a notional is computed from, which stays open (→ [Price-Time Priority Matching](001_price_time_priority_matching.md)); how the fee amount is written down (no successor doc — the old `exact_arithmetic` crate's transaction-log-encoding design was never carried into the real 16-crate [exact](https://github.com/Wandalen/exact) family).
 
 ### Abstract
 
@@ -55,8 +55,11 @@ happens on executed deals rather than on submitted ones.
    shape open cheap.
 
 4. **Hand the split arithmetic to `exact_arith`.** A fee that does not
-   divide evenly must not create or destroy units; the split is performed by
-   [Conservation-Exact Split](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md)
+   divide evenly must not create or destroy units. Notional × rate is
+   `exact_ratio::money_mul_ratio`
+   (→ [Exact Ratio](https://github.com/Wandalen/exact/blob/master/module/exact_ratio/readme.md)); an uneven split is
+   `exact_dust::money_dust_split_weighted`
+   (→ [Conservation-Exact Split](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md)); both work
    over
    [conserved value types](https://github.com/Wandalen/exact/blob/master/module/exact_kind/readme.md),
    inside the representable range and scale that crate budgets
@@ -141,7 +144,8 @@ the executed notional**, whatever executed price that rule produces.
 | File | Relationship |
 |------|--------------|
 | [https://github.com/Wandalen/exact/blob/master/module/exact_conserve/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_conserve/readme.md) | Sees both ends of the fee transfer, which is why a fee is never a burn |
-| [https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md) | Performs the uneven split; owns the guarantee this crate consumes rather than restates |
+| [https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md) | Performs the uneven split (`money_dust_split_weighted`); owns the guarantee this crate consumes rather than restates |
+| [https://github.com/Wandalen/exact/blob/master/module/exact_ratio/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_ratio/readme.md) | Computes notional × rate (`money_mul_ratio`), refusing or rounding as asked |
 | [001_price_time_priority_matching.md](001_price_time_priority_matching.md) | Hosts the single assessment point at step 3, and owns the still-open executed-price rule the notional is computed from |
 | [002_self_match_prevention.md](002_self_match_prevention.md) | Why a cancel-time fee would pay the venue for its own prohibition, and why an executed self-trade is a pure fee leak |
 | [003_cancel_and_amend_semantics.md](003_cancel_and_amend_semantics.md) | The operations that deliberately assess nothing |
