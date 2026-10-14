@@ -86,6 +86,7 @@ grows without bound and would refuse the resubmission a cancel allows.
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
 | `docs/item/` | Exposed surface, as built vs. proposed |
 | [`tests/exchange_inbound_test.rs`](tests/exchange_inbound_test.rs) | T01, the ring round trip; T02, `inbound_apply` and its claims |
+| [`tests/manual/readme.md`](tests/manual/readme.md) | Manual plan — the overflow policy and the book check, by mutation |
 
 ## Related
 
