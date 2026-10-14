@@ -4,29 +4,28 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 description = "Order matching under price-time priority with escrow holds"
-publish = false
 
 [dependencies]
-exchange_types = { path = "../exchange_types" }
-exchange_book = { path = "../exchange_book" }
-exchange_cap = { path = "../exchange_cap" }
-exchange_fill = { path = "../exchange_fill" }
-exchange_match = { path = "../exchange_match" }
-exchange_order = { path = "../exchange_order" }
-exchange_side = { path = "../exchange_side" }
-exchange_escrow = { path = "../exchange_escrow" }
-exchange_seq = { path = "../exchange_seq" }
-exchange_id = { path = "../exchange_id" }
-exchange_tif = { path = "../exchange_tif" }
-exchange_spec = { path = "../exchange_spec" }
-exchange_depth = { path = "../exchange_depth" }
-exchange_halt = { path = "../exchange_halt" }
-exchange_snap = { path = "../exchange_snap" }
-exchange_event = { path = "../exchange_event" }
-exchange_stats = { path = "../exchange_stats" }
-exchange_rest = { path = "../exchange_rest" }
-exchange_idem = { path = "../exchange_idem" }
-exchange_inbound = { path = "../exchange_inbound" }
+exchange_types = { path = "../exchange_types", version = "0.1.0" }
+exchange_book = { path = "../exchange_book", version = "0.1.0" }
+exchange_cap = { path = "../exchange_cap", version = "0.1.0" }
+exchange_fill = { path = "../exchange_fill", version = "0.1.0" }
+exchange_match = { path = "../exchange_match", version = "0.1.0" }
+exchange_order = { path = "../exchange_order", version = "0.1.0" }
+exchange_side = { path = "../exchange_side", version = "0.1.0" }
+exchange_escrow = { path = "../exchange_escrow", version = "0.1.0" }
+exchange_seq = { path = "../exchange_seq", version = "0.1.0" }
+exchange_id = { path = "../exchange_id", version = "0.1.0" }
+exchange_tif = { path = "../exchange_tif", version = "0.1.0" }
+exchange_spec = { path = "../exchange_spec", version = "0.1.0" }
+exchange_depth = { path = "../exchange_depth", version = "0.1.0" }
+exchange_halt = { path = "../exchange_halt", version = "0.1.0" }
+exchange_snap = { path = "../exchange_snap", version = "0.1.0" }
+exchange_event = { path = "../exchange_event", version = "0.1.0" }
+exchange_stats = { path = "../exchange_stats", version = "0.1.0" }
+exchange_rest = { path = "../exchange_rest", version = "0.1.0" }
+exchange_idem = { path = "../exchange_idem", version = "0.1.0" }
+exchange_inbound = { path = "../exchange_inbound", version = "0.1.0" }
 exact_arith = { workspace = true }
 
 [lints]

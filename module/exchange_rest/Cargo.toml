@@ -4,20 +4,19 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 description = "Rest, cancel, replace — the three non-matching ways an order moves on the book"
-publish = false
 
 [dependencies]
-exchange_book = { path = "../exchange_book" }
-exchange_id = { path = "../exchange_id" }
-exchange_side = { path = "../exchange_side" }
+exchange_book = { path = "../exchange_book", version = "0.1.0" }
+exchange_id = { path = "../exchange_id", version = "0.1.0" }
+exchange_side = { path = "../exchange_side", version = "0.1.0" }
 
 [dev-dependencies]
 # The tests build a `Resting` by hand, which needs every field of the `Order`
 # it wraps.
 exact_arith = { workspace = true }
-exchange_order = { path = "../exchange_order" }
-exchange_seq = { path = "../exchange_seq" }
-exchange_tif = { path = "../exchange_tif" }
+exchange_order = { path = "../exchange_order", version = "0.1.0" }
+exchange_seq = { path = "../exchange_seq", version = "0.1.0" }
+exchange_tif = { path = "../exchange_tif", version = "0.1.0" }
 
 [lints]
 workspace = true
