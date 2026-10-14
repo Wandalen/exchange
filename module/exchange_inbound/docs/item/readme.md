@@ -19,7 +19,7 @@ The exposed surface of `exchange_inbound`, as built.
 | `InboundApplyError` | enum | `{ Match(MatchError), OrderIdRests, DuplicateClientId, ZeroQuantity, NotNew }`, with `Display`, `Error`, `From<MatchError>` |
 | `Claims` | struct | `{ /* private */ }`, `Claims::new()` — the `( AccountId, ClientOrderId )`s `inbound_apply` has accepted |
 | `inbound_ring` | fn | `(capacity: usize) -> Result<Split<InboundCmd>, BuildError>` |
-| `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: &[InboundCmd]) -> usize` — publishes a prefix, `cmds[n..]` stays the caller's |
+| `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: &[InboundCmd]) -> usize` — `#[must_use]`; publishes a prefix, `cmds[n..]` stays the caller's |
 | `inbound_overflow_reject` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmd: InboundCmd) -> Result<(), InboundCmd>` |
 | `inbound_drain` | fn | `(consumer: &mut Consumer<'_, InboundCmd>) -> Vec<InboundCmd>` |
 | `inbound_apply` | fn | `(book: &mut Book, claims: &mut Claims, policy: SelfMatchPolicy, cmd: InboundCmd) -> Result<InboundOutcome, InboundApplyError>` |

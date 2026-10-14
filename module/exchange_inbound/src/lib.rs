@@ -247,6 +247,38 @@ pub fn inbound_ring( capacity : usize ) -> Result< Split< InboundCmd >, BuildErr
 /// Publish the front of `cmds`, as much as the ring takes, and return how
 /// many — [`Producer::try_push_batch`]. A partial batch is not a failure:
 /// `cmds[ n.. ]` is still the caller's to publish later.
+///
+/// ```
+/// #![ deny( unused_must_use ) ]
+/// use exchange_id::{ AccountId, InstrumentId, OrderId };
+/// use exchange_inbound::{ inbound_flush, inbound_ring, InboundCmd, OrderRef };
+///
+/// let mut split = inbound_ring( 2 ).unwrap();
+/// let mut ends = split.ends();
+/// let ( mut producer, _consumer ) = ends.split();
+/// let cancel = | id | InboundCmd::Cancel { instrument : InstrumentId( 1 ), account : AccountId( 1 ), order : OrderRef::Id( OrderId( id ) ) };
+/// let cmds = [ cancel( 1 ), cancel( 2 ), cancel( 3 ) ];
+///
+/// let sent = inbound_flush( &mut producer, &cmds );
+/// assert_eq!( sent, 2 ); // `cmds[ 2.. ]` is still the caller's
+/// ```
+///
+/// Ignoring the count loses `cmds[ n.. ]` without a trace, so it does not
+/// compile under `deny( unused_must_use )`:
+///
+/// ```compile_fail
+/// #![ deny( unused_must_use ) ]
+/// use exchange_id::{ AccountId, InstrumentId, OrderId };
+/// use exchange_inbound::{ inbound_flush, inbound_ring, InboundCmd, OrderRef };
+///
+/// let mut split = inbound_ring( 2 ).unwrap();
+/// let mut ends = split.ends();
+/// let ( mut producer, _consumer ) = ends.split();
+/// let cancel = | id | InboundCmd::Cancel { instrument : InstrumentId( 1 ), account : AccountId( 1 ), order : OrderRef::Id( OrderId( id ) ) };
+/// let cmds = [ cancel( 1 ), cancel( 2 ), cancel( 3 ) ];
+///
+/// inbound_flush( &mut producer, &cmds );
+/// ```
 //
 // Fix(flush_accepts_as_many_as_fit_and_reports_the_count):
 // Root cause: written against a `usize`-returning `try_push_batch`, which
@@ -258,6 +290,7 @@ pub fn inbound_ring( capacity : usize ) -> Result< Split< InboundCmd >, BuildErr
 // the ring took and dropped it with the batch's error, so a caller resuming
 // from the same iterator lost it.
 // Pitfall: a partial batch is the normal case, so its cut must lose nothing.
+#[ must_use = "commands past the returned count were not published; drop the count and they are lost unseen" ]
 pub fn inbound_flush( producer : &mut Producer< '_, InboundCmd >, cmds : &[ InboundCmd ] ) -> usize
 {
   match producer.try_push_batch( &mut cmds.iter().copied() )
