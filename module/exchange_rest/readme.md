@@ -53,7 +53,11 @@ quantity at the same price no earlier (`JumpsQueue`). And nothing here
 matches, so a replacement priced into the opposite side is refused
 (`WouldTake`) rather than rested there. Rested, it would leave the book
 crossed: the next order to arrive trades against it while the better price
-it crossed sits on.
+it crossed sits on. The check is price only, so on a book an unpayable fill
+already left crossed it refuses even a smaller quantity at the original's
+price, and the remedy is a cancel. Such a book needs an instrument whose tick
+times lot is inexact; see `exchange_match`'s "Not built: refusing an inexact
+tick and lot".
 
 ## Who calls it
 

@@ -59,6 +59,10 @@ pub enum RestReplaceError
   /// The replacement's price reaches the best order on the opposite side,
   /// whoever's. Resting it would leave the book crossed; it has to be matched
   /// instead, where a self-cross meets its `SelfMatchPolicy`.
+  ///
+  /// Price only. On a book an unpayable fill left crossed (`exchange_match`'s
+  /// module doc) this refuses even a smaller quantity at the original's
+  /// price, which matching would not trade either; the remedy is a cancel.
   WouldTake,
 }
 
