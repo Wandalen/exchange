@@ -47,10 +47,13 @@ on a refusal.
 A replacement is the same order, amended: another side, account or time in
 force is refused (`NotAnAmend`), as the family's amend rule has it
 (`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`). The id
-may change. And nothing here matches, so a replacement priced into the
-opposite side is refused (`WouldTake`) rather than rested there. Rested, it
-would leave the book crossed: the next order to arrive trades against it
-while the better price it crossed sits on.
+may change. Its `arrival` follows the rule's priority table: a larger
+quantity or another price arrives after the original, a smaller or equal
+quantity at the same price no earlier (`JumpsQueue`). And nothing here
+matches, so a replacement priced into the opposite side is refused
+(`WouldTake`) rather than rested there. Rested, it would leave the book
+crossed: the next order to arrive trades against it while the better price
+it crossed sits on.
 
 ## Who calls it
 
@@ -66,11 +69,9 @@ three.
 in the same step and reports it
 (`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`);
 `Exchange` has neither the escrow side nor an event for it, so
-`exchange_step` answers `Replace` with `StepOutcome::ReplaceNotWired`. The
-priority rule — keep the place only for a smaller quantity at one price —
-rides on the replacement's `arrival`, which `rest_replace` takes as given,
-the same as `Book::insert` does for a new order: only the facade stamps
-arrivals, so only it can apply the rule.
+`exchange_step` answers `Replace` with `StepOutcome::ReplaceNotWired`.
+`rest_replace` refuses an arrival the priority rule forbids; which later
+arrival is right is the facade's to say, since it stamps them.
 
 ## Responsibility Table
 

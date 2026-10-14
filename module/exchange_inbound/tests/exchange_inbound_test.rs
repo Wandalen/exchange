@@ -208,7 +208,8 @@ fn replace_swaps_the_resting_order_atomically()
   let mut claims = Claims::new();
   assert!( book.insert( resting( 1, Side::Sell, "2.00", 4, Tif::Gtc ) ), "fresh id, must succeed" );
 
-  let cmd = InboundCmd::Replace { instrument : INSTRUMENT, old_id : OrderId( 1 ), new_resting : resting( 1, Side::Sell, "2.10", 6, Tif::Gtc ) };
+  let new_resting = Resting { arrival : Sequence( 2 ), ..resting( 1, Side::Sell, "2.10", 6, Tif::Gtc ) };
+  let cmd = InboundCmd::Replace { instrument : INSTRUMENT, old_id : OrderId( 1 ), new_resting };
   let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cmd ).unwrap();
 
   let InboundOutcome::Replaced( Ok( old ) ) = outcome else { panic!( "Replace must succeed here" ) };

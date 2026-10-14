@@ -10,8 +10,8 @@
 //! putting the original back would seat it behind every order sharing its
 //! arrival. So it checks the replacement first and touches nothing on a
 //! refusal. A replacement must be the same order, amended — same side,
-//! account and time in force — and, since nothing here matches, must not
-//! reach the opposite side.
+//! account and time in force, arriving as the amend rule allows — and, since
+//! nothing here matches, must not reach the opposite side.
 
 use exchange_book::{ Book, Resting };
 use exchange_id::{ InstrumentId, OrderId };
@@ -48,6 +48,10 @@ pub enum RestReplaceError
   /// The replacement has another side, account or time in force than the
   /// order it replaces: that is a cancel and a new order, not an amend.
   NotAnAmend,
+  /// The replacement's `arrival` ranks it ahead of where the amend rule puts
+  /// it: a larger quantity or another price must arrive after the original,
+  /// a smaller or equal quantity at the same price no earlier.
+  JumpsQueue,
   /// [`Book::insert`] would refuse the replacement: a `remaining` of zero or
   /// above its order's quantity, or an `order.id` resting elsewhere.
   Refused,
@@ -65,6 +69,7 @@ impl core::fmt::Display for RestReplaceError
       Self::InstrumentMismatch => write!( f, "new_resting's own instrument disagrees with the instrument argument" ),
       Self::Missing => write!( f, "no order with that id is resting on this instrument" ),
       Self::NotAnAmend => write!( f, "the replacement changes the order's side, account or time in force" ),
+      Self::JumpsQueue => write!( f, "the replacement's arrival ranks it ahead of where the amend rule allows; the original order is unchanged" ),
       Self::Refused => write!( f, "the replacement was refused; the original order is unchanged" ),
       Self::WouldTake => write!( f, "the replacement would trade against the opposite side; the original order is unchanged" ),
     }
@@ -80,10 +85,11 @@ impl core::error::Error for RestReplaceError {}
 /// `old_id` and inserts `new_resting`. A refusal touches nothing, so the
 /// original keeps its place in the queue.
 ///
-/// The replacement's place is its own `arrival`'s. Passing the original's
-/// keeps the original's place, which the family's amend rule allows only for
-/// a smaller quantity at the same price
-/// (`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`).
+/// The replacement's place is its own `arrival`'s. The family's amend rule
+/// (`exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`) lets a
+/// smaller or equal quantity at the same price keep the original's arrival;
+/// anything else must arrive after it. Which later arrival is the caller's:
+/// only it stamps them.
 ///
 /// # Errors
 ///
@@ -92,7 +98,8 @@ impl core::error::Error for RestReplaceError {}
 /// instrument; [`RestReplaceError::Refused`] if [`Book::insert`] would refuse
 /// it; [`RestReplaceError::Missing`] if `old_id` does not rest on
 /// `instrument`; [`RestReplaceError::NotAnAmend`] if it changes the order's
-/// side, account or time in force; [`RestReplaceError::WouldTake`] if its
+/// side, account or time in force; [`RestReplaceError::JumpsQueue`] if its
+/// arrival breaks the amend rule; [`RestReplaceError::WouldTake`] if its
 /// price reaches the best opposite order.
 ///
 /// ```rust
@@ -162,6 +169,19 @@ pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : Order
   if ( new.side, new.account, new.tif ) != ( was.side, was.account, was.tif )
   {
     return Err( RestReplaceError::NotAnAmend );
+  }
+
+  // Fix(rest_replace_refuses_a_replacement_that_jumps_the_queue):
+  // Root cause: the replacement's arrival was taken as given, so one that
+  // raised its quantity or moved its price kept the original's place by
+  // carrying its arrival.
+  // Pitfall: which later arrival is right is the stamper's to know; what
+  // holds for any amend is that it arrives after the order it amends.
+  let keeps_place = new.price == was.price && new_resting.remaining <= old.remaining;
+  let jumps = if keeps_place { new_resting.arrival < old.arrival } else { new_resting.arrival <= old.arrival };
+  if jumps
+  {
+    return Err( RestReplaceError::JumpsQueue );
   }
 
   // Fix(rest_replace_refuses_a_replacement_that_would_take):

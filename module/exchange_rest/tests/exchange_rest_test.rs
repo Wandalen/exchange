@@ -106,9 +106,7 @@ fn rest_replace_swaps_price_and_quantity_atomically()
 }
 
 /// A replacement that moves an order to a worse price loses queue priority
-/// to whatever already rested at the better price — the same rule any
-/// fresh `insert` follows, since `rest_replace` adds no priority rule of
-/// its own.
+/// to whatever already rested at the better price.
 #[ test ]
 fn rest_replace_at_a_new_price_loses_its_old_queue_position()
 {
@@ -385,4 +383,60 @@ fn rest_replace_may_rename_the_order()
 
   assert_eq!( book.best( InstrumentId( 1 ), Side::Sell ).unwrap().order.id, OrderId( 7 ) );
   assert_eq!( book.len(), 1 );
+}
+
+// --- rest_replace: JumpsQueue --------------------------------------------
+
+/// A replacement that raises its quantity or moves its price must arrive
+/// after the original, and one that keeps both no earlier than it.
+///
+/// # Root Cause
+///
+/// `rest_replace` took the replacement's arrival as given. Carrying the
+/// original's, a replacement kept the original's place whatever it changed,
+/// though the amend rule gives that place up for a larger quantity or
+/// another price.
+///
+/// # Why Not Caught
+///
+/// Every replacement in the suite carried a later arrival.
+///
+/// # Fix Applied
+///
+/// `rest_replace` refuses an arrival the rule does not allow with
+/// `RestReplaceError::JumpsQueue`.
+///
+/// # Prevention
+///
+/// One case per row of the priority table in
+/// `exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`.
+///
+/// # Pitfall
+///
+/// `rest_replace` cannot tell which later arrival is right, only that an
+/// amend never arrives before the order it amends.
+#[ test ]
+fn rest_replace_refuses_a_replacement_that_jumps_the_queue()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
+  assert!( rest_place( &mut book, resting( 2, Side::Sell, "2.50", 4, 20 ) ) );
+  assert!( rest_place( &mut book, resting( 3, Side::Sell, "2.40", 4, 15 ) ) );
+  assert!( rest_place( &mut book, resting( 4, Side::Sell, "2.50", 4, 7 ) ) );
+  let queue = | book : &Book | book.side( InstrumentId( 1 ), Side::Sell ).map( | resting | resting.order.id.0 ).collect::< Vec< _ > >();
+  assert_eq!( queue( &book ), vec![ 3, 4, 1, 2 ] );
+
+  // Ahead of order 2 with more to sell, ahead of order 3 at its price, ahead
+  // of order 4 with less.
+  for ( price, quantity, arrival ) in [ ( "2.50", 5, 10 ), ( "2.40", 4, 10 ), ( "2.50", 3, 5 ) ]
+  {
+    let error = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Sell, price, quantity, arrival ) ).unwrap_err();
+    assert_eq!( error, RestReplaceError::JumpsQueue, "{quantity} at {price}, arriving at {arrival}" );
+    assert_eq!( queue( &book ), vec![ 3, 4, 1, 2 ] );
+  }
+
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Sell, "2.50", 3, 10 ) ).unwrap();
+  assert_eq!( queue( &book ), vec![ 3, 4, 1, 2 ], "a smaller quantity at one price keeps its place" );
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Sell, "2.50", 5, 30 ) ).unwrap();
+  assert_eq!( queue( &book ), vec![ 3, 4, 2, 1 ], "a larger one, arriving later, goes behind order 2" );
 }
