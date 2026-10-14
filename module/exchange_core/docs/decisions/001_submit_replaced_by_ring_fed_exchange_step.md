@@ -40,6 +40,8 @@ producer or reassign.
    drain.
 
 3. **`Cancel` delegates to the existing `Exchange::cancel`, unchanged.**
+   *Superseded by ADR-003: `Exchange::cancel` is removed, and a cancel names
+   its account, instrument and the order by either id.*
    `InboundCmd::Cancel`'s own `instrument` field is never consulted —
    `cancel`'s own global, instrument-agnostic search is already correct and
    already tested, so a ring-fed cancel gets exactly the same escrow-release
