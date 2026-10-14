@@ -1,0 +1,21 @@
+[package]
+name = "exchange_escrow"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The available/reserved balance partition, so an order cannot commit what it does not hold"
+
+[dependencies]
+exact_arith = { workspace = true }
+exchange_fill = { path = "../exchange_fill", version = "0.1.0" }
+exchange_id = { path = "../exchange_id", version = "0.1.0" }
+exchange_order = { path = "../exchange_order", version = "0.1.0" }
+exchange_side = { path = "../exchange_side", version = "0.1.0" }
+exchange_types = { path = "../exchange_types", version = "0.1.0" }
+
+[dev-dependencies]
+# The tests' `Order` fixtures need a `Tif`; src/ names none.
+exchange_tif = { path = "../exchange_tif", version = "0.1.0" }
+
+[lints]
+workspace = true
