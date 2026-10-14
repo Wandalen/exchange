@@ -1,5 +1,5 @@
 //! Test Matrix T01 — ring round-trip (flush/drain/overflow) and T02 —
-//! `inbound_apply`'s dispatch to `exchange_match`/`exchange_rest`.
+//! `inbound_apply` and its claims.
 
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
@@ -32,6 +32,12 @@ fn resting( id : u64, side : Side, price : &str, quantity : i64, tif : Tif ) -> 
 }
 
 // ── T01: ring round-trip ────────────────────────────────────────────────
+
+/// Cancels of orders `1..=n`, for tests that only move commands.
+fn cancels( n : u64 ) -> Vec< InboundCmd >
+{
+  ( 1..=n ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).collect()
+}
 
 #[ test ]
 fn a_pushed_command_drains_in_the_same_order_it_was_pushed()
@@ -89,8 +95,7 @@ fn flush_accepts_as_many_as_fit_and_reports_the_count()
   let mut ends = split.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let cmds : Vec< _ > = ( 1..=4u64 ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).collect();
-  let accepted = inbound_flush( &mut producer, &cmds );
+  let accepted = inbound_flush( &mut producer, &cancels( 4 ) );
 
   assert_eq!( accepted, 2, "capacity 2 — only the first two of four fit" );
   assert_eq!( inbound_drain( &mut consumer ).len(), 2 );
@@ -129,7 +134,7 @@ fn a_flush_leaves_what_did_not_fit_with_the_caller()
   let mut split = inbound_ring( 2 ).unwrap();
   let mut ends = split.ends();
   let ( mut producer, mut consumer ) = ends.split();
-  let cmds : Vec< _ > = ( 1..=4u64 ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).collect();
+  let cmds = cancels( 4 );
 
   let mut drained = Vec::new();
   let mut sent = 0;
@@ -168,7 +173,7 @@ fn drain_is_empty_on_a_fresh_ring()
   assert!( inbound_drain( &mut consumer ).is_empty() );
 }
 
-// ── T02: inbound_apply dispatch ─────────────────────────────────────────
+// ── T02: inbound_apply and its claims ───────────────────────────────────
 
 #[ test ]
 fn a_place_with_nothing_to_cross_rests_on_the_book()
@@ -626,6 +631,30 @@ fn a_replace_may_take_the_id_of_an_order_that_filled()
 /// An order id is free again once its order has left the book, whether it
 /// filled or self-match prevention withdrew it — as it is after a cancel,
 /// and as it always was for an order that filled on arrival.
+///
+/// # Root Cause
+///
+/// Order ids were claimed in a set of their own, released only by a cancel
+/// or a replace. Order 1 filled and order 3 was withdrawn by self-match;
+/// both kept their claims, so a new order under either id was refused for
+/// good.
+///
+/// # Why Not Caught
+///
+/// The one test reusing an id cancelled the order first.
+///
+/// # Fix Applied
+///
+/// The set is gone: `inbound_apply` asks the book whether an id rests.
+///
+/// # Prevention
+///
+/// Reuse an id after each way its order can leave the book.
+///
+/// # Pitfall
+///
+/// An order that filled on arrival never claimed its id, so whether the id
+/// came back depended on whether the order had rested first.
 #[ test ]
 fn an_order_id_is_free_again_once_its_order_left_the_book()
 {
