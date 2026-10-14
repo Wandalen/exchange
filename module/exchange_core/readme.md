@@ -111,10 +111,11 @@ full design. The apply loop itself stays single-threaded by choice, not by
 limitation: it is the ring's producers that genuinely race, not
 `exchange_step`'s own drain-then-apply pass over what they left behind.
 
-Three things are deliberately absent, named here rather than left to be
+Four things are deliberately absent, named here rather than left to be
 discovered as gaps:
 
 - **Stop orders.** Out of v0.1.
+- **More than one asset pair.** `Exchange::spec_register` admits one pair: escrow holds one cash and one asset balance per account.
 - **Amend.** [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) covers cancel, which exists; amend does not.
 - **Fees.** [`algorithm/004`](docs/algorithm/004_fee_assessment_point.md) fixes the assessment point; no schedule is decided, so nothing is charged.
 

@@ -28,6 +28,9 @@ rather than restates:
 - **Values.** Every price, quantity, and balance is an
   [`exact_arith`](https://github.com/Wandalen/exact/blob/master/module/exact_arith/readme.md)
   type — the float ban is upstream of this crate, not re-argued here.
+- **Assets.** One trading pair: escrow holds one cash and one asset balance
+  per account, so registration refuses a second pair and an asset traded
+  for itself (→ [`tests/asset_pair_test.rs`](../../tests/asset_pair_test.rs)).
 - **Hosting.** No concurrency host is integrated yet; intake will ride
   whatever mechanism the eventual host provides, never a bespoke one built
   inside this crate.

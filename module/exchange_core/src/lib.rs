@@ -56,7 +56,8 @@
 //! - **Multi-instrument** is real: `exchange_step` reads `instrument` off the
 //!   incoming order itself rather than a facade-wide constant. [`Book`] was
 //!   already keyed by instrument; this was the last piece pinning every
-//!   submission to one of them regardless.
+//!   submission to one of them regardless. Every instrument trades the same
+//!   asset pair, though; see the next section.
 //! - **Self-match policy** is a parameter on [`Exchange::exchange_step`]
 //!   itself, supplied per call exactly like `exchange_match::cross`'s own
 //!   `policy` parameter — never stored on `Exchange`, matching the rest of
@@ -69,6 +70,9 @@
 //!
 //! - **Stop orders.** Out of v0.1. A market order needs no type of its own:
 //!   it is a limit order whose price is a cap, sent IOC or FOK.
+//! - **More than one asset pair.** Escrow holds one cash and one asset
+//!   balance per account, so [`Exchange::spec_register`] admits one pair
+//!   (hard problem 19).
 //! - **Amend and fees.** Both are specified at family grain. Fees in
 //!   particular have a decided hook position and an undecided schedule, so
 //!   implementing the hook now would be building a parameter nobody can
@@ -524,7 +528,10 @@ impl< E : EscrowPort > Exchange< E >
   /// old one. [`ExchangeError::Spec`] if `tick` or `lot` is zero.
   /// [`ExchangeError::BaseIsQuote`] if `base` is `quote`.
   /// [`ExchangeError::SecondAssetPair`] if another instrument is
-  /// registered on a different `( base, quote )`: v0.1 trades one pair.
+  /// registered on a different `( base, quote )`: v0.1 trades one pair. The
+  /// rule holds per `Exchange`; two of them sharing one escrow through a
+  /// custom [`EscrowPort`] could each register a different pair, and share
+  /// its balances again.
   pub fn spec_register
   (
     &mut self,
