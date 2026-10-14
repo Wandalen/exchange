@@ -491,3 +491,46 @@ fn a_zero_quantity_place_is_refused_and_claims_nothing()
   inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( tagged( 2, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) ) ).unwrap();
   assert_eq!( book.len(), 1, "the client id was still free" );
 }
+
+/// A place whose `remaining` is not its quantity is refused before it
+/// crosses.
+///
+/// # Root Cause
+///
+/// `inbound_apply` crossed `order.quantity` and rested what `cross` left of
+/// it, so the `remaining` a place carried was never read: a buy for 10 with
+/// 3 remaining took all 10 from the ask, and one with nothing remaining
+/// rested whole.
+///
+/// # Why Not Caught
+///
+/// The test helper sets `remaining` to the quantity.
+///
+/// # Fix Applied
+///
+/// A `Place` is a new order, so anything but its whole quantity remaining is
+/// refused with `InboundApplyError::NotNew`.
+///
+/// # Prevention
+///
+/// Test a command with each field it carries set apart from the others.
+///
+/// # Pitfall
+///
+/// `Resting` is the book's node, reused as a command; its `remaining` means
+/// something there and nothing in a new order.
+#[ test ]
+fn a_place_whose_remaining_is_not_its_quantity_is_refused()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  assert!( book.insert( resting( 1, Side::Sell, "1.00", 10, Tif::Gtc ) ) );
+
+  for remaining in [ 3, 0, 12 ]
+  {
+    let partial = Resting { remaining : Quantity::from_int( remaining ).unwrap(), ..resting( 2, Side::Buy, "1.00", 10, Tif::Gtc ) };
+    assert_eq!( inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( partial ) ), Err( InboundApplyError::NotNew ), "{remaining} remaining of 10" );
+    assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().remaining, Quantity::from_int( 10 ).unwrap(), "the ask was not touched" );
+    assert_eq!( book.len(), 1 );
+  }
+}

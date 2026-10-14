@@ -15,7 +15,7 @@ The exposed surface of `exchange_inbound`, as built.
 |------|------|-----------|
 | `InboundCmd` | enum | `{ Place(Resting), Cancel { instrument: InstrumentId, id: OrderId }, Replace { instrument: InstrumentId, old_id: OrderId, new_resting: Resting } }` |
 | `InboundOutcome` | enum | `{ Crossed(Crossing), Cancelled(Option<Resting>), Replaced(Result<Resting, RestReplaceError>) }` |
-| `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError), DuplicateClientId, ZeroQuantity }`, with `Display`, `Error`, `From<MatchError>`, `From<IdemError>` |
+| `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError), DuplicateClientId, ZeroQuantity, NotNew }`, with `Display`, `Error`, `From<MatchError>`, `From<IdemError>` |
 | `Claims` | struct | `{ /* private */ }`, `Claims::new()` — order ids and `( AccountId, ClientOrderId )`s `inbound_apply` has claimed |
 | `inbound_ring` | fn | `(capacity: usize) -> Result<Split<InboundCmd>, BuildError>` |
 | `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: impl IntoIterator<Item = InboundCmd>) -> usize` |

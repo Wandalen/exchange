@@ -52,7 +52,8 @@ pub use ring_handle::{ Consumer, Drain, Ends, Producer, Split };
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum InboundCmd
 {
-  /// A new order, with the arrival its producer stamped.
+  /// A new order: its `remaining` the whole quantity, its `arrival` as its
+  /// producer stamped it.
   Place( Resting ),
   /// Withdraw `id`, resting on `instrument`'s book, whichever side.
   Cancel
@@ -102,6 +103,9 @@ pub enum InboundApplyError
   DuplicateClientId,
   /// A [`InboundCmd::Place`] for a quantity of zero.
   ZeroQuantity,
+  /// A [`InboundCmd::Place`] whose `remaining` is not its quantity: a new
+  /// order has none of it filled.
+  NotNew,
 }
 
 impl core::fmt::Display for InboundApplyError
@@ -114,6 +118,7 @@ impl core::fmt::Display for InboundApplyError
       Self::Idem( error ) => write!( f, "place refused: {error}" ),
       Self::DuplicateClientId => write!( f, "place refused: this account already placed an order under this client id" ),
       Self::ZeroQuantity => write!( f, "place refused: the quantity is zero" ),
+      Self::NotNew => write!( f, "place refused: a new order's remaining must be its whole quantity" ),
     }
   }
 }
@@ -126,7 +131,7 @@ impl core::error::Error for InboundApplyError
     {
       Self::Match( error ) => Some( error ),
       Self::Idem( error ) => Some( error ),
-      Self::DuplicateClientId | Self::ZeroQuantity => None,
+      Self::DuplicateClientId | Self::ZeroQuantity | Self::NotNew => None,
     }
   }
 }
@@ -222,7 +227,8 @@ pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< Inbou
 /// Each with `book` and `claims` untouched: [`InboundApplyError::Match`] when
 /// `cross` refuses, in practice a post-only order that would take;
 /// [`InboundApplyError::ZeroQuantity`] for a `Place` for nothing;
-/// [`InboundApplyError::Idem`] for one naming a claimed order id;
+/// [`InboundApplyError::NotNew`] for one whose `remaining` is not its
+/// quantity; [`InboundApplyError::Idem`] for one naming a claimed order id;
 /// [`InboundApplyError::DuplicateClientId`] for one carrying a client id its
 /// account already used.
 pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
@@ -245,6 +251,16 @@ pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatch
       if order.quantity == Quantity::ZERO
       {
         return Err( InboundApplyError::ZeroQuantity );
+      }
+      // Fix(a_place_whose_remaining_is_not_its_quantity_is_refused):
+      // Root cause: `cross` trades `order.quantity` and the remainder rests
+      // from what it leaves, so the `remaining` a place carried went unread:
+      // 3 left of 10 traded all 10.
+      // Pitfall: a field a command carries and nothing reads is one its
+      // producer still believes in.
+      if resting.remaining != order.quantity
+      {
+        return Err( InboundApplyError::NotNew );
       }
       if idem_seen( &claims.orders, order.id )
       {
