@@ -111,14 +111,19 @@ full design. The apply loop itself stays single-threaded by choice, not by
 limitation: it is the ring's producers that genuinely race, not
 `exchange_step`'s own drain-then-apply pass over what they left behind.
 
-These are deliberately absent, named here rather than left to be
+Four things are deliberately absent, named here rather than left to be
 discovered as gaps:
 
 - **Stop orders.** Out of v0.1.
 - **More than one asset pair.** `Exchange::spec_register` admits one pair: escrow holds one cash and one asset balance per account.
 - **Amend.** [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) specifies it; which version carries it is open. A drained `Replace` answers `StepOutcome::ReplaceNotWired` and changes nothing; see `exchange_step`'s own doc and [`docs/decisions/`](docs/decisions/readme.md) for why.
-- **Cold recovery.** Nothing rebuilds the book and escrow from the event log yet (v0.1 exit criterion 4).
 - **Fees.** [`algorithm/004`](docs/algorithm/004_fee_assessment_point.md) fixes the assessment point; no schedule is decided, so nothing is charged.
+
+**Cold recovery is required, not excluded.** It is v0.1 exit criterion 4,
+and it is not met: nothing rebuilds the book and escrow from the event log,
+and replaying the log could not do it yet, because the admin methods
+(`open_account`, `spec_register`, `caps_set`, `halt_set`, `halt_clear`)
+change state without emitting an event.
 
 A market order is a limit order whose price is a cap, sent IOC or FOK; see
 [`tests/market_order_test.rs`](tests/market_order_test.rs).
