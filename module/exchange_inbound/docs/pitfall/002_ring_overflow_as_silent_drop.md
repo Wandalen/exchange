@@ -17,6 +17,13 @@ A dropped order when the ring is full is indistinguishable, to the submitter, fr
 `Ok` does not mean the record was kept. It is this crate's only
 `with_overflow` call. [`inbound_overflow_reject`] forwards to
 `Producer::try_push`, whose `Err` that policy makes reachable.
+[`inbound_flush`] reports a full ring as a count short of the batch, and is
+`#[must_use]`, so a caller cannot drop the unsent tail without a compile
+warning.
+
+Only the producer sees a reject. The consumer, and `exchange_core`'s event
+log after it, never receive a command the ring refused, so the producer is
+the one that tells the sender.
 
 [`tests/exchange_inbound_test.rs`](../../tests/exchange_inbound_test.rs)'s
 `a_full_ring_rejects_the_next_publish_instead_of_dropping_it` fills a

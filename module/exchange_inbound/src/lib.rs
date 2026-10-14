@@ -22,6 +22,12 @@
 //! full ring's `try_push` returns `Ok` and discards the record.
 //! [`inbound_ring`] always sets [`OverflowPolicy::Fail`], so
 //! [`inbound_overflow_reject`] hands back a command it could not publish.
+//! For a batch, [`inbound_flush`]'s count short of `cmds.len()` is the same
+//! reject, and it is `#[must_use]`.
+//!
+//! Only the producer learns of the reject. A command the ring refused never
+//! reaches the consumer, so `exchange_core`'s event log has no record of it;
+//! telling the sender is the producer's job.
 //!
 //! # Applying a command
 //!

@@ -50,6 +50,11 @@ whatever was published by then. See
 default, `DropNewest`, a full ring's `try_push` returns `Ok` and discards
 the record.
 
+A full ring is a reject the producer sees: `inbound_overflow_reject` hands
+the command back, and `inbound_flush` (`#[must_use]`) returns a count short
+of the batch. The consumer never receives a refused command, so the event
+log has no record of it; the producer tells the sender.
+
 ## Not built: instrument rules
 
 `inbound_apply` refuses what would break the book or its claims — a zero
