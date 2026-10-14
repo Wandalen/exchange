@@ -97,7 +97,7 @@ depends on today.
 
 Step 2 reserves before the order is visible to matching, and releases on
 cancel; step 5 rests only what the match didn't consume, reservation
-retained — together, this is `Exchange::exchange_step`/`Exchange::cancel`'s
+retained — together, this is `Exchange::exchange_step`'s
 own load-bearing ordering, not a restatement of `exchange_escrow`'s or
 `exchange_book`'s own, narrower contracts. Closes hard problem 4
 (escrow before rest) and feature 10 (partial fill, rest the leftover).

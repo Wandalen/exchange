@@ -111,6 +111,23 @@ fn submit_tif
   }
 }
 
+/// Push one `Cancel` through the ring and apply it: the only way to cancel.
+fn cancel
+(
+  exchange : &mut Exchange,
+  producer : &mut Producer< '_, InboundCmd >,
+  consumer : &mut Consumer< '_, InboundCmd >,
+  id : OrderId,
+) -> Result< Quantity, ExchangeError >
+{
+  assert_eq!( inbound_flush( producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, id } ] ), 1 );
+  match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
+  {
+    Some( StepOutcome::Cancelled( result ) ) => result,
+    other => panic!( "cancel() only pushes Cancel — got {other:?}" ),
+  }
+}
+
 /// T11 — one order in, its trades out, through every crate in the family.
 ///
 /// The assertions walk the whole path deliberately: the types crate shaped the
@@ -232,7 +249,7 @@ fn a_cancel_through_the_facade_returns_the_reservation()
   let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "2.50" ), qty( 10 ) ).unwrap();
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), money( "25" ) );
 
-  let withdrawn = exchange.cancel( resting.order ).unwrap();
+  let withdrawn = cancel( &mut exchange, &mut producer, &mut consumer, resting.order ).unwrap();
 
   assert_eq!( withdrawn, qty( 10 ) );
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.available(), money( "1000" ) );
@@ -245,8 +262,11 @@ fn a_cancel_through_the_facade_returns_the_reservation()
 fn cancelling_an_absent_order_is_reported()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  assert_eq!( exchange.cancel( OrderId( 42 ) ), Err( ExchangeError::NotResting( OrderId( 42 ) ) ) );
+  assert_eq!( cancel( &mut exchange, &mut producer, &mut consumer, OrderId( 42 ) ), Err( ExchangeError::NotResting( OrderId( 42 ) ) ) );
 }
 
 /// A filled order cannot then be cancelled — it is not resting.
@@ -261,7 +281,7 @@ fn a_filled_order_cannot_be_cancelled()
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
   let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
 
-  assert!( matches!( exchange.cancel( taking.order ), Err( ExchangeError::NotResting( _ ) ) ) );
+  assert!( matches!( cancel( &mut exchange, &mut producer, &mut consumer, taking.order ), Err( ExchangeError::NotResting( _ ) ) ) );
 }
 
 /// Every state change emitted exactly one event, and the positions are a gapless run.
@@ -280,7 +300,7 @@ fn the_event_stream_numbers_every_event_without_a_gap()
   let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), Quantity::ZERO ).unwrap_err();
-  exchange.cancel( resting.order ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, resting.order ).unwrap();
 
   let positions : Vec< u64 > = exchange.events().iter().map( | event | event.sequence.0 ).collect();
   assert_eq!( positions, ( 0..positions.len() as u64 ).collect::< Vec< _ > >() );
@@ -316,7 +336,7 @@ fn acceptance_records_what_it_reserved_and_cancel_records_what_it_returned()
   let ( mut producer, mut consumer ) = ends.split();
 
   let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "2.50" ), qty( 10 ) ).unwrap();
-  exchange.cancel( resting.order ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, resting.order ).unwrap();
 
   let reserved = exchange.events().iter().find_map( | event | match event.kind
   {
@@ -539,7 +559,7 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
   // unrecoverable before, since `cancel` on a vanished order returns
   // `NotResting` and no other release path exists.
   assert!( matches!( exchange.escrow().reserved_for( ask.order ), Some( Obligation::Asset( _ ) ) ) );
-  exchange.cancel( ask.order ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, ask.order ).unwrap();
   assert_eq!( exchange.escrow().reserved_for( ask.order ), None );
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().asset.available(), qty( 100 ) );
 }
@@ -594,7 +614,7 @@ fn a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for()
   assert_eq!( exchange.book().len(), 1, "only the rest of the bid is left" );
 
   // Cancelling the rest returns everything but the 0.000001 paid.
-  exchange.cancel( taking.order ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, taking.order ).unwrap();
   assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.available(), money( "999.999999" ) );
 }
 
@@ -845,7 +865,7 @@ fn a_resting_order_stays_cancellable_at_the_ceiling()
   assert_eq!( account.cash.available(), money( "8999999996" ), "no proceeds landed" );
   assert_eq!( account.cash.reserved(), money( "1" ) );
 
-  assert_eq!( exchange.cancel( order_1.order ), Ok( qty( 1 ) ) );
+  assert_eq!( cancel( &mut exchange, &mut producer, &mut consumer, order_1.order ), Ok( qty( 1 ) ) );
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.available(), money( "8999999997" ) );
   assert_eq!( exchange.escrow().reserved_for( order_1.order ), None );
 }

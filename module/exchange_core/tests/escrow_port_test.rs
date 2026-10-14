@@ -141,6 +141,23 @@ fn place
   }
 }
 
+/// Push one `Cancel` through the ring and apply it: the only way to cancel.
+fn cancel
+(
+  exchange : &mut Exchange< ScriptedEscrow >,
+  producer : &mut Producer< '_, InboundCmd >,
+  consumer : &mut Consumer< '_, InboundCmd >,
+  id : OrderId,
+) -> Result< Quantity, ExchangeError >
+{
+  assert_eq!( inbound_flush( producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, id } ] ), 1 );
+  match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
+  {
+    Some( StepOutcome::Cancelled( result ) ) => result,
+    other => panic!( "cancel() only pushes Cancel — got {other:?}" ),
+  }
+}
+
 /// Every [`EscrowError`] a reservation can refuse with reaches the caller as
 /// the [`RejectReason`] the facade documents for it, with nothing committed.
 #[ test ]
@@ -274,7 +291,7 @@ fn every_applied_escrow_call_has_its_event()
   run( order( AccountId( 1 ), Side::Sell, "2.00", 2, Tif::Gtc ), SelfMatchPolicy::CancelIncoming );
   let own = run( order( AccountId( 1 ), Side::Buy, "2.00", 1, Tif::Gtc ), SelfMatchPolicy::CancelIncoming );
   assert!( own.self_match_cancelled );
-  exchange.cancel( OrderId( 3 ) ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, OrderId( 3 ) ).unwrap();
 
   let calls = &exchange.escrow().calls;
   let count_calls = | pick : fn( &Call ) -> bool | calls.iter().filter( | call | pick( call ) ).count();
@@ -303,7 +320,7 @@ fn a_cancel_whose_release_fails_leaves_the_order_resting()
 
   place( &mut exchange, &mut producer, &mut consumer, order( AccountId( 1 ), Side::Sell, "1.00", 2, Tif::Gtc ), SelfMatchPolicy::CancelIncoming ).unwrap();
 
-  assert_eq!( exchange.cancel( OrderId( 0 ) ), Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
+  assert_eq!( cancel( &mut exchange, &mut producer, &mut consumer, OrderId( 0 ) ), Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
   assert!( exchange.book().iter().any( | resting | resting.order.id == OrderId( 0 ) ), "the order must still rest" );
   assert!( !exchange.escrow().calls.contains( &Call::Release( OrderId( 0 ) ) ) );
   assert!( !exchange.events().iter().any( | event | matches!( event.kind, EventKind::OrderCancelled { .. } ) ) );

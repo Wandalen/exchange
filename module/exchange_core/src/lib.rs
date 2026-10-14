@@ -45,8 +45,8 @@
 //! [`Exchange::exchange_step`] drains an [`exchange_inbound`] ring and applies
 //! every [`InboundCmd`] it finds, in drain order — see that method's own doc
 //! for the full design (why it owns sequencing rather than trusting a
-//! caller-supplied id/arrival, why `Cancel` delegates to [`Exchange::cancel`]
-//! unchanged, and why `Replace` is not yet wired). Three of the four bullets
+//! caller-supplied id/arrival, why every cancel arrives through it, and why
+//! `Replace` is not yet wired). Three of the four bullets
 //! the previous revision of this doc named as "not implemented" are resolved
 //! as a direct consequence, not a separate effort:
 //!
@@ -135,7 +135,7 @@ pub use exchange_types::{ TypeError, notional, obligation };
 ///   call against a clone first, then replays the same calls for real,
 ///   `expect`ing each to succeed. An implementation that answers the replay
 ///   differently from the dry run panics the facade.
-/// - **A refused call changes nothing.** [`Exchange::cancel`] calls
+/// - **A refused call changes nothing.** A cancel calls
 ///   [`Self::release`] on the real escrow and leaves the order resting when it
 ///   refuses.
 /// - **`Clone` is a full, independent copy.** A dry run that writes through
@@ -378,9 +378,8 @@ pub enum StepOutcome
   /// pipeline the removed `submit` method used to run directly — see
   /// [`Exchange::exchange_step`]'s own doc for what changed.
   Placed( Result< Receipt, ExchangeError > ),
-  /// An [`InboundCmd::Cancel`] ran through [`Exchange::cancel`] unchanged —
-  /// see [`Exchange::exchange_step`]'s own doc for why this delegates rather
-  /// than re-implementing cancellation.
+  /// An [`InboundCmd::Cancel`] was applied: the withdrawn remainder, or why
+  /// nothing was withdrawn.
   Cancelled( Result< Quantity, ExchangeError > ),
   /// An [`InboundCmd::Replace`] was drained, but this facade does not yet
   /// apply it — see [`Exchange::exchange_step`]'s own doc, "Replace is not
@@ -597,9 +596,8 @@ impl< E : EscrowPort > Exchange< E >
 
   /// A copy of the running counters [`Self::exchange_step`] has kept so far.
   ///
-  /// Counts only activity processed through [`Self::exchange_step`] —
-  /// [`Self::cancel`]'s own direct, synchronous path is kept byte-for-byte
-  /// unchanged by this stage's own scope, so it does not feed these counters.
+  /// Every placement and cancel goes through [`Self::exchange_step`], so
+  /// these count all of them.
   #[ must_use ]
   pub fn stats_get( &self ) -> BookStats
   {
@@ -637,13 +635,11 @@ impl< E : EscrowPort > Exchange< E >
   /// order hold regardless of what (if anything) a producer stamped on the
   /// way in.
   ///
-  /// # `Cancel` delegates, it does not re-implement
+  /// # Cancel
   ///
-  /// [`InboundCmd::Cancel`]'s own `instrument` field is never consulted —
-  /// [`Self::cancel`] already does its own authoritative, instrument-agnostic
-  /// search and is already correct and tested, so a command arriving via the
-  /// ring gets exactly the same escrow-release behaviour a direct call would,
-  /// with no second implementation to keep in sync.
+  /// The ring is the only way to cancel; there is no direct call. A
+  /// [`InboundCmd::Cancel`]'s `instrument` field is not consulted: the order
+  /// is found by id across every book.
   ///
   /// # Replace is not yet wired
   ///
@@ -994,7 +990,8 @@ impl< E : EscrowPort > Exchange< E >
     self.reject( order, reason )
   }
 
-  /// Withdraw a resting order's remainder and return its reservation.
+  /// Withdraw a resting order's remainder and return its reservation, and the
+  /// order whole.
   ///
   /// # Errors
   ///
@@ -1020,12 +1017,6 @@ impl< E : EscrowPort > Exchange< E >
   /// safe ordering — "first find it, then let it go" — right up until the
   /// second call's failure mode is traced to something the first call
   /// cannot undo.
-  pub fn cancel( &mut self, id : OrderId ) -> Result< Quantity, ExchangeError >
-  {
-    self.cancel_resting( id ).map( | resting | resting.remaining )
-  }
-
-  /// [`Self::cancel`], returning the withdrawn order whole.
   fn cancel_resting( &mut self, id : OrderId ) -> Result< Resting, ExchangeError >
   {
     let ( account, instrument ) = self.book.iter().find( | resting | resting.order.id == id )

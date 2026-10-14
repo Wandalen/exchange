@@ -895,7 +895,7 @@ fn a_settlement_failing_late_leaves_nothing_committed()
 /// # Why Not Caught
 ///
 /// Every existing call to `release` in this suite, and both call sites in
-/// the exchange engine (`Exchange::cancel` and the self-match cancellation
+/// the exchange engine (a ring `Cancel` and the self-match cancellation
 /// path), name the order's own true owner — each derives `owner` from the very order
 /// record that was used to reserve it, so `owner` can never mismatch through
 /// either mediated path. Nothing exercised a caller reaching `Escrow` directly
