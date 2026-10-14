@@ -7,11 +7,11 @@
 - **In Scope**: The contract's two directions — 010 implements the trait 002 defines, and 010 consumes the events 002 emits.
 - **Out of Scope**: 002 writing any real balance-holding logic itself.
 
-**Design status**: Not held as drawn — see `../boundary/002_out.md`'s Design status: the real `exchange_escrow` crate implements real balance-holding itself rather than leaving it to a future workstream 010 crate.
+**Design status**: Half held. 002's side is built: `exchange_core::EscrowPort` is the trait, and the facade reaches escrow only through it (`module/exchange_core/docs/decisions/002_escrow_reached_through_escrow_port.md`). 010's side is not: the implementation is 002's own `exchange_escrow::Escrow`, which holds real balances itself (see `../boundary/002_out.md`'s Design status), and no 010 crate exists.
 
 ### Statement
 
-The intended contract is a clean two-way handoff: 002 defines the `EscrowPort` trait and calls it without knowing its implementation, and 010 both implements that trait and consumes 002's `Fill` events to perform settlement. In the real build, this handoff never happens — 002 took on 010's half of the contract itself before 010 existed, which is the single most significant boundary divergence the comparison between this proposal and the real build surfaces.
+The intended contract is a clean two-way handoff: 002 defines the `EscrowPort` trait and calls it without knowing its implementation, and 010 both implements that trait and consumes 002's `Fill` events to perform settlement. In the real build, only 002's half exists: the trait is defined and called, but 002 also implements it, taking on 010's half before 010 existed. That remains the single most significant boundary divergence the comparison between this proposal and the real build surfaces.
 
 ### Sources
 
