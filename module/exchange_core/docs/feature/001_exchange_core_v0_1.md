@@ -16,7 +16,10 @@ sell under price-time priority, with every value an exact type.
 **Commitments** — each owned by exactly one artifact this doc points at
 rather than restates:
 
-- **Order semantics.** Market, Limit, and Stop orders; Time-in-Force
+- **Order semantics.** Limit orders, and market orders as a limit order
+  whose price is a cap, sent IOC or FOK (→ [`tests/market_order_test.rs`](../../tests/market_order_test.rs)).
+  No stop orders in v0.1: a client watching the trades sends a capped market
+  order instead. Time-in-Force
   handling for FOK, IOC, and GTC; partial fills that split
   conservation-exact. Matching order is price priority, then time priority
   within a price level (→ [Price-Time Priority Matching](../algorithm/001_price_time_priority_matching.md)).
@@ -25,6 +28,9 @@ rather than restates:
 - **Values.** Every price, quantity, and balance is an
   [`exact_arith`](https://github.com/Wandalen/exact/blob/master/module/exact_arith/readme.md)
   type — the float ban is upstream of this crate, not re-argued here.
+- **Assets.** One trading pair: escrow holds one cash and one asset balance
+  per account, so registration refuses a second pair and an asset traded
+  for itself (→ [`tests/asset_pair_test.rs`](../../tests/asset_pair_test.rs)).
 - **Hosting.** No concurrency host is integrated yet; intake will ride
   whatever mechanism the eventual host provides, never a bespoke one built
   inside this crate.
@@ -68,8 +74,12 @@ version carries it is not fixed here.
 
 **Exit criteria** — v0.1 is done when all four hold:
 
-1. Orders in → trades + events out, for all three order types across all
-   three TIF modes, partial fills included.
+1. Orders in → trades + events out, for limit orders across all three TIF
+   modes and market orders under IOC and FOK, partial fills included.
+   Holds on a grid where one tick times one lot is exact. On an inexact grid
+   matching declines a fill whose notional needs a seventh decimal, so a
+   market buy can end unfilled with asks inside its cap; refusing such grids
+   at registration is planned.
 2. The conservation audit over the emitted event stream balances exactly
    (→ [Conservation Audit](https://github.com/Wandalen/exact/blob/master/module/exact_conserve/readme.md)).
 3. The escrow invariant holds at every observable point under a randomized
@@ -124,7 +134,7 @@ version carries it is not fixed here.
 
 | File | Relationship |
 |------|--------------|
-| `src/lib.rs` | `Exchange` — this scope implemented, less TIF disposition, market orders, self-match, amend and fees |
+| `src/lib.rs` | `Exchange` — this scope implemented, less amend and fees |
 
 ### Tests
 

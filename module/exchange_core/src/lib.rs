@@ -56,7 +56,8 @@
 //! - **Multi-instrument** is real: `exchange_step` reads `instrument` off the
 //!   incoming order itself rather than a facade-wide constant. [`Book`] was
 //!   already keyed by instrument; this was the last piece pinning every
-//!   submission to one of them regardless.
+//!   submission to one of them regardless. Every instrument trades the same
+//!   asset pair, though; see the next section.
 //! - **Self-match policy** is a parameter on [`Exchange::exchange_step`]
 //!   itself, supplied per call exactly like `exchange_match::cross`'s own
 //!   `policy` parameter — never stored on `Exchange`, matching the rest of
@@ -67,9 +68,11 @@
 //!
 //! Named rather than silently absent:
 //!
-//! - **Market orders.** Only limit orders exist. A market order is a limit
-//!   order with no price bound, which changes the crossing predicate and the
-//!   reservation rule together; nothing here exercises one.
+//! - **Stop orders.** Out of v0.1. A market order needs no type of its own:
+//!   it is a limit order whose price is a cap, sent IOC or FOK.
+//! - **More than one asset pair.** Escrow holds one cash and one asset
+//!   balance per account, so [`Exchange::spec_register`] admits one pair
+//!   (hard problem 19).
 //! - **Amend and fees.** Both are specified at family grain. Fees in
 //!   particular have a decided hook position and an undecided schedule, so
 //!   implementing the hook now would be building a parameter nobody can
@@ -282,6 +285,23 @@ pub enum ExchangeError
   /// silently changing a live grid would strand every order already resting
   /// against the old one.
   SpecAlreadyRegistered( InstrumentId ),
+  /// [`Exchange::spec_register`] was asked to register an instrument whose
+  /// base asset is its quote asset. Escrow would hold the one asset as two
+  /// balances, cash and asset, and [`verify`] would audit them apart.
+  BaseIsQuote( InstrumentId ),
+  /// [`Exchange::spec_register`] was asked to register an instrument on an
+  /// asset pair other than the one already registered. Escrow keeps one cash
+  /// and one asset holding per account, so a second pair would share both
+  /// with the first, and [`verify`] could not tell them apart.
+  SecondAssetPair
+  {
+    /// The instrument refused.
+    id : InstrumentId,
+    /// The `( base, quote )` already registered.
+    held : ( AssetId, AssetId ),
+    /// The `( base, quote )` `id` asked for.
+    asked : ( AssetId, AssetId ),
+  },
   /// [`Exchange::depth_get`] was asked for the top zero levels.
   Depth( DepthError ),
   /// [`Exchange::halt_set`]/[`Exchange::halt_clear`] asked for a state the
@@ -302,6 +322,13 @@ impl core::fmt::Display for ExchangeError
       Self::UnknownInstrument( id ) => write!( f, "instrument {} has no registered spec", id.0 ),
       Self::Spec( error ) => write!( f, "spec refused: {error}" ),
       Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
+      Self::BaseIsQuote( id ) => write!( f, "instrument {} trades an asset for itself", id.0 ),
+      Self::SecondAssetPair { id, held, asked } => write!
+      (
+        f,
+        "instrument {} trades asset {} for asset {}; this exchange trades asset {} for asset {}",
+        id.0, asked.0.0, asked.1.0, held.0.0, held.1.0,
+      ),
       Self::Depth( error ) => write!( f, "depth refused: {error}" ),
       Self::Halt( error ) => write!( f, "halt refused: {error}" ),
     }
@@ -320,7 +347,7 @@ impl core::error::Error for ExchangeError
       Self::Depth( error ) => Some( error ),
       Self::Halt( error ) => Some( error ),
       Self::Rejected( _ ) | Self::NotResting( _ ) | Self::UnknownInstrument( _ )
-      | Self::SpecAlreadyRegistered( _ ) => None,
+      | Self::SpecAlreadyRegistered( _ ) | Self::BaseIsQuote( _ ) | Self::SecondAssetPair { .. } => None,
     }
   }
 }
@@ -393,8 +420,9 @@ pub enum StepOutcome
 /// [`verify`] nets separately.
 ///
 /// Escrow's own partition, not an instrument's [`AssetId`]s: escrow keeps one
-/// cash and one asset holding per account for every instrument, so two
-/// instruments' base assets are one balance there, and a posting keyed finer
+/// cash and one asset holding per account for every instrument. That is
+/// sound only because [`Exchange::spec_register`] admits one asset pair, so
+/// `Cash` is that pair's quote and `Asset` its base. A posting keyed finer
 /// than the balance it moves would audit a separation that does not exist.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord ) ]
 pub enum PostingAsset
@@ -491,10 +519,19 @@ impl< E : EscrowPort > Exchange< E >
   ///
   /// # Errors
   ///
+  /// Checked in this order, the first that applies wins: the id, the spec on
+  /// its own (grid, then assets), then the pair against the one registered.
+  ///
   /// [`ExchangeError::SpecAlreadyRegistered`] if `id` is already registered —
   /// refused rather than overwritten, since replacing a live tick/lot grid
   /// would silently change the terms under orders already resting against the
   /// old one. [`ExchangeError::Spec`] if `tick` or `lot` is zero.
+  /// [`ExchangeError::BaseIsQuote`] if `base` is `quote`.
+  /// [`ExchangeError::SecondAssetPair`] if another instrument is
+  /// registered on a different `( base, quote )`: v0.1 trades one pair. The
+  /// rule holds per `Exchange`; two of them sharing one escrow through a
+  /// custom [`EscrowPort`] could each register a different pair, and share
+  /// its balances again.
   pub fn spec_register
   (
     &mut self,
@@ -510,6 +547,15 @@ impl< E : EscrowPort > Exchange< E >
       return Err( ExchangeError::SpecAlreadyRegistered( id ) );
     }
     let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
+    if base == quote
+    {
+      return Err( ExchangeError::BaseIsQuote( id ) );
+    }
+    if let Some( held ) = self.specs.values().next().map( | held | ( held.base, held.quote ) )
+      && held != ( base, quote )
+    {
+      return Err( ExchangeError::SecondAssetPair { id, held, asked : ( base, quote ) } );
+    }
     self.specs.insert( id, spec );
     Ok( () )
   }

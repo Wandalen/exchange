@@ -25,6 +25,7 @@ silently absorbed.
 1. **Validate.** Reject malformed orders whole: unknown type, unknown TIF,
    non-positive quantity, or any value field that is not an exact type.
 2. **Reserve escrow.** Reserve the order's maximum settlement obligation
+   (a buy owes its limit price × quantity; a market buy's limit is its cap)
    before it can match or rest; rejection on insufficient funds happens
    here, atomically, with nothing yet visible to the book
    (→ [Escrow Covers Resting Orders](../invariant/001_escrow_covers_resting_orders.md)).
@@ -96,9 +97,6 @@ its matching algorithm or order-book data flow (→ external design corpus
 
 **Still open at this grain — named, not decided here:**
 
-- **Stop-order trigger semantics** — when a Stop becomes an executable
-  Market/Limit order, and against which price feed. Untouched: the
-  implementation is limit-only.
 - **Fee rate and schedule** — flat, maker/taker pair, volume-tiered, or
   per-account. Open. The fee *hook position* is no longer open: fees are
   assessed at exactly one point, in step 3 at trade generation, against that

@@ -54,12 +54,13 @@ block, then exits `ok`.
 Limit orders under price-time priority are implemented, tested, and graded by
 the smoke lane above. Time-in-force (`GTC`/`IOC`/`FOK`/post-only) is
 implemented in `exchange_match::cross` — see that crate's own module doc for
-the FOK probe-then-commit rule and the post-only refusal. Three things are
+the FOK probe-then-commit rule and the post-only refusal. Four things are
 deliberately not here yet, named rather than left to be discovered as gaps:
 
 | Not yet built | Current behavior |
 |----------------|-------------------|
-| Market orders | limit only |
+| Stop orders | out of v0.1; a market order is a limit order whose price is a cap, sent IOC or FOK |
+| More than one asset pair | `spec_register` admits one pair; escrow holds one cash and one asset balance per account |
 | Amend | cancel exists; amend does not |
 | Fees | the assessment point is fixed; no schedule is decided, nothing is charged |
 

@@ -39,11 +39,12 @@ retry after a lost acknowledgement cannot rest twice. The source design's
 wrapper, and validation happens at the submission boundary — see
 [`docs/decisions/001_no_order_mutation_or_error.md`](docs/decisions/001_no_order_mutation_or_error.md).
 
-## Not built: market, stop, iceberg
+## Market needs no type; stop and iceberg are not built
 
-A market order has no limit, so both the crossing predicate and the
-reservation — which reserves at the limit price — change with it. A stop needs
-something watching trade prices to trigger it. An iceberg hides part of its
+A market order needs no type: it is an `Order` whose `price` is a cap, sent
+IOC or FOK, and a market sell's cap is zero. Nothing enforces the IOC or FOK:
+a zero-price sell sent GTC rests, and the next buy takes it for nothing. A stop needs something watching
+trade prices to trigger it, and is out of v0.1. An iceberg hides part of its
 quantity, which `exchange_depth` and `exchange_snap` would have to honour, and
 re-queues on each refresh.
 

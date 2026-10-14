@@ -82,7 +82,7 @@ range, or how it rounds.
 
 | Kind | Emitted when | Distinguishing payload | Effect on book and ledger |
 |------|--------------|------------------------|---------------------------|
-| `OrderAccepted` | Validation and reservation both succeed, before any matching | Side, order type, limit price (absent for a market order), submitted quantity, Time-in-Force, self-match key, reserved amount | Quantity moved `available → reserved`; the order becomes visible to matching. Its `sequence` is the order's arrival position |
+| `OrderAccepted` | Validation and reservation both succeed, before any matching | Side, limit price (a market order's cap; v0.1 has no separate order type), submitted quantity, Time-in-Force, self-match key, reserved amount | Quantity moved `available → reserved`; the order becomes visible to matching. Its `sequence` is the order's arrival position |
 | `OrderRejected` | Validation fails, or the reservation cannot be taken in full | Rejection reason, from a **closed** set | None. No book state ever existed and no units were reserved |
 | `Trade` | The match loop generates one fill | Resting order id, resting account id, executed price, executed quantity, and the fee assessed against each side | Both orders' remaining quantities reduced by the executed quantity; both reservations reduced by their matched portions; the units transfer |
 | `OrderCancelled` | A remainder is withdrawn | Cause — request, Time-in-Force disposition, or self-match — plus cancelled quantity and released amount | The order leaves the book; the remainder's reservation returns to `available` |

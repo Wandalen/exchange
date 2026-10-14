@@ -1214,7 +1214,7 @@ fn stats_are_kept_per_instrument_and_in_total()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
   let other = InstrumentId( 2 );
-  exchange.spec_register( other, AssetId( 1 ), AssetId( 3 ), price( "0.01" ), qty( 1 ) ).unwrap();
+  exchange.spec_register( other, AssetId( 1 ), AssetId( 2 ), price( "0.01" ), qty( 1 ) ).unwrap();
 
   let on = | instrument, account, side, quantity | Order
   {
@@ -1472,7 +1472,7 @@ fn an_order_off_the_grid_is_rejected()
 {
   let mut exchange = market();
   let coarse = InstrumentId( 2 );
-  exchange.spec_register( coarse, AssetId( 1 ), AssetId( 3 ), price( "0.05" ), qty( 2 ) ).unwrap();
+  exchange.spec_register( coarse, AssetId( 1 ), AssetId( 2 ), price( "0.05" ), qty( 2 ) ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
