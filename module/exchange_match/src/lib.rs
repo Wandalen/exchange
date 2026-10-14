@@ -266,7 +266,9 @@ fn settleable( executed : Price, taken : Quantity ) -> bool
 ///
 /// [`MatchError::PostOnlyWouldTake`] if `incoming` is post-only and
 /// [`would_take`] holds, with `book` untouched. The other variants guard
-/// states the loop cannot reach; see each.
+/// states the loop cannot reach; see each. One returned mid-loop would leave
+/// the trades before it applied to `book` and unreported, so `exchange_core`
+/// crosses a clone first.
 pub fn cross( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) -> Result< Crossing, MatchError >
 {
   if !tif_takes( incoming.tif ) && would_take( book, incoming )
@@ -391,8 +393,10 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
 /// Withdraw the self-matched resting order `id`, which the loop just read at
 /// the front of the book.
 ///
-/// The book refusing means the two disagree about what rests. Ignored, the
-/// loop would read the same order again: under cancel-resting, forever.
+/// Cannot fail: [`Book::cancel`] checks each side's front first, and `id` is
+/// there. [`Book::insert`] refusing an id that rests on either side makes the
+/// order removed the one the loop read. A failure, ignored, would have the
+/// loop read the same order again: under cancel-resting, forever.
 fn withdraw( book : &mut Book, instrument : InstrumentId, id : OrderId ) -> Result< (), MatchError >
 {
   book.cancel( instrument, id ).map( drop ).ok_or( MatchError::BookDesynchronized )
