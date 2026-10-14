@@ -129,7 +129,7 @@ fn submit
 {
   let quantity = order.quantity;
   let resting = Resting { order, remaining : quantity, arrival : Sequence( 0 ) };
-  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  let pushed = inbound_flush( producer, &[ InboundCmd::Place( resting ) ] );
   assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
 
   match exchange.exchange_step( consumer, policy ).into_iter().next()

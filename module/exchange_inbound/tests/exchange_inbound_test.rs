@@ -90,11 +90,57 @@ fn flush_accepts_as_many_as_fit_and_reports_the_count()
   let mut ends = split.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let cmds = ( 1..=4u64 ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } );
-  let accepted = inbound_flush( &mut producer, cmds );
+  let cmds : Vec< _ > = ( 1..=4u64 ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).collect();
+  let accepted = inbound_flush( &mut producer, &cmds );
 
   assert_eq!( accepted, 2, "capacity 2 — only the first two of four fit" );
   assert_eq!( inbound_drain( &mut consumer ).len(), 2 );
+}
+
+/// What a flush could not publish stays with the caller.
+///
+/// # Root Cause
+///
+/// `inbound_flush` took any iterator. `try_push_batch` pulls one command past
+/// what a full ring takes and hands it back in its error, and the flush
+/// dropped that error's command, so a caller resuming from the same iterator
+/// lost one command per partial flush — through a capacity-2 ring, 1, 2, 4
+/// arrived and 3 never did.
+///
+/// # Why Not Caught
+///
+/// The partial-flush test passed its iterator by value and checked the count
+/// only.
+///
+/// # Fix Applied
+///
+/// `inbound_flush` takes a slice; what did not fit is `cmds[ n.. ]`.
+///
+/// # Prevention
+///
+/// Test a partial batch by publishing the rest of it.
+///
+/// # Pitfall
+///
+/// The overflow pitfall this crate guards against at `try_push`, one call
+/// over.
+#[ test ]
+fn a_flush_leaves_what_did_not_fit_with_the_caller()
+{
+  let mut split = inbound_ring( 2 ).unwrap();
+  let mut ends = split.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+  let cmds : Vec< _ > = ( 1..=4u64 ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).collect();
+
+  let mut drained = Vec::new();
+  let mut sent = 0;
+  while sent < cmds.len()
+  {
+    sent += inbound_flush( &mut producer, &cmds[ sent.. ] );
+    drained.extend( inbound_drain( &mut consumer ) );
+  }
+
+  assert_eq!( drained, cmds );
 }
 
 #[ test ]

@@ -18,7 +18,7 @@ The exposed surface of `exchange_inbound`, as built.
 | `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError), DuplicateClientId, ZeroQuantity, NotNew }`, with `Display`, `Error`, `From<MatchError>`, `From<IdemError>` |
 | `Claims` | struct | `{ /* private */ }`, `Claims::new()` — the `( AccountId, ClientOrderId )`s `inbound_apply` has accepted |
 | `inbound_ring` | fn | `(capacity: usize) -> Result<Split<InboundCmd>, BuildError>` |
-| `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: impl IntoIterator<Item = InboundCmd>) -> usize` |
+| `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: &[InboundCmd]) -> usize` — publishes a prefix, `cmds[n..]` stays the caller's |
 | `inbound_overflow_reject` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmd: InboundCmd) -> Result<(), InboundCmd>` |
 | `inbound_drain` | fn | `(consumer: &mut Consumer<'_, InboundCmd>) -> Vec<InboundCmd>` |
 | `inbound_apply` | fn | `(book: &mut Book, claims: &mut Claims, policy: SelfMatchPolicy, cmd: InboundCmd) -> Result<InboundOutcome, InboundApplyError>` |
@@ -40,9 +40,10 @@ The source design (`core_exchange.txt:482-487`, `652-661`) names
   refused command back instead of a typed error.
 - **No `Inbound` or `inbound_producer`.** `inbound_ring` returns a
   `Split<InboundCmd>`; `.ends().split()` gives the producer and consumer.
-- **`inbound_flush` takes any iterator.** `ring_tls` is not a dependency, so
+- **`inbound_flush` takes a slice.** `ring_tls` is not a dependency, so
   there is no thread-local stage to flush from; it forwards to
-  `Producer::try_push_batch`.
+  `Producer::try_push_batch`, and what does not fit stays in the caller's
+  slice.
 - **No `InboundError`.** Each failure belongs to the crate that produces it:
   `BuildError`, `MatchError`, `RestReplaceError` inside
   `InboundOutcome::Replaced`, the refused command on overflow. Nothing can

@@ -183,17 +183,23 @@ pub fn inbound_ring( capacity : usize ) -> Result< Split< InboundCmd >, BuildErr
   Factory.build::< InboundCmd >( cfg )
 }
 
-/// Publish as many of `cmds` as the ring takes, and return how many —
-/// [`Producer::try_push_batch`]. A partial batch is not a failure.
+/// Publish the front of `cmds`, as much as the ring takes, and return how
+/// many — [`Producer::try_push_batch`]. A partial batch is not a failure:
+/// `cmds[ n.. ]` is still the caller's to publish later.
 //
 // Fix(flush_accepts_as_many_as_fit_and_reports_the_count):
 // Root cause: written against a `usize`-returning `try_push_batch`, which
 // returns `Result< usize, ( usize, T ) >`, so it never compiled.
 // Pitfall: a thin forward still has to match what it forwards to.
-pub fn inbound_flush( producer : &mut Producer< '_, InboundCmd >, cmds : impl IntoIterator< Item = InboundCmd > ) -> usize
+//
+// Fix(a_flush_leaves_what_did_not_fit_with_the_caller):
+// Root cause: taking any iterator, the flush pulled one command past what
+// the ring took and dropped it with the batch's error, so a caller resuming
+// from the same iterator lost it.
+// Pitfall: a partial batch is the normal case, so its cut must lose nothing.
+pub fn inbound_flush( producer : &mut Producer< '_, InboundCmd >, cmds : &[ InboundCmd ] ) -> usize
 {
-  let mut cmds = cmds.into_iter();
-  match producer.try_push_batch( &mut cmds )
+  match producer.try_push_batch( &mut cmds.iter().copied() )
   {
     Ok( n ) | Err( ( n, _ ) ) => n,
   }
