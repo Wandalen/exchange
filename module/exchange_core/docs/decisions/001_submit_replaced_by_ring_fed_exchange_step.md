@@ -107,9 +107,9 @@ producer or reassign.
 
 ## Related
 
-- `exchange_inbound`'s own module doc, "What this crate does not do" — names
-  sequencing as an accept-time decision this crate only carries, anticipating
-  this ADR's point 2.
+- `exchange_inbound`'s module doc, "Applying a command" — arrivals are the
+  producer's and that crate does not sequence, anticipating this ADR's
+  point 2.
 - `exchange_rest`'s own module doc — names escrow orchestration as a
   facade-level concern, the basis for this ADR's point 4.
 - [`../../../exchange_rest/docs/pitfall/002_rest_replace_trusts_new_resting_instrument.md`](../../../exchange_rest/docs/pitfall/002_rest_replace_trusts_new_resting_instrument.md) —

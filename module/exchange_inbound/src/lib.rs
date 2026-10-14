@@ -1,139 +1,61 @@
-//! Ring-fed inbound commands: many producer lanes, one deterministic apply.
+//! Inbound commands over a ring: a producer publishes [`InboundCmd`]s, one
+//! consumer drains them in order and applies them to a [`Book`].
 //!
-//! Closes hard problems 11 (inbound at the aeon edge), 23 (full order of
-//! inbound) and 24 (ring overflow is reject), and features 29 (inbound
-//! flush, drain, then rest or match) and 30 (overflow → reject) — not hard
-//! problem 1, which is `exchange_book`'s own "one book per instrument" with
-//! no producer-ordering content. [`inbound_drain`] is the already-drained
-//! slice hard problem 11 asks for; the fixed lane order the "Two producers"
-//! section below describes is hard problem 23's stable total order;
-//! [`inbound_overflow_reject`]/[`ring_types::OverflowPolicy::Fail`] is hard
-//! problem 24 and feature 30 together; [`inbound_flush`] →
-//! [`inbound_drain`] → [`inbound_apply`] is feature 29's flush-drain-then-
-//! rest-or-match sequence end to end. This crate is the family's first use
-//! of real concurrency. Depends on
-//! `ring_factory` + `ring_handle` + `ring_types` only, per
-//! `docs/ring_edge/001_*.md`'s resolved finding: `ring_handle::Producer`
-//! cannot be cloned (by design — see its own module doc's "`try_clone` is
-//! withheld" row) and `ring_core`/`ring_mpsc`'s actual multi-producer claim
-//! path sits below the family's five-crate export Contract. One ring,
-//! reached through this crate, therefore has **exactly one producer**, full
-//! stop — never two threads racing on the same `Producer` value.
+//! `exchange_core::Exchange::exchange_step` drains these rings and applies
+//! each command itself, with escrow, caps and halt. [`inbound_apply`] is the
+//! book-level apply, for a caller without the facade.
 //!
-//! # Two producers without two threads on one ring
+//! # One producer per ring
 //!
-//! `docs/phase/028_p28_drain.md` asks for drain order to be deterministic
-//! "not thread-completion-order-dependent" across **real** concurrent
-//! producers — so simulating "two producers" as one thread pushing twice,
-//! sequentially, would not exercise the property the phase cares about at
-//! all. The resolution: **one [`inbound_ring`] per producer**, each with its
-//! own exclusively-owned [`Producer`], genuinely raced from its own OS
-//! thread — and a consumer-side combine step that concatenates each lane's
-//! [`inbound_drain`] result in a **fixed lane order decided ahead of time**,
-//! never by which thread happened to finish first. Real concurrency at the
-//! push side; a result insensitive to its scheduling at the drain side. See
-//! `docs/decisions/001_two_producers_is_two_rings.md` for the full case
-//! against the alternative (one shared ring, `Producer` behind a `Mutex`) —
-//! that would reintroduce the exact lock contention this family exists to
-//! avoid, for a capability (`ring_handle::Producer::try_clone`) this crate's
-//! dependency set does not have anyway.
+//! `ring_handle::Producer` cannot be cloned, and this crate uses the `ring_*`
+//! export crates only, so a ring has exactly one producer. Many producers are
+//! many rings, each raced from its own thread and drained in a lane order the
+//! caller fixes ahead of time, never in the order the threads finished
+//! (`docs/decisions/001_two_producers_is_two_rings.md`). The combined order
+//! repeats from run to run only if each lane is drained once its producer has
+//! stopped: [`inbound_drain`] takes what was published before the call, so a
+//! live lane is cut wherever its producer happens to be.
 //!
-//! # Overflow is a reject, not a drop — by explicit configuration
+//! # Overflow is a reject
 //!
-//! `RingConfig::new`'s own default overflow policy is
-//! [`ring_types::OverflowPolicy::DropNewest`] — a full ring's `try_push`
-//! would return `Ok(())` while silently discarding the record (see
-//! `ring_handle::Producer::try_push`'s own doc comment: "an `Ok` is not by
-//! itself evidence the record was kept"). `docs/phase/029_p29_over.md`
-//! wants the opposite: a full ring must come back as a **visible** rejection.
-//! [`inbound_ring`] therefore always builds with
-//! [`ring_types::OverflowPolicy::Fail`] — never the default — which is what
-//! makes [`inbound_overflow_reject`]'s `Err` case reachable at all rather
-//! than vacuously unreachable behind a policy that never fails.
+//! `RingConfig::new` defaults to `OverflowPolicy::DropNewest`, under which a
+//! full ring's `try_push` returns `Ok` and discards the record.
+//! [`inbound_ring`] always sets [`OverflowPolicy::Fail`], so
+//! [`inbound_overflow_reject`] hands back a command it could not publish.
 //!
-//! # `inbound_apply`'s `Place` reaches into `exchange_match`, not just `exchange_rest`
+//! # Applying a command
 //!
-//! A `Place` command names a *new* order, not one already resting — crossing
-//! it against the book before any remainder rests is what
-//! `exchange_match::cross` exists for, and skipping that step (going
-//! straight to `exchange_rest::rest_place`, an unconditional insert) would
-//! let a marketable order rest unmatched, silently wrong. `Cancel`/`Replace`
-//! act on an order already on the book, which is exactly `exchange_rest`'s
-//! own scope — no crossing involved either way. This mirrors
-//! `exchange_core::submit`'s shape in miniature, without duplicating its
-//! cap/escrow orchestration: those stay facade-level concerns Stage 9 has
-//! not yet wired this crate into. Idempotency is the one exception — see
-//! the next section for why it is checked here instead.
+//! A [`InboundCmd::Place`] is a new order: `exchange_match::cross` crosses it
+//! first, and only a remainder its time in force lets rest goes to
+//! `exchange_rest::rest_place`. Cancel and replace act on a resting order and
+//! go to `exchange_rest`. Arrivals are the producer's; nothing here
+//! sequences.
 //!
-//! # Idempotency
-//!
-//! [`inbound_apply`] takes the caller's [`Claims`], refuses a
-//! [`InboundCmd::Place`] whose id it already claims before crossing, and
-//! claims the id with `exchange_idem::idem_insert` once the remainder rests —
-//! and un-claims it with
-//! `exchange_idem::idem_remove` once a [`InboundCmd::Cancel`]/
-//! [`InboundCmd::Replace`] actually withdraws it, so a legitimate
-//! cancel-then-resubmit is accepted again rather than permanently refused.
-//!
-//! A `Place` carrying a `ClientOrderId` is refused too if its account already
-//! placed an order under it — the rule `exchange_core` applies, claim never
-//! released included, so a caller bypassing the facade keeps the retry
-//! guarantee. `Replace` neither checks nor claims a client id.
-//!
-//! This is *not* the same orchestration-stays-in-the-facade story the
-//! paragraph above tells for cap/escrow. Unlike those two, idempotency has a
-//! real, demonstrated gap at this crate's own level today: `exchange_core`'s
-//! facade never reaches `inbound_apply` at all (`Exchange::step_one` runs
-//! its own, separate, already-id-fresh pipeline — see that method's own
-//! doc), so an id arriving through *this* crate's own public
-//! [`inbound_apply`] has no upstream guarantee of freshness the way one
-//! arriving through the facade does. Before this check existed, a repeat id
-//! reaching [`rest_place`]'s own pre-existing duplicate guard was silently
-//! dropped in release builds — see [`inbound_apply`]'s own
-//! `Fix(exchange_inbound/BUG-003)` comment.
-//!
-//! See `exchange_idem`'s own module doc for why this does not duplicate
-//! `exchange_book::Book::insert`'s pre-existing duplicate-id guard: that
-//! guard already *has* the same information, just without a name a caller
-//! can branch on separately from "this quantity was already zero" — this
-//! crate's `idem_insert` call is what gives it one, named and returned to
-//! the caller rather than silently discarded the way a bare `rest_place`
-//! bool was before `Fix(exchange_inbound/BUG-003)`. An id is claimed only
-//! while its order rests, but checked before crossing: a repeat that crossed
-//! first would trade against the book and then be refused.
-//!
-//! # What this crate does not do
-//!
-//! It does not assign `arrival`/`Sequence` — a [`Resting`] inside
-//! [`InboundCmd::Place`] arrives already sequenced, by whichever producer
-//! built it (realistically, the eventual facade's `seq_next()`, once Stage 9
-//! wires this crate in). Sequencing inbound commands is an accept-time
-//! decision; this crate only carries and applies what it is given.
+//! A `Place` naming an order id that rests, or a client id its account
+//! already used, is refused before it crosses. The book says which order ids
+//! rest: once an order has left it, however it left, its id is free again.
+//! [`Claims`] keeps the client ids, for good, as `exchange_core` keeps them;
+//! a retry of an order that filled is known by its client id.
 
+use exact_arith::Quantity;
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
-use exchange_idem::{ idem_insert, idem_remove, idem_seen };
+use exchange_idem::{ idem_insert, idem_seen, IdSet };
 use exchange_match::{ cross, Crossing, MatchError, SelfMatchPolicy };
 use exchange_rest::{ rest_cancel, rest_place, rest_replace, RestReplaceError };
 use exchange_tif::tif_rests;
 use ring_factory::Factory;
 use ring_types::OverflowPolicy;
 
-pub use exchange_idem::{ IdemError, IdSet };
 pub use ring_factory::{ BuildError, RingConfig };
 pub use ring_handle::{ Consumer, Drain, Ends, Producer, Split };
 
-/// One command carried from a producer, through the ring, to the book.
-///
-/// Every variant is a direct call shape for one of `exchange_rest`'s three
-/// non-matching moves, or — for [`Place`](Self::Place) — for
-/// `exchange_match::cross` instead, per the module doc's "`inbound_apply`'s
-/// `Place`" section.
+/// One command from a producer to the book.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum InboundCmd
 {
-  /// A new order, not yet on the book. Carries its own `remaining`/`arrival`
-  /// — see the module doc's "What this crate does not do".
+  /// A new order: its `remaining` the whole quantity, its `arrival` as its
+  /// producer stamped it.
   Place( Resting ),
   /// Withdraw `id`, resting on `instrument`'s book, whichever side.
   Cancel
@@ -143,8 +65,8 @@ pub enum InboundCmd
     /// The resting order to withdraw.
     id : OrderId,
   },
-  /// Atomically replace `old_id` with `new_resting` — see
-  /// [`exchange_rest::rest_replace`] for the all-or-nothing guarantee.
+  /// Replace `old_id` with `new_resting` in one step —
+  /// [`exchange_rest::rest_replace`].
   Replace
   {
     /// Which instrument's book `old_id` rests on.
@@ -172,17 +94,19 @@ pub enum InboundOutcome
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum InboundApplyError
 {
-  /// [`exchange_match::cross`] itself refused. Reachable only as
-  /// [`MatchError::PostOnlyWouldTake`]; see that function's own doc for why
-  /// every other variant is not.
+  /// [`exchange_match::cross`] refused: in practice
+  /// [`MatchError::PostOnlyWouldTake`], with `book` untouched.
   Match( MatchError ),
-  /// [`InboundCmd::Place`] named an id that is already claimed by an earlier,
-  /// not-yet-cancelled `Place` — a retried submission, not a new order. See
-  /// the module doc's "Idempotency" section.
-  Idem( IdemError ),
-  /// [`InboundCmd::Place`] carried a `ClientOrderId` its account already
-  /// placed an order under — a retry, not a new order.
+  /// A [`InboundCmd::Place`] named an order id that rests on the book.
+  OrderIdRests,
+  /// A [`InboundCmd::Place`] carried a client id its account already placed
+  /// an order under — a retry, not a new order.
   DuplicateClientId,
+  /// A [`InboundCmd::Place`] for a quantity of zero.
+  ZeroQuantity,
+  /// A [`InboundCmd::Place`] whose `remaining` is not its quantity: a new
+  /// order has none of it filled.
+  NotNew,
 }
 
 impl core::fmt::Display for InboundApplyError
@@ -192,8 +116,10 @@ impl core::fmt::Display for InboundApplyError
     match self
     {
       Self::Match( error ) => write!( f, "matching failed: {error}" ),
-      Self::Idem( error ) => write!( f, "place refused: {error}" ),
+      Self::OrderIdRests => write!( f, "place refused: an order under this id rests on the book" ),
       Self::DuplicateClientId => write!( f, "place refused: this account already placed an order under this client id" ),
+      Self::ZeroQuantity => write!( f, "place refused: the quantity is zero" ),
+      Self::NotNew => write!( f, "place refused: a new order's remaining must be its whole quantity" ),
     }
   }
 }
@@ -205,8 +131,7 @@ impl core::error::Error for InboundApplyError
     match self
     {
       Self::Match( error ) => Some( error ),
-      Self::Idem( error ) => Some( error ),
-      Self::DuplicateClientId => None,
+      Self::OrderIdRests | Self::DuplicateClientId | Self::ZeroQuantity | Self::NotNew => None,
     }
   }
 }
@@ -219,20 +144,11 @@ impl From< MatchError > for InboundApplyError
   }
 }
 
-impl From< IdemError > for InboundApplyError
-{
-  fn from( error : IdemError ) -> Self
-  {
-    Self::Idem( error )
-  }
-}
-
-/// What [`inbound_apply`] has claimed: an order id while its order rests, and
-/// every `( AccountId, ClientOrderId )` it accepted, for good.
+/// Every `( AccountId, ClientOrderId )` [`inbound_apply`] has accepted, for
+/// good. Which order ids are taken, the book says.
 #[ derive( Debug, Clone, Default ) ]
 pub struct Claims
 {
-  orders : IdSet,
   clients : IdSet< ( AccountId, ClientOrderId ) >,
 }
 
@@ -246,107 +162,117 @@ impl Claims
   }
 }
 
-/// Build one ring of `capacity` inbound-command slots.
-///
-/// Always configured with [`OverflowPolicy::Fail`] — never the ring family's
-/// own default — per the module doc's "Overflow is a reject" section. One
-/// ring is one producer; see the module doc's "Two producers without two
-/// threads" section for why many producers means many rings, not one shared
-/// one.
+/// Build one ring of `capacity` command slots, one producer, overflow
+/// refused — see the module doc.
 ///
 /// # Errors
 ///
-/// [`BuildError`] on an invalid `capacity` (zero, or not a power of two) or
-/// an unsupported configuration — neither reachable here, since the only
-/// policy ever requested is one every in-house backend accepts.
+/// [`BuildError::Unsupported`], carrying the ring's own error, on a
+/// `capacity` of zero or not a power of two. Every backend accepts
+/// [`OverflowPolicy::Fail`].
 pub fn inbound_ring( capacity : usize ) -> Result< Split< InboundCmd >, BuildError >
 {
   let cfg = RingConfig::new( capacity ).map_err( BuildError::Unsupported )?.with_overflow( OverflowPolicy::Fail );
   Factory.build::< InboundCmd >( cfg )
 }
 
-/// Publish as many of `cmds` as the ring will take.
-///
-/// A thin forward to [`Producer::try_push_batch`] — see that method's own
-/// doc comment: partial acceptance is the normal case, not a failure.
-// Fix(exchange_inbound/BUG-001): try_push_batch returns Result<usize, (usize, T)>,
-// not usize — the Err case still carries the accepted count (the usize field),
-// which is what a partial-acceptance caller needs, same as the Ok case.
-// Root cause: inbound_flush was written against an assumed usize-returning
-// signature; ring_handle::Producer::try_push_batch's real signature already
-// returns Result<usize, (usize, T)> and was never usize — this forward never
-// compiled against the real API.
-// Pitfall: a "thin forward" doc comment is not itself proof the call compiles —
-// confirm the wrapped method's real signature, not just its documented intent.
-pub fn inbound_flush( producer : &mut Producer< '_, InboundCmd >, cmds : impl IntoIterator< Item = InboundCmd > ) -> usize
+/// Publish the front of `cmds`, as much as the ring takes, and return how
+/// many — [`Producer::try_push_batch`]. A partial batch is not a failure:
+/// `cmds[ n.. ]` is still the caller's to publish later.
+//
+// Fix(flush_accepts_as_many_as_fit_and_reports_the_count):
+// Root cause: written against a `usize`-returning `try_push_batch`, which
+// returns `Result< usize, ( usize, T ) >`, so it never compiled.
+// Pitfall: a thin forward still has to match what it forwards to.
+//
+// Fix(a_flush_leaves_what_did_not_fit_with_the_caller):
+// Root cause: taking any iterator, the flush pulled one command past what
+// the ring took and dropped it with the batch's error, so a caller resuming
+// from the same iterator lost it.
+// Pitfall: a partial batch is the normal case, so its cut must lose nothing.
+pub fn inbound_flush( producer : &mut Producer< '_, InboundCmd >, cmds : &[ InboundCmd ] ) -> usize
 {
-  let mut cmds = cmds.into_iter();
-  match producer.try_push_batch( &mut cmds )
+  match producer.try_push_batch( &mut cmds.iter().copied() )
   {
     Ok( n ) | Err( ( n, _ ) ) => n,
   }
 }
 
-/// Publish one command, surfacing a full ring as `Err` rather than a silent
-/// drop.
-///
-/// Reachable only because [`inbound_ring`] always builds with
-/// [`OverflowPolicy::Fail`] — on any other policy this can only return `Ok`,
-/// policy-dependent silence the module doc's "Overflow is a reject" section
-/// names directly.
+/// Publish one command — [`Producer::try_push`].
 ///
 /// # Errors
 ///
-/// Hands `cmd` back, unpublished, when the ring has no free slot.
+/// Hands `cmd` back, unpublished, when the ring is full. Only a ring built
+/// with [`OverflowPolicy::Fail`], as [`inbound_ring`] builds them, says so.
 pub fn inbound_overflow_reject( producer : &mut Producer< '_, InboundCmd >, cmd : InboundCmd ) -> Result< (), InboundCmd >
 {
   producer.try_push( cmd )
 }
 
-/// Take every command published before this call, as a plain `Vec`.
-///
-/// A thin forward to [`Consumer::drain`] — already bounded at the call that
-/// makes it, so this terminates under a still-live producer.
+/// Every command published before this call, in order — [`Consumer::drain`].
+/// Bounded at the call, so it returns while a producer still publishes.
 pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< InboundCmd >
 {
   consumer.drain().collect()
 }
 
-/// Apply one drained [`InboundCmd`] to `book`, tracking claimed ids in `claims`.
-///
-/// `policy` is supplied by the caller on every call, same as
-/// `exchange_match::cross` itself — this crate holds no state of its own
-/// between calls either; `claims` is the caller's, threaded through exactly
-/// like `book`. See the module doc's "`inbound_apply`'s `Place`" section for
-/// why [`InboundCmd::Place`] reaches `exchange_match` rather than
-/// `exchange_rest::rest_place` directly, and its "Idempotency" section for
-/// why `claims` exists at all.
+/// Apply one drained [`InboundCmd`] to `book` — see the module doc's
+/// "Applying a command". `policy` resolves a self-match, as in
+/// `exchange_match::cross`.
 ///
 /// # Errors
 ///
-/// [`InboundApplyError::Match`] exactly when `exchange_match::cross` itself
-/// returns one — in practice a post-only order that would take, with `book`
-/// untouched.
-/// [`InboundApplyError::Idem`] if [`InboundCmd::Place`] names an id `claims`
-/// already holds, [`InboundApplyError::DuplicateClientId`] if it carries a
-/// client id its account already used — both with `book` untouched.
+/// Each with `book` and `claims` untouched: [`InboundApplyError::Match`] when
+/// `cross` refuses, in practice a post-only order that would take;
+/// [`InboundApplyError::ZeroQuantity`] for a `Place` for nothing;
+/// [`InboundApplyError::NotNew`] for one whose `remaining` is not its
+/// quantity; [`InboundApplyError::OrderIdRests`] for one naming a resting
+/// order id; [`InboundApplyError::DuplicateClientId`] for one carrying a
+/// client id its account already used.
 pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
 {
   match cmd
   {
     InboundCmd::Place( resting ) =>
     {
-      // Fix(inbound_apply_duplicate_traded_before_refusal): a repeated id was
-      // checked only where its remainder would rest — after `cross` had
-      // already traded it against the book — so the caller got `Err` and
-      // lost trades that had happened.
-      // Root cause: the check sat where the harm was assumed to be (a second
-      // rest), not where the book is first touched.
-      // Pitfall: refuse before the first mutation, not before the last one.
       let order = resting.order;
-      if idem_seen( &claims.orders, order.id )
+      // Fix(a_zero_quantity_place_is_refused_and_claims_nothing):
+      // Root cause: nothing read the quantity, so a place for nothing crossed
+      // nothing, came back `Ok`, and claimed its client id for good.
+      // Pitfall: `exchange_core` refuses it before anything else; a second
+      // way onto the book needs the same first check.
+      if order.quantity == Quantity::ZERO
       {
-        return Err( InboundApplyError::Idem( IdemError::Duplicate ) );
+        return Err( InboundApplyError::ZeroQuantity );
+      }
+      // Fix(a_place_whose_remaining_is_not_its_quantity_is_refused):
+      // Root cause: `cross` trades `order.quantity` and the remainder rests
+      // from what it leaves, so the `remaining` a place carried went unread:
+      // 3 left of 10 traded all 10.
+      // Pitfall: a field a command carries and nothing reads is one its
+      // producer still believes in.
+      if resting.remaining != order.quantity
+      {
+        return Err( InboundApplyError::NotNew );
+      }
+      // Fix(a_duplicate_place_id_is_refused_before_it_trades):
+      // Root cause: a repeated id was checked only where its remainder would
+      // rest, after `cross` had traded it, so the caller got `Err` and lost
+      // the trades.
+      // Pitfall: refuse before the first mutation, not before the last one.
+      //
+      // Fix(a_replace_may_take_the_id_of_an_order_that_filled):
+      // Root cause: order ids were claimed in a set of their own, released by
+      // cancel and replace only. An order that filled or was withdrawn by
+      // self-match kept its claim, so its id was refused for good, and a
+      // replace onto it panicked on the claim after changing the book. An id
+      // resting on a book `claims` never saw was not refused at all.
+      // Pitfall: a second record of what the book holds drifts from it;
+      // ask the book. With the quantity checked above, `insertable` can only
+      // refuse the id.
+      if !book.insertable( &resting, None )
+      {
+        return Err( InboundApplyError::OrderIdRests );
       }
       let client = order.client.map( | client | ( order.account, client ) );
       if client.is_some_and( | key | idem_seen( &claims.clients, key ) )
@@ -359,69 +285,33 @@ pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatch
         idem_insert( &mut claims.clients, key ).expect( "checked unseen before crossing" );
       }
 
-      // Fix(exchange_inbound/BUG-002): a self-match-cancelled incoming order was
-      // rested anyway, because `!crossing.is_complete()` is true whenever
-      // `crossing.remaining > 0` regardless of *why* — the self-match branch
-      // (`SelfMatchPolicy::CancelIncoming`/`CancelBoth`) leaves the full
-      // cancelled quantity in `remaining` on purpose (see `Crossing::remaining`'s
-      // own doc comment), which this code read as an ordinary unfilled
-      // remainder instead of a cancellation. `exchange_core::step_place`
-      // already solved this exact problem (`incoming_cancelled`, scanning
-      // `crossing.cancelled` for the incoming order's own id) — ported here.
-      // Root cause: `crossing.is_complete()`/`crossing.remaining` alone cannot
-      // distinguish "nothing left to fill" from "cancelled, not meant to rest"
-      // — only `crossing.cancelled` carries that distinction.
-      // Pitfall: `remaining > 0` means "not finished", not "safe to rest" —
-      // check `cancelled` for the incoming order's own id before resting
-      // anything derived from `remaining`.
+      // Fix(place_does_not_rest_an_order_the_self_match_policy_cancelled):
+      // Root cause: `crossing.remaining` keeps a self-match-cancelled
+      // remainder too, and only it was read, so a cancelled incoming order
+      // rested anyway.
+      // Pitfall: `remaining > 0` means not filled, not free to rest; only
+      // `crossing.cancelled` tells the two apart.
       let incoming_cancelled = crossing.cancelled.iter().any( | c | c.order == resting.order.id );
 
       if !incoming_cancelled && !crossing.is_complete() && tif_rests( resting.order.tif )
       {
-        // Fix(exchange_inbound/BUG-003): a duplicate id reaching this point was
-        // silently dropped in release builds — `rest_place`'s own `false` was
-        // only ever checked by a `debug_assert!`, compiled out entirely outside
-        // debug, so the remainder neither rested nor was reported, with no event
-        // stream here to fall back on the way `exchange_core::step_place` has.
-        // Root cause: this function trusted `resting.order.id` to be fresh
-        // because `exchange_core`'s own pipeline guarantees that — true for the
-        // one caller Stage 9 actually wired up, but `inbound_apply` is a public
-        // function nothing stops a different caller from invoking directly with
-        // a hand-built, not-necessarily-fresh id (see this module's own
-        // "Idempotency" section).
-        // Pitfall: a `debug_assert!` guarding an invariant that only holds for
-        // today's one caller is not a check — it is a release-mode no-op with a
-        // comment attached. An invariant a *public* function depends on must be
-        // enforced for every caller, not assumed from the one caller that
-        // currently happens to satisfy it.
-        idem_insert( &mut claims.orders, order.id ).expect( "checked unseen before crossing" );
+        // Fix(duplicate_place_id_is_refused_not_silently_dropped):
+        // Root cause: `rest_place` refusing a repeated id was checked by a
+        // `debug_assert!` only, so in release the remainder neither rested
+        // nor was reported.
+        // Pitfall: a public function cannot assume the fresh ids its one
+        // in-repo caller happens to send.
         let remainder = Resting { remaining : crossing.remaining, ..resting };
         let placed = rest_place( book, remainder );
-        debug_assert!( placed, "idem_insert above already refused a repeat; a freshly-claimed id cannot also collide in Book::insert" );
+        assert!( placed, "insertable() held before crossing, and cross seats nothing" );
       }
 
       Ok( InboundOutcome::Crossed( crossing ) )
     },
-    InboundCmd::Cancel { instrument, id } =>
-    {
-      let cancelled = rest_cancel( book, instrument, id );
-      if cancelled.is_some()
-      {
-        idem_remove( &mut claims.orders, id );
-      }
-      Ok( InboundOutcome::Cancelled( cancelled ) )
-    },
+    InboundCmd::Cancel { instrument, id } => Ok( InboundOutcome::Cancelled( rest_cancel( book, instrument, id ) ) ),
     InboundCmd::Replace { instrument, old_id, new_resting } =>
     {
-      let new_id = new_resting.order.id;
-      let result = rest_replace( book, instrument, old_id, new_resting );
-      if result.is_ok()
-      {
-        idem_remove( &mut claims.orders, old_id );
-        idem_insert( &mut claims.orders, new_id )
-          .expect( "rest_replace's own underlying Book::insert already proved this id free" );
-      }
-      Ok( InboundOutcome::Replaced( result ) )
+      Ok( InboundOutcome::Replaced( rest_replace( book, instrument, old_id, new_resting ) ) )
     },
   }
 }

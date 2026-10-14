@@ -132,7 +132,7 @@ fn place
 ) -> Result< Receipt, ExchangeError >
 {
   let resting = Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) };
-  assert_eq!( inbound_flush( producer, [ InboundCmd::Place( resting ) ] ), 1 );
+  assert_eq!( inbound_flush( producer, &[ InboundCmd::Place( resting ) ] ), 1 );
 
   match exchange.exchange_step( consumer, policy ).into_iter().next()
   {

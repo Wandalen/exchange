@@ -74,7 +74,7 @@ fn submit
 {
   let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc, client : None };
   let resting = Resting { order, remaining : quantity, arrival : Sequence( 0 ) };
-  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  let pushed = inbound_flush( producer, &[ InboundCmd::Place( resting ) ] );
   assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
 
   match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
@@ -101,7 +101,7 @@ fn submit_tif
 ) -> Result< Receipt, ExchangeError >
 {
   let resting = Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) };
-  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  let pushed = inbound_flush( producer, &[ InboundCmd::Place( resting ) ] );
   assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
 
   match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
@@ -1118,7 +1118,7 @@ fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
 
   let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : price( "2.50" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
-  inbound_flush( &mut producer, [ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
+  inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
   let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
   assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.is_empty() ) );
 
@@ -1167,7 +1167,7 @@ fn a_self_match_withdrawal_is_recorded_before_the_trade_behind_it()
   let before = exchange.events().len();
 
   let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : price( "2.60" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
-  inbound_flush( &mut producer, [ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
+  inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
   let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
   assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.len() == 1 ) );
 
@@ -1205,7 +1205,7 @@ fn stats_are_kept_per_instrument_and_in_total()
   submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 4 ) ).unwrap();
   submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 0 ) ).unwrap_err();
 
-  inbound_flush( &mut producer, [ InboundCmd::Cancel { instrument : INSTRUMENT, id : resting.order } ] );
+  inbound_flush( &mut producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, id : resting.order } ] );
   assert!( matches!( exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming )[ 0 ], StepOutcome::Cancelled( Ok( _ ) ) ) );
 
   let first = exchange.stats_get_for( INSTRUMENT );
