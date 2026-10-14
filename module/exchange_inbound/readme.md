@@ -5,15 +5,15 @@ channel, to the book — the family's concurrent edge.
 
 ```rust
 use exchange_book::Book;
-use exchange_inbound::{ inbound_apply, inbound_drain, inbound_ring, Claims, InboundCmd };
-use exchange_id::{ InstrumentId, OrderId };
+use exchange_inbound::{ inbound_apply, inbound_drain, inbound_ring, Claims, InboundCmd, OrderRef };
+use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_stp::SelfMatchPolicy;
 
 let mut split = inbound_ring( 8 ).unwrap();
 let mut ends = split.ends();
 let ( mut producer, mut consumer ) = ends.split();
 
-producer.try_push( InboundCmd::Cancel { instrument : InstrumentId( 1 ), id : OrderId( 1 ) } ).unwrap();
+producer.try_push( InboundCmd::Cancel { instrument : InstrumentId( 1 ), account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) } ).unwrap();
 
 let mut book = Book::new();
 let mut claims = Claims::new();

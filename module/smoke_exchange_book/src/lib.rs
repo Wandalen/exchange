@@ -60,7 +60,7 @@ use exchange_conserve::conserve_assert;
 use exchange_core::
 {
   AccountId, AssetId, Consumer, Exchange, ExchangeError, InboundCmd, InstrumentId, LevelView, Money, Order, OrderId,
-  Price, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, Trade,
+  OrderRef, Price, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, Trade,
   inbound_flush, inbound_overflow_reject, inbound_ring,
 };
 use exchange_idem::{ IdSet, idem_insert };
@@ -180,7 +180,8 @@ fn checksum( cmds : &[ InboundCmd ] ) -> u64
   {
     let id = match cmd
     {
-      InboundCmd::Cancel { id, .. } => id.0,
+      InboundCmd::Cancel { order : OrderRef::Id( id ), .. } => id.0,
+      InboundCmd::Cancel { order : OrderRef::Client( client ), .. } => client.0,
       InboundCmd::Replace { old_id, .. } => old_id.0,
       InboundCmd::Place( resting ) => resting.order.id.0,
     };
@@ -394,14 +395,14 @@ fn ring_determinism_once() -> u64
     {
       for id in 1..=4u64
       {
-        producer_a.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).unwrap();
+        producer_a.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( id ) ) } ).unwrap();
       }
     } );
     scope.spawn( move ||
     {
       for id in 101..=104u64
       {
-        producer_b.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).unwrap();
+        producer_b.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( id ) ) } ).unwrap();
       }
     } );
   } );
@@ -436,12 +437,12 @@ pub fn ring_overflow_rejects() -> bool
   let mut ends = ring.ends();
   let ( mut producer, _consumer ) = ends.split();
 
-  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } )
+  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) } )
   .expect( "the first of two fits in a capacity-2 ring" );
-  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 2 ) } )
+  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 2 ) ) } )
   .expect( "the second of two fits in a capacity-2 ring" );
 
-  let third = InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 3 ) };
+  let third = InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 3 ) ) };
   inbound_overflow_reject( &mut producer, third ).is_err()
 }
 

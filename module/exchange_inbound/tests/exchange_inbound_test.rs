@@ -4,7 +4,7 @@
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
-use exchange_inbound::{ inbound_apply, inbound_drain, inbound_flush, inbound_overflow_reject, inbound_ring, Claims, InboundApplyError, InboundCmd, InboundOutcome };
+use exchange_inbound::{ inbound_apply, inbound_drain, inbound_flush, inbound_overflow_reject, inbound_ring, Claims, InboundApplyError, InboundCmd, InboundOutcome, OrderRef };
 use exchange_match::MatchError;
 use exchange_order::Order;
 use exchange_rest::RestReplaceError;
@@ -36,7 +36,7 @@ fn resting( id : u64, side : Side, price : &str, quantity : i64, tif : Tif ) -> 
 /// Cancels of orders `1..=n`, for tests that only move commands.
 fn cancels( n : u64 ) -> Vec< InboundCmd >
 {
-  ( 1..=n ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).collect()
+  ( 1..=n ).map( | id | InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( id ) ) } ).collect()
 }
 
 #[ test ]
@@ -46,8 +46,8 @@ fn a_pushed_command_drains_in_the_same_order_it_was_pushed()
   let mut ends = split.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let a = InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) };
-  let b = InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 2 ) };
+  let a = InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) };
+  let b = InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 2 ) ) };
   producer.try_push( a ).unwrap();
   producer.try_push( b ).unwrap();
 
@@ -154,10 +154,10 @@ fn a_full_ring_rejects_the_next_publish_instead_of_dropping_it()
   let mut ends = split.ends();
   let ( mut producer, _consumer ) = ends.split();
 
-  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
-  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 2 ) } ).unwrap();
+  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) } ).unwrap();
+  producer.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 2 ) ) } ).unwrap();
 
-  let third = InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 3 ) };
+  let third = InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 3 ) ) };
   let rejected = inbound_overflow_reject( &mut producer, third );
 
   assert_eq!( rejected, Err( third ), "the ring must hand the rejected command back, not silently discard it" );
@@ -241,11 +241,50 @@ fn cancel_withdraws_a_resting_order_and_reports_none_when_absent()
   let mut claims = Claims::new();
   assert!( book.insert( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) ), "fresh id, must succeed" );
 
-  let found = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
+  let found = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) } ).unwrap();
   assert!( matches!( found, InboundOutcome::Cancelled( Some( _ ) ) ) );
 
-  let missing = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
+  let missing = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) } ).unwrap();
   assert!( matches!( missing, InboundOutcome::Cancelled( None ) ), "already withdrawn — a race result, not an error" );
+}
+
+/// A cancel withdraws only its own account's order on the instrument it
+/// names; another account's, or the right order on the wrong instrument, is
+/// answered as absent and the book is untouched.
+#[ test ]
+fn inbound_apply_leaves_a_foreign_cancel_untouched()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  assert!( book.insert( tagged( 1, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) ) );
+  let before = book.clone();
+
+  for ( instrument, account, order ) in
+  [
+    ( INSTRUMENT, AccountId( 2 ), OrderRef::Id( OrderId( 1 ) ) ),
+    ( INSTRUMENT, AccountId( 2 ), OrderRef::Client( ClientOrderId( 7 ) ) ),
+    ( InstrumentId( 2 ), AccountId( 1 ), OrderRef::Id( OrderId( 1 ) ) ),
+  ]
+  {
+    let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument, account, order } ).unwrap();
+    assert_eq!( outcome, InboundOutcome::Cancelled( None ), "{account:?} {order:?} on {instrument:?}" );
+  }
+  assert_eq!( book, before );
+}
+
+/// The owner may name its order by the client id it placed it under.
+#[ test ]
+fn inbound_apply_cancels_by_client_id()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  assert!( book.insert( tagged( 1, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) ) );
+
+  let cancel = InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Client( ClientOrderId( 7 ) ) };
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cancel ).unwrap();
+
+  assert!( matches!( outcome, InboundOutcome::Cancelled( Some( resting ) ) if resting.order.id == OrderId( 1 ) ) );
+  assert!( book.is_empty() );
 }
 
 #[ test ]
@@ -410,7 +449,7 @@ fn cancel_then_resubmit_under_the_same_id_is_accepted()
   let place = InboundCmd::Place( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) );
   inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, place ).unwrap();
 
-  let cancel = InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) };
+  let cancel = InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) };
   let cancelled = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cancel ).unwrap();
   assert!( matches!( cancelled, InboundOutcome::Cancelled( Some( _ ) ) ) );
 
@@ -477,7 +516,7 @@ fn a_client_id_stays_claimed_after_cancel()
   let mut book = Book::new();
   let mut claims = Claims::new();
   inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( tagged( 1, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) ) ).unwrap();
-  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( 1 ) } ).unwrap();
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) } ).unwrap();
 
   let retry = InboundCmd::Place( tagged( 2, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) );
   assert_eq!( inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, retry ), Err( InboundApplyError::DuplicateClientId ) );

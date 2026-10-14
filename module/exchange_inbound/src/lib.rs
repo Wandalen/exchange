@@ -57,13 +57,16 @@ pub enum InboundCmd
   /// A new order: its `remaining` the whole quantity, its `arrival` as its
   /// producer stamped it.
   Place( Resting ),
-  /// Withdraw `id`, resting on `instrument`'s book, whichever side.
+  /// Withdraw `account`'s order named by `order`, resting on
+  /// `instrument`'s book, whichever side.
   Cancel
   {
-    /// Which instrument's book `id` rests on.
+    /// Which instrument's book the order rests on.
     instrument : InstrumentId,
+    /// The account asking; only its own order is withdrawn.
+    account : AccountId,
     /// The resting order to withdraw.
-    id : OrderId,
+    order : OrderRef,
   },
   /// Replace `old_id` with `new_resting` in one step —
   /// [`exchange_rest::rest_replace`].
@@ -78,13 +81,78 @@ pub enum InboundCmd
   },
 }
 
+/// Which order a [`InboundCmd::Cancel`] names: the id the exchange assigned,
+/// or the client id the account placed it under. A ring producer never sees
+/// the id the exchange assigns, so the client id is how it names its own
+/// order.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
+pub enum OrderRef
+{
+  /// The id the exchange assigned.
+  Id( OrderId ),
+  /// The client id the account placed the order under.
+  Client( ClientOrderId ),
+}
+
+impl OrderRef
+{
+  /// The order this names, resting on `instrument`'s book under `account`.
+  ///
+  /// [`None`] when no such order rests: never placed, already gone, on
+  /// another instrument, or another account's. All four are the same answer,
+  /// so a caller cannot learn which ids another account has live. A client
+  /// id names at most one order, because an account never reuses one.
+  #[ must_use ]
+  pub fn resting_in( self, book : &Book, instrument : InstrumentId, account : AccountId ) -> Option< &Resting >
+  {
+    book.iter().find( | resting |
+    {
+      let order = resting.order;
+      order.instrument == instrument && order.account == account && match self
+      {
+        Self::Id( id ) => order.id == id,
+        Self::Client( client ) => order.client == Some( client ),
+      }
+    } )
+  }
+}
+
+impl From< OrderId > for OrderRef
+{
+  fn from( id : OrderId ) -> Self
+  {
+    Self::Id( id )
+  }
+}
+
+impl From< ClientOrderId > for OrderRef
+{
+  fn from( client : ClientOrderId ) -> Self
+  {
+    Self::Client( client )
+  }
+}
+
+impl core::fmt::Display for OrderRef
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::Id( id ) => write!( f, "order {}", id.0 ),
+      Self::Client( client ) => write!( f, "client order {}", client.0 ),
+    }
+  }
+}
+
 /// What applying one [`InboundCmd`] produced.
 #[ derive( Debug, Clone, PartialEq, Eq ) ]
 pub enum InboundOutcome
 {
   /// [`InboundCmd::Place`] was crossed against the book.
   Crossed( Crossing ),
-  /// [`InboundCmd::Cancel`] ran; [`None`] if nothing was resting under that id.
+  /// [`InboundCmd::Cancel`] ran; [`None`] if the account had no such order
+  /// resting on that instrument ([`OrderRef::resting_in`]).
   Cancelled( Option< Resting > ),
   /// [`InboundCmd::Replace`] ran; see [`RestReplaceError`] for the failure shapes.
   Replaced( Result< Resting, RestReplaceError > ),
@@ -308,7 +376,11 @@ pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatch
 
       Ok( InboundOutcome::Crossed( crossing ) )
     },
-    InboundCmd::Cancel { instrument, id } => Ok( InboundOutcome::Cancelled( rest_cancel( book, instrument, id ) ) ),
+    InboundCmd::Cancel { instrument, account, order } =>
+    {
+      let id = order.resting_in( book, instrument, account ).map( | resting | resting.order.id );
+      Ok( InboundOutcome::Cancelled( id.and_then( | id | rest_cancel( book, instrument, id ) ) ) )
+    },
     InboundCmd::Replace { instrument, old_id, new_resting } =>
     {
       Ok( InboundOutcome::Replaced( rest_replace( book, instrument, old_id, new_resting ) ) )
