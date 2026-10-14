@@ -51,7 +51,7 @@ the record.
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `ring_factory`/`ring_handle`/`ring_types`, and the exchange crates `inbound_apply` calls |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `ring_factory`/`ring_handle`/`ring_types`, `exact_arith`, and the exchange crates `inbound_apply` calls |
 | [`src/lib.rs`](src/lib.rs) | `InboundCmd`, `InboundOutcome`, `InboundApplyError`, `Claims`, `inbound_ring`, `inbound_flush`, `inbound_drain`, `inbound_apply`, `inbound_overflow_reject` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/decisions/` | Why "two producers" is two rings, not one shared one |

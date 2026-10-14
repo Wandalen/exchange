@@ -34,6 +34,7 @@
 //! rests and released when a cancel or replace withdraws it; a client id is
 //! claimed for good.
 
+use exact_arith::Quantity;
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_idem::{ idem_insert, idem_remove, idem_seen };
@@ -99,6 +100,8 @@ pub enum InboundApplyError
   /// A [`InboundCmd::Place`] carried a client id its account already placed
   /// an order under — a retry, not a new order.
   DuplicateClientId,
+  /// A [`InboundCmd::Place`] for a quantity of zero.
+  ZeroQuantity,
 }
 
 impl core::fmt::Display for InboundApplyError
@@ -110,6 +113,7 @@ impl core::fmt::Display for InboundApplyError
       Self::Match( error ) => write!( f, "matching failed: {error}" ),
       Self::Idem( error ) => write!( f, "place refused: {error}" ),
       Self::DuplicateClientId => write!( f, "place refused: this account already placed an order under this client id" ),
+      Self::ZeroQuantity => write!( f, "place refused: the quantity is zero" ),
     }
   }
 }
@@ -122,7 +126,7 @@ impl core::error::Error for InboundApplyError
     {
       Self::Match( error ) => Some( error ),
       Self::Idem( error ) => Some( error ),
-      Self::DuplicateClientId => None,
+      Self::DuplicateClientId | Self::ZeroQuantity => None,
     }
   }
 }
@@ -217,7 +221,8 @@ pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< Inbou
 ///
 /// Each with `book` and `claims` untouched: [`InboundApplyError::Match`] when
 /// `cross` refuses, in practice a post-only order that would take;
-/// [`InboundApplyError::Idem`] for a `Place` naming a claimed order id;
+/// [`InboundApplyError::ZeroQuantity`] for a `Place` for nothing;
+/// [`InboundApplyError::Idem`] for one naming a claimed order id;
 /// [`InboundApplyError::DuplicateClientId`] for one carrying a client id its
 /// account already used.
 pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
@@ -232,6 +237,15 @@ pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatch
       // the trades.
       // Pitfall: refuse before the first mutation, not before the last one.
       let order = resting.order;
+      // Fix(a_zero_quantity_place_is_refused_and_claims_nothing):
+      // Root cause: nothing read the quantity, so a place for nothing crossed
+      // nothing, came back `Ok`, and claimed its client id for good.
+      // Pitfall: `exchange_core` refuses it before anything else; a second
+      // way onto the book needs the same first check.
+      if order.quantity == Quantity::ZERO
+      {
+        return Err( InboundApplyError::ZeroQuantity );
+      }
       if idem_seen( &claims.orders, order.id )
       {
         return Err( InboundApplyError::Idem( IdemError::Duplicate ) );

@@ -15,7 +15,7 @@ The exposed surface of `exchange_inbound`, as built.
 |------|------|-----------|
 | `InboundCmd` | enum | `{ Place(Resting), Cancel { instrument: InstrumentId, id: OrderId }, Replace { instrument: InstrumentId, old_id: OrderId, new_resting: Resting } }` |
 | `InboundOutcome` | enum | `{ Crossed(Crossing), Cancelled(Option<Resting>), Replaced(Result<Resting, RestReplaceError>) }` |
-| `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError), DuplicateClientId }`, with `Display`, `Error`, `From<MatchError>`, `From<IdemError>` |
+| `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError), DuplicateClientId, ZeroQuantity }`, with `Display`, `Error`, `From<MatchError>`, `From<IdemError>` |
 | `Claims` | struct | `{ /* private */ }`, `Claims::new()` — order ids and `( AccountId, ClientOrderId )`s `inbound_apply` has claimed |
 | `inbound_ring` | fn | `(capacity: usize) -> Result<Split<InboundCmd>, BuildError>` |
 | `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: impl IntoIterator<Item = InboundCmd>) -> usize` |
@@ -47,8 +47,8 @@ The source design (`core_exchange.txt:482-487`, `652-661`) names
   `BuildError`, `MatchError`, `RestReplaceError` inside
   `InboundOutcome::Replaced`, the refused command on overflow. Nothing can
   report a ring closed, and a drain cannot fail. `InboundApplyError` holds
-  only what `inbound_apply` adds: the cross refusal and the two idempotency
-  refusals.
+  only what `inbound_apply` adds: the cross refusal, the two idempotency
+  refusals and the order checks.
 - **`InboundOutcome`, `Claims` and the re-exports** are not in the proposal.
   No `Claim` or `GatingSet` is exported.
 

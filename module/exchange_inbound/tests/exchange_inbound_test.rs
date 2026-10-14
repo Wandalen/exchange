@@ -453,3 +453,41 @@ fn a_refused_place_does_not_claim_its_client_id()
   inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, passive ).unwrap();
   assert_eq!( book.len(), 2 );
 }
+
+/// A place for a quantity of zero is refused, and claims nothing.
+///
+/// # Root Cause
+///
+/// `inbound_apply` never read the quantity. `cross` had nothing to trade,
+/// the call returned `Ok` with a complete crossing, and the client id was
+/// claimed for good, so the account's real order under it was refused.
+///
+/// # Why Not Caught
+///
+/// Every place in the suite had a positive quantity.
+///
+/// # Fix Applied
+///
+/// A zero quantity is refused first, with `InboundApplyError::ZeroQuantity`,
+/// as `exchange_core` refuses it.
+///
+/// # Prevention
+///
+/// A second way onto the book gets the facade's checks that do not need an
+/// instrument's spec.
+///
+/// # Pitfall
+///
+/// A claim taken for good makes a harmless-looking `Ok` permanent.
+#[ test ]
+fn a_zero_quantity_place_is_refused_and_claims_nothing()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  let empty = tagged( 1, 1, Side::Buy, "1.00", 0, Tif::Gtc, 7 );
+
+  assert_eq!( inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( empty ) ), Err( InboundApplyError::ZeroQuantity ) );
+
+  inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( tagged( 2, 1, Side::Buy, "1.00", 5, Tif::Gtc, 7 ) ) ).unwrap();
+  assert_eq!( book.len(), 1, "the client id was still free" );
+}
