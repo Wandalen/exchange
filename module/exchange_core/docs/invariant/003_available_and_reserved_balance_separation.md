@@ -103,7 +103,7 @@ This is the one statement that ties this partition to
 is the assertion a property test evaluates at every event boundary. Coverage
 alone says each order is backed; this says the backing is not double-counted.
 
-**Decided here; open elsewhere.** Three questions are genuinely open and are
+**Decided here; open elsewhere.** Two questions are genuinely open and are
 named rather than answered:
 
 - **Whether the fee is reserved alongside the notional.** Fees are assessed
@@ -118,6 +118,11 @@ named rather than answered:
   needs; per-order makes a cancel's release amount a lookup rather than a
   recomputation, and makes an audit discrepancy attributable to an order
   rather than to an account. The corpus fixes neither.
+
+What a market buy reserves is decided: a market order is a limit order whose
+price is a cap, so it reserves `cap × quantity` and gets back what it does
+not spend (→ [`exchange_types`](../../../exchange_types/readme.md), "A market
+order's obligation"; [`tests/market_order_test.rs`](../../tests/market_order_test.rs)).
 
 ### Violation Consequences
 

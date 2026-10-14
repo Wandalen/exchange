@@ -30,8 +30,9 @@ pub type Amount = Money;
 
 /// A submitted limit order.
 ///
-/// Only limit orders exist. Post-only is a [`Tif`], not an order type; market,
-/// stop and iceberg orders are not built.
+/// Only limit orders exist. Post-only is a [`Tif`], not an order type. A
+/// market order needs no type: it is a limit order whose price is a cap,
+/// sent IOC or FOK. Stop and iceberg orders are not built.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub struct Order
 {
