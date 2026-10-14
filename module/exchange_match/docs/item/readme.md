@@ -16,7 +16,7 @@ The exposed surface of `exchange_match`, as built.
 | `Crossing` | struct | `{ trades: Vec<Trade>, remaining: Quantity, cancelled: Vec<SelfMatchCancellation> }` |
 | `Crossing::is_complete` | fn | `(&self) -> bool` |
 | `Crossing::filled` | fn | `(&self) -> Result<Quantity, KindError>` |
-| `Crossing::steps` | fn | `(&self) -> Vec<CrossingStep<'_>>` — trades and withdrawals in the order they happened |
+| `Crossing::steps` | fn | `(&self) -> impl Iterator<Item = CrossingStep<'_>>` — trades and withdrawals in the order they happened |
 | `CrossingStep` | enum | `{ Trade(&Trade), Cancelled(&SelfMatchCancellation) }` |
 | `SelfMatchCancellation` | struct | `{ order: OrderId, account: AccountId, quantity: Quantity, trades_before: usize }` (`Copy`) |
 | `MatchError` | enum | `{ Quantity(KindError), BookDesynchronized, Conservation(ConserveError), PostOnlyWouldTake }`, with `Display`, `Error`, `From<KindError>`, `From<ConserveError>` |

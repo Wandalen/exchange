@@ -108,21 +108,25 @@ impl Crossing
 
   /// Every trade and self-match withdrawal, in the order `cross` made them —
   /// the order to settle, release and record them in.
-  #[ must_use ]
-  pub fn steps( &self ) -> Vec< CrossingStep< '_ > >
+  pub fn steps( &self ) -> impl Iterator< Item = CrossingStep< '_ > >
   {
-    let mut steps = Vec::with_capacity( self.trades.len() + self.cancelled.len() );
+    let mut trades = self.trades.iter();
     let mut cancelled = self.cancelled.iter().peekable();
-    for ( done, trade ) in self.trades.iter().enumerate()
+    let mut done = 0;
+    core::iter::from_fn( move ||
     {
-      while let Some( withdrawn ) = cancelled.next_if( | withdrawn | withdrawn.trades_before <= done )
+      if let Some( withdrawn ) = cancelled.next_if( | withdrawn | withdrawn.trades_before <= done )
       {
-        steps.push( CrossingStep::Cancelled( withdrawn ) );
+        return Some( CrossingStep::Cancelled( withdrawn ) );
       }
-      steps.push( CrossingStep::Trade( trade ) );
-    }
-    steps.extend( cancelled.map( CrossingStep::Cancelled ) );
-    steps
+      let Some( trade ) = trades.next()
+      else
+      {
+        return cancelled.next().map( CrossingStep::Cancelled );
+      };
+      done += 1;
+      Some( CrossingStep::Trade( trade ) )
+    } )
   }
 }
 

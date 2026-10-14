@@ -342,7 +342,7 @@ fn steps_keep_a_withdrawal_between_the_trades_around_it()
   let crossing = cross( &mut book, &order( 4, 9, Side::Buy, "2.60", 5 ), SelfMatchPolicy::CancelResting ).unwrap();
 
   assert_eq!( crossing.cancelled[ 0 ].trades_before, 1, "order 1 traded before order 2 was withdrawn" );
-  let steps : Vec< String > = crossing.steps().iter().map( | step | match step
+  let steps : Vec< String > = crossing.steps().map( | step | match step
   {
     CrossingStep::Trade( trade ) => format!( "trade {}", trade.maker.0 ),
     CrossingStep::Cancelled( withdrawn ) => format!( "cancel {}", withdrawn.order.0 ),
