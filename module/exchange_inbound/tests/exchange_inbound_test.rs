@@ -316,8 +316,8 @@ fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
 ///
 /// # Fix Applied
 ///
-/// `inbound_apply` claims each resting id in `Claims` and refuses a claimed
-/// one with `InboundApplyError::Idem` — since then, before it crosses.
+/// `inbound_apply` refuses a `Place` whose id rests with
+/// `InboundApplyError::Idem` — now before it crosses, asking the book.
 ///
 /// # Prevention
 ///
@@ -364,8 +364,8 @@ fn cancel_then_resubmit_under_the_same_id_is_accepted()
   let cancelled = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, cancel ).unwrap();
   assert!( matches!( cancelled, InboundOutcome::Cancelled( Some( _ ) ) ) );
 
-  // A legitimate resubmission under the same, now-cancelled id must be
-  // accepted again — the whole reason `idem_remove` exists.
+  // The id left the book with its order, so a resubmission under it is a
+  // new order.
   let resubmit = InboundCmd::Place( resting( 1, Side::Buy, "1.05", 4, Tif::Gtc ) );
   inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, resubmit ).unwrap();
 
@@ -533,4 +533,114 @@ fn a_place_whose_remaining_is_not_its_quantity_is_refused()
     assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().remaining, Quantity::from_int( 10 ).unwrap(), "the ask was not touched" );
     assert_eq!( book.len(), 1 );
   }
+}
+
+/// A replace may take the id of an order that has filled.
+///
+/// # Root Cause
+///
+/// Order ids were claimed in a set of their own, released only by a cancel
+/// or a replace. Order 1 rested, claimed its id, and filled; the claim
+/// stayed. A replace onto id 1 passed `rest_replace`, which asks the book,
+/// changed the book, and then panicked claiming the id — in release too.
+///
+/// # Why Not Caught
+///
+/// No test replaced onto an id that had been used before.
+///
+/// # Fix Applied
+///
+/// The set is gone: `inbound_apply` asks the book whether an id rests, and
+/// a replace claims nothing.
+///
+/// # Prevention
+///
+/// Keep one record of what the book holds — the book.
+///
+/// # Pitfall
+///
+/// Every way an order leaves the book has to release a mirror of it: a
+/// fill, a self-match withdrawal, a cancel, a replace.
+#[ test ]
+fn a_replace_may_take_the_id_of_an_order_that_filled()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  for place in [ resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ), resting( 2, Side::Buy, "1.00", 5, Tif::Gtc ), resting( 3, Side::Sell, "2.00", 5, Tif::Gtc ) ]
+  {
+    inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Place( place ) ).unwrap();
+  }
+
+  let onto_filled = Resting { order : Order { account : AccountId( 3 ), ..resting( 1, Side::Sell, "2.10", 5, Tif::Gtc ).order }, arrival : Sequence( 4 ), ..resting( 1, Side::Sell, "2.10", 5, Tif::Gtc ) };
+  let outcome = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, InboundCmd::Replace { instrument : INSTRUMENT, old_id : OrderId( 3 ), new_resting : onto_filled } );
+
+  assert!( matches!( outcome, Ok( InboundOutcome::Replaced( Ok( _ ) ) ) ) );
+  assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 1 ) );
+}
+
+/// An order id is free again once its order has left the book, whether it
+/// filled or self-match prevention withdrew it — as it is after a cancel,
+/// and as it always was for an order that filled on arrival.
+#[ test ]
+fn an_order_id_is_free_again_once_its_order_left_the_book()
+{
+  for policy in [ SelfMatchPolicy::CancelResting, SelfMatchPolicy::CancelBoth ]
+  {
+    let mut book = Book::new();
+    let mut claims = Claims::new();
+    let shared = | resting : Resting | Resting { order : Order { account : AccountId( 7 ), ..resting.order }, ..resting };
+    inbound_apply( &mut book, &mut claims, policy, InboundCmd::Place( resting( 1, Side::Sell, "1.00", 5, Tif::Gtc ) ) ).unwrap();
+    inbound_apply( &mut book, &mut claims, policy, InboundCmd::Place( resting( 2, Side::Buy, "1.00", 5, Tif::Gtc ) ) ).unwrap();
+    inbound_apply( &mut book, &mut claims, policy, InboundCmd::Place( shared( resting( 3, Side::Sell, "1.00", 5, Tif::Gtc ) ) ) ).unwrap();
+    inbound_apply( &mut book, &mut claims, policy, InboundCmd::Place( shared( resting( 4, Side::Buy, "1.00", 5, Tif::Ioc ) ) ) ).unwrap();
+    assert!( book.is_empty(), "{policy:?}: order 1 filled, order 3 was withdrawn" );
+
+    for id in [ 1, 3 ]
+    {
+      inbound_apply( &mut book, &mut claims, policy, InboundCmd::Place( resting( id, Side::Buy, "0.90", 5, Tif::Gtc ) ) ).unwrap();
+    }
+    assert_eq!( book.len(), 2, "{policy:?}" );
+  }
+}
+
+/// A place naming an id that rests is refused before it trades, even when
+/// that order reached the book some other way than `inbound_apply`.
+///
+/// # Root Cause
+///
+/// The check before crossing read the claim set, which only knew what
+/// `inbound_apply` had rested itself. Order 1 inserted directly was not in
+/// it, so a place under id 1 traded against order 5, then failed to rest:
+/// a `debug_assert!` fired in debug, and in release the remainder vanished
+/// behind an `Ok`.
+///
+/// # Why Not Caught
+///
+/// The duplicate tests rested the first order through `inbound_apply`.
+///
+/// # Fix Applied
+///
+/// The check before crossing asks the book.
+///
+/// # Prevention
+///
+/// Check a duplicate against the thing that refuses it.
+///
+/// # Pitfall
+///
+/// The tests seed books with `Book::insert` and a fresh `Claims` all the
+/// time; a caller restoring a book does the same.
+#[ test ]
+fn a_place_whose_id_rests_is_refused_before_it_trades()
+{
+  let mut book = Book::new();
+  let mut claims = Claims::new();
+  assert!( book.insert( resting( 1, Side::Sell, "2.00", 5, Tif::Gtc ) ) );
+  assert!( book.insert( resting( 5, Side::Sell, "1.00", 2, Tif::Gtc ) ) );
+
+  let repeat = InboundCmd::Place( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) );
+  assert_eq!( inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ), Err( InboundApplyError::Idem( IdemError::Duplicate ) ) );
+
+  assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 5 ), "order 5 was not traded" );
+  assert_eq!( book.len(), 2 );
 }

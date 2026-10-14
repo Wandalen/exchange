@@ -29,7 +29,8 @@ for cmd in inbound_drain( &mut consumer )
 applies each command itself, with escrow, caps and halt; it answers
 `Replace` with `StepOutcome::ReplaceNotWired`. `inbound_apply` is the
 book-level apply, without any of that: crossed, rested, cancelled and
-replaced through `exchange_match` and `exchange_rest`, with idempotency
+replaced through `exchange_match` and `exchange_rest`. It refuses an order
+id that rests, asking the book, and a client id its account already used,
 kept in `Claims`. `smoke_exchange_phases`' P28 and P29 drive the ring.
 
 Closes hard problems 11 (inbound at the aeon edge), 23 (full order of
@@ -64,5 +65,5 @@ the record.
 
 - [`exchange_rest/`](../exchange_rest/readme.md) — what `Cancel`/`Replace` call through to
 - [`exchange_match/`](../exchange_match/readme.md) — what `Place` is crossed against before any remainder rests
-- [`exchange_idem/`](../exchange_idem/readme.md) — the `IdSet`s behind `Claims`
+- [`exchange_idem/`](../exchange_idem/readme.md) — the `IdSet` behind `Claims`
 - [`exchange_core/`](../exchange_core/readme.md) — drains these rings in `exchange_step`
