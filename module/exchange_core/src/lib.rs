@@ -67,9 +67,8 @@
 //!
 //! Named rather than silently absent:
 //!
-//! - **Market orders.** Only limit orders exist. A market order is a limit
-//!   order with no price bound, which changes the crossing predicate and the
-//!   reservation rule together; nothing here exercises one.
+//! - **Stop orders.** Out of v0.1. A market order needs no type of its own:
+//!   it is a limit order whose price is a cap, sent IOC or FOK.
 //! - **Amend and fees.** Both are specified at family grain. Fees in
 //!   particular have a decided hook position and an undecided schedule, so
 //!   implementing the hook now would be building a parameter nobody can

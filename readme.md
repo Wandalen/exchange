@@ -59,7 +59,7 @@ deliberately not here yet, named rather than left to be discovered as gaps:
 
 | Not yet built | Current behavior |
 |----------------|-------------------|
-| Market orders | limit only |
+| Stop orders | out of v0.1; a market order is a limit order whose price is a cap, sent IOC or FOK |
 | Amend | cancel exists; amend does not |
 | Fees | the assessment point is fixed; no schedule is decided, nothing is charged |
 

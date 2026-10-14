@@ -118,14 +118,6 @@ named rather than answered:
   needs; per-order makes a cancel's release amount a lookup rather than a
   recomputation, and makes an audit discrepancy attributable to an order
   rather than to an account. The corpus fixes neither.
-- **What a market buy reserves.**
-  [Price-Time Priority Matching](../algorithm/001_price_time_priority_matching.md)
-  step 2 reserves "the order's maximum settlement obligation", and a market
-  buy has no limit price, so against a thin or empty book that maximum is
-  unbounded. A worst-case notional, a price band, or rejecting a market buy
-  that names no cap are the three candidates; none is selected, and the
-  choice is not cosmetic — it decides whether a market buy is representable
-  at all.
 
 ### Violation Consequences
 

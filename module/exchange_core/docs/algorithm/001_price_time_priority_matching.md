@@ -96,9 +96,6 @@ its matching algorithm or order-book data flow (→ external design corpus
 
 **Still open at this grain — named, not decided here:**
 
-- **Stop-order trigger semantics** — when a Stop becomes an executable
-  Market/Limit order, and against which price feed. Untouched: the
-  implementation is limit-only.
 - **Fee rate and schedule** — flat, maker/taker pair, volume-tiered, or
   per-account. Open. The fee *hook position* is no longer open: fees are
   assessed at exactly one point, in step 3 at trade generation, against that

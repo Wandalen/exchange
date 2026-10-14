@@ -12,7 +12,7 @@
 - `order_replace` still has no facade-level equivalent: `exchange_step` drains `InboundCmd::Replace` but returns `StepOutcome::ReplaceNotWired` rather than applying it — a deliberate scope cut (no escrow-aware replace orchestration or `EventKind::Replaced` variant exists yet), not a missing crate. See `module/exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md` for the full reasoning, and `../../module/exchange_rest/docs/pitfall/002_rest_replace_trusts_new_resting_instrument.md` for an unrelated `exchange_rest` gap this deferral happens to make unreachable through the facade, without fixing it.
 - `exchange_step` is now a real, caller-driven, ring-fed function — `submit` is gone entirely, not merely wrapped.
 - `open_account` remains a real item the proposal's Prompt 3 answer for this crate never named.
-- The module's own doc comment (`exchange_core/src/lib.rs`, "What this slice still does not implement") discloses what remains genuinely unimplemented: market orders, amend, fees, and concurrent intake past the ring. Time-in-Force, multi-instrument routing, and per-call self-match policy are all real now, closed as a direct consequence of routing through `exchange_step`.
+- The module's own doc comment (`exchange_core/src/lib.rs`, "What this slice still does not implement") discloses what remains genuinely unimplemented: stop orders, amend, fees, and concurrent intake past the ring. Time-in-Force, multi-instrument routing, and per-call self-match policy are all real now, closed as a direct consequence of routing through `exchange_step`.
 
 ### Statement
 

@@ -82,7 +82,7 @@ What still genuinely diverges:
   [`../../../exchange_rest/docs/pitfall/002_rest_replace_trusts_new_resting_instrument.md`](../../../exchange_rest/docs/pitfall/002_rest_replace_trusts_new_resting_instrument.md)
   for why this deferral also happens to make an unrelated `exchange_rest` gap
   unreachable through this facade, without fixing it.
-- Market orders, amend, and fees remain unimplemented — named in this crate's
+- Stop orders, amend, and fees remain unimplemented — named in this crate's
   own module doc, "What this slice still does not implement."
 
 `open_account` and `postings` remain real items the proposal never named for
