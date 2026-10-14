@@ -1,0 +1,101 @@
+//! Top-N book depth, read off [`exchange_book::Book`]'s priority-ordered
+//! sides. Closes hard problem 13 (depth) and feature 17 (`depth_top`).
+//!
+//! [`Book::side`](exchange_book::Book::side) yields a side best first, every
+//! order at one price adjacent, so the top `n` prices are read without
+//! looking past the first order beyond them. Each price is one [`LevelView`]
+//! with its orders' summed remainder, as a depth display is read.
+
+use exact_arith::{ Price, Quantity, qty_saturating_add };
+use exchange_book::{ Book, Resting };
+use exchange_id::InstrumentId;
+use exchange_side::Side;
+
+/// Every resting order at one price, aggregated.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
+pub struct LevelView
+{
+  /// The price every order aggregated into this level rests at.
+  pub price : Price,
+  /// Total resting quantity across every order at `price`. Saturates at
+  /// `Quantity::MAX`: orders at one price can together hold more than one
+  /// `Quantity` expresses, and a depth read is a display, not a balance —
+  /// a lower bound beats failing the query.
+  pub qty : Quantity,
+}
+
+/// The top levels on both sides of a book, best-first.
+#[ derive( Debug, Clone, PartialEq, Eq, Default ) ]
+pub struct Depth
+{
+  /// Bid levels, best (highest) price first.
+  pub bids : Vec< LevelView >,
+  /// Ask levels, best (lowest) price first.
+  pub asks : Vec< LevelView >,
+}
+
+/// Why a depth query was refused.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
+pub enum DepthError
+{
+  /// `n` was zero. An `n` above what rests just returns fewer rows.
+  BadN,
+}
+
+impl core::fmt::Display for DepthError
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::BadN => write!( f, "the top zero levels has no answer" ),
+    }
+  }
+}
+
+impl core::error::Error for DepthError {}
+
+/// The best `n` price levels on each side of `instrument`'s book.
+///
+/// # Errors
+///
+/// Returns [`DepthError::BadN`] if `n` is zero. A `n` larger than the
+/// number of distinct prices resting on a side is not an error — that side's
+/// `Vec` is simply shorter than `n`.
+pub fn depth_top( book : &Book, instrument : InstrumentId, n : usize ) -> Result< Depth, DepthError >
+{
+  if n == 0
+  {
+    return Err( DepthError::BadN );
+  }
+
+  Ok( Depth
+  {
+    bids : levels_top( book.side( instrument, Side::Buy ), n ),
+    asks : levels_top( book.side( instrument, Side::Sell ), n ),
+  } )
+}
+
+/// Aggregate `resting` (already in priority order) into up to `n` levels.
+fn levels_top< 'a >( resting : impl Iterator< Item = &'a Resting >, n : usize ) -> Vec< LevelView >
+{
+  let mut levels : Vec< LevelView > = Vec::new();
+
+  for r in resting
+  {
+    if let Some( top ) = levels.last_mut()
+      && top.price == r.order.price
+    {
+      top.qty = qty_saturating_add( top.qty, r.remaining );
+      continue;
+    }
+
+    if levels.len() == n
+    {
+      break;
+    }
+    levels.push( LevelView { price : r.order.price, qty : r.remaining } );
+  }
+
+  levels
+}
