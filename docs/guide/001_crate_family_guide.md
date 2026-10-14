@@ -228,7 +228,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   // probes a clone first and returns Crossing{ remaining: incoming.quantity, .. }
   // without ever mutating `book`, rather than resting or partially filling it.
   ```
-- **`exchange_rest`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `rest_place`/`rest_cancel` (forwards to `Book`) and `rest_replace`: one order swapped for its amended replacement in one step, the replacement checked before the original is touched. `step_place` rests every remainder through `rest_place`; `Exchange::cancel` cancels on the book itself, releasing escrow in the same step. `rest_replace` is reached only through `exchange_inbound` — `exchange_step` drains an `InboundCmd::Replace` and returns `StepOutcome::ReplaceNotWired` (see Introduction, point 2, and `exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md`).
+- **`exchange_rest`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `rest_place`/`rest_cancel` (forwards to `Book`) and `rest_replace`: one order swapped for its amended replacement in one step, the replacement checked before the original is touched. `step_place` rests every remainder through `rest_place`; `exchange_step` applies a ring `InboundCmd::Cancel` on the book itself, releasing escrow in the same step. `rest_replace` is reached only through `exchange_inbound` — `exchange_step` drains an `InboundCmd::Replace` and returns `StepOutcome::ReplaceNotWired` (see Introduction, point 2, and `exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md`).
   ```rust
   // rest_replace( book: &mut Book, instrument, old_id: OrderId, new_resting: Resting )
   //   -> Result<Resting, RestReplaceError>
