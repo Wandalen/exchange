@@ -7,7 +7,7 @@
 - **In Scope**: The bridge itself. Does not own `ring_claim` and does not implement gating.
 - **Out of Scope**: Owning `ring_claim` or gating.
 
-**Design status**: Built (`module/exchange_inbound`), depending on exactly three `ring_*` crates (`ring_factory`, `ring_handle`, `ring_types`) rather than the six originally named — see `../ring_edge/001_exchange_inbound_ring_edge.md` for the resolved edge and [`../../module/exchange_inbound/docs/item/readme.md`](../../module/exchange_inbound/docs/item/readme.md) for the full comparison against this crate's own proposal.
+**Design status**: Built (`module/exchange_inbound`), depending on exactly three `ring_*` crates (`ring_factory`, `ring_handle`, `ring_types`) rather than the six originally named — see `../ring_edge/001_exchange_inbound_ring_edge.md` for the resolved edge and [`../../module/exchange_inbound/docs/item/readme.md`](../../module/exchange_inbound/docs/item/readme.md) for the full comparison against this crate's own proposal. Not the one path into the book: `exchange_core::Exchange::exchange_step` drains these rings and applies each command itself, with escrow; `inbound_apply` is the book-level apply, without it.
 
 ### Statement
 

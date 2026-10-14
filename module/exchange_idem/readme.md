@@ -14,18 +14,17 @@ assert!( idem_seen( &seen, OrderId( 1 ) ) );
 assert!( idem_insert( &mut seen, OrderId( 1 ) ).is_err(), "a repeat is refused" );
 ```
 
-## Two callers, two keys
+## Two callers, one key
 
 `IdSet< K = OrderId >` takes any hashable key.
 
-- `exchange_inbound::inbound_apply` keys by `OrderId`: it is `pub`, bypasses
-  `exchange_core`, and lets its caller pick ids, so a repeated `OrderId` is a
-  real retry there. It calls `idem_remove` on cancel, so a cancelled id can be
-  resubmitted. It keys a second set by `( AccountId, ClientOrderId )`, as
-  `exchange_core` does, and never removes from it.
 - `exchange_core` keys by `( AccountId, ClientOrderId )`: it assigns
   `OrderId` itself, so only the submitter's own id can mark a retry. It never
   removes one — the set grows with every client-tagged order.
+- `exchange_inbound::inbound_apply` keys by `( AccountId, ClientOrderId )`
+  the same way. Its caller picks order ids, and whether one is taken it asks
+  the book, which knows when an order leaves; no caller keys by `OrderId`
+  today.
 
 ## Not built: forgetting old client ids
 
@@ -49,6 +48,6 @@ retention policy, and the family reads no clock.
 ## Related
 
 - [`exchange_id/`](../exchange_id/readme.md) — supplies `OrderId`, `AccountId`, `ClientOrderId`
-- [`exchange_inbound/`](../exchange_inbound/readme.md) — caller keyed by `OrderId` and by `( AccountId, ClientOrderId )`, via `inbound_apply`'s `Claims`
+- [`exchange_inbound/`](../exchange_inbound/readme.md) — caller keyed by `( AccountId, ClientOrderId )`, via `inbound_apply`'s `Claims`
 - [`exchange_core/`](../exchange_core/readme.md) — caller keyed by `( AccountId, ClientOrderId )`
 - [`smoke_exchange_phases/`](../smoke_exchange_phases/readme.md) — `demo_p13_dup`
