@@ -116,7 +116,7 @@ discovered as gaps:
 
 - **Stop orders.** Out of v0.1.
 - **More than one asset pair.** `Exchange::spec_register` admits one pair: escrow holds one cash and one asset balance per account.
-- **Amend.** Out of v0.1. A drained `Replace` answers `StepOutcome::ReplaceNotWired` and changes nothing; see `exchange_step`'s own doc and [`docs/decisions/`](docs/decisions/readme.md) for why. [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) specifies amend for a later version.
+- **Amend.** [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) specifies it; which version carries it is open. A drained `Replace` answers `StepOutcome::ReplaceNotWired` and changes nothing; see `exchange_step`'s own doc and [`docs/decisions/`](docs/decisions/readme.md) for why.
 - **Cold recovery.** Nothing rebuilds the book and escrow from the event log yet (v0.1 exit criterion 4).
 - **Fees.** [`algorithm/004`](docs/algorithm/004_fee_assessment_point.md) fixes the assessment point; no schedule is decided, so nothing is charged.
 
