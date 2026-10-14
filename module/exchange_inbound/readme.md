@@ -50,6 +50,30 @@ whatever was published by then. See
 default, `DropNewest`, a full ring's `try_push` returns `Ok` and discards
 the record.
 
+## Not built: instrument rules
+
+`inbound_apply` refuses what would break the book or its claims — a zero
+quantity, a `remaining` that is not the quantity, a resting id, a used
+client id. It does not check a price's sign, tick or lot, or a halt: those
+come from an instrument's `InstrumentSpec`, which `Exchange` holds, and
+`exchange_step` checks them. Checking them here needs the specs passed in,
+a second copy of the facade's validation.
+
+## Not built: sequencing
+
+A `Place` rests at the arrival its producer stamped. Lanes stamped apart can
+rank an order applied later ahead of one applied before it at the same
+price. `exchange_step` stamps arrivals itself on drain; doing that here
+needs a counter kept between calls, and the producers of `inbound_apply`'s
+callers stamp their own today.
+
+## Not built: remembering order ids that filled
+
+An order id is taken while its order rests. Once the order fills or leaves,
+the id is free, so a retry of a filled order carrying no client id trades
+again; with a client id it is refused. Keeping every order id ever placed
+grows without bound and would refuse the resubmission a cancel allows.
+
 ## Responsibility Table
 
 | File | Responsibility |
