@@ -111,12 +111,13 @@ full design. The apply loop itself stays single-threaded by choice, not by
 limitation: it is the ring's producers that genuinely race, not
 `exchange_step`'s own drain-then-apply pass over what they left behind.
 
-Four things are deliberately absent, named here rather than left to be
+These are deliberately absent, named here rather than left to be
 discovered as gaps:
 
 - **Stop orders.** Out of v0.1.
 - **More than one asset pair.** `Exchange::spec_register` admits one pair: escrow holds one cash and one asset balance per account.
-- **Amend.** [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) covers cancel, which exists; amend does not.
+- **Amend.** Out of v0.1. A drained `Replace` answers `StepOutcome::ReplaceNotWired` and changes nothing; see `exchange_step`'s own doc and [`docs/decisions/`](docs/decisions/readme.md) for why. [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) specifies amend for a later version.
+- **Cold recovery.** Nothing rebuilds the book and escrow from the event log yet (v0.1 exit criterion 4).
 - **Fees.** [`algorithm/004`](docs/algorithm/004_fee_assessment_point.md) fixes the assessment point; no schedule is decided, so nothing is charged.
 
 A market order is a limit order whose price is a cap, sent IOC or FOK; see
@@ -124,15 +125,13 @@ A market order is a limit order whose price is a cap, sent IOC or FOK; see
 
 Two more are resolved, not absent, as a side effect of routing through the
 ring rather than a direct call: **Time-in-Force** is a real, caller-chosen
-field on every placed order now (`{ FOK, IOC, GTC }`, no longer pinned to
-`GTC`), and **self-match policy** is a parameter on
+field on every placed order now (`{ GTC, IOC, FOK, post-only }`, no longer
+pinned to `GTC`), and **self-match policy** is a parameter on
 [`Exchange::exchange_step`] itself, supplied per call rather than hardcoded.
 [`algorithm/002`](docs/algorithm/002_self_match_prevention.md) states the
 self-match ban;
 [`exchange_match/tests/self_match_test.rs`](../exchange_match/tests/self_match_test.rs)
-covers all three configured policies. `Replace` is drained but not yet
-applied — see `exchange_step`'s own doc and
-[`docs/decisions/`](docs/decisions/readme.md) for why.
+covers all three configured policies.
 
 ## Two questions this implementation closed
 

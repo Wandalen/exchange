@@ -57,8 +57,9 @@ to decide it against.
 nor the version's scope list it, and no amend operation exists in the source
 material at all — but its priority rule is decided now, in
 [Cancel and Amend Semantics](../algorithm/003_cancel_and_amend_semantics.md),
-so that adding the operation is an increment rather than a redesign. Which
-version carries it is not fixed here.
+so that adding the operation is an increment rather than a redesign. It is
+not in v0.1: a drained `Replace` answers `StepOutcome::ReplaceNotWired` and
+changes nothing.
 
 **Deliberate exclusions:**
 
