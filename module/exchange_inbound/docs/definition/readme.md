@@ -4,8 +4,8 @@
 
 - **Purpose**: Index every `pub` item this crate declares against the doc instance that explains it.
 - **Responsibility**: One row per public declaration, pointing at its owning collection — never restating what that collection already says.
-- **In Scope**: This crate's own `pub` surface, including the six `ring_factory`/`ring_handle` types re-exported here (`BuildError`, `RingConfig`, `Consumer`, `Drain`, `Ends`, `Producer`, `Split`) rather than declared.
-- **Out of Scope**: Items declared elsewhere and merely used here (`Book`/`Resting` from `exchange_book`; `InstrumentId`/`OrderId` from `exchange_id`; `Crossing`/`MatchError`/`SelfMatchPolicy` from `exchange_match`; `RestReplaceError` from `exchange_rest`).
+- **In Scope**: This crate's own `pub` surface, including the nine types re-exported here rather than declared: `BuildError` and `RingConfig` from `ring_factory`, `Consumer`, `Drain`, `Ends`, `Producer` and `Split` from `ring_handle`, `IdemError` and `IdSet` from `exchange_idem`.
+- **Out of Scope**: Items declared elsewhere and merely used here (`Book`/`Resting` from `exchange_book`; `AccountId`/`ClientOrderId`/`InstrumentId`/`OrderId` from `exchange_id`; `Crossing`/`MatchError`/`SelfMatchPolicy` from `exchange_match`; `RestReplaceError` from `exchange_rest`; `tif_rests` from `exchange_tif`).
 
 ### Module Index
 
@@ -27,10 +27,10 @@
 | `Ends` | struct (re-export) | `ring_handle` crate, re-exported at `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Producer` | struct (re-export) | `ring_handle` crate, re-exported at `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 | `Split` | struct (re-export) | `ring_handle` crate, re-exported at `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `IdemError` | enum (re-export) | `exchange_idem` crate, re-exported at `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
+| `IdSet` | struct (re-export) | `exchange_idem` crate, re-exported at `src/lib.rs` | [`../item/readme.md`](../item/readme.md) |
 
-No decisions-collection pointer for the `Inbound`/`InboundError` omissions —
-see [`../item/readme.md`](../item/readme.md)'s "Differs from the proposal"
-for that reasoning.
+The divergences from the proposal — no `Inbound`, `inbound_producer` or
+`InboundError` — are listed in [`../item/readme.md`](../item/readme.md).
 [`../decisions/001_two_producers_is_two_rings.md`](../decisions/001_two_producers_is_two_rings.md)
-covers the one divergence that warranted a full ADR (a real alternative was
-weighed and rejected, not just a shape that didn't materialize).
+records the one that weighed an alternative.

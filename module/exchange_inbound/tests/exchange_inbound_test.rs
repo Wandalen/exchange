@@ -49,10 +49,7 @@ fn a_pushed_command_drains_in_the_same_order_it_was_pushed()
   assert_eq!( inbound_drain( &mut consumer ), vec![ a, b ], "FIFO — push order must survive the ring" );
 }
 
-// exchange_inbound/BUG-001 substrate/task/exchange_inbound/bug/completed/001_inbound_flush_wrong_return_type.md
-// — bug_reproducer: this test already specified the correct partial-acceptance
-// behavior (accepted == 2, not a panic) before the fix; it simply could not run
-// because inbound_flush did not compile against try_push_batch's real signature.
+/// A flush takes as many commands as fit and says how many.
 ///
 /// # Root Cause
 ///
@@ -228,11 +225,8 @@ fn replace_of_a_missing_order_reports_missing()
   assert!( matches!( outcome, InboundOutcome::Replaced( Err( RestReplaceError::Missing ) ) ) );
 }
 
-// BUG-001 substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md — bug_reproducer: this crate's own
-// `InboundCmd::Replace` carries `instrument` and `new_resting` as two independently-settable
-// fields and forwards both straight to `exchange_rest::rest_replace` with no check of its own
-// (see that function's own bug_reproducer in `exchange_rest_test.rs`) — a second, real, tested
-// call site sharing the exact same gap, found while filing BUG-001's Search More Instances step.
+/// `Replace` carries `instrument` and `new_resting` separately and forwards
+/// both; `rest_replace` refuses them disagreeing, here as in its own suite.
 #[ test ]
 fn replace_refuses_a_new_resting_for_a_different_instrument()
 {
@@ -251,12 +245,7 @@ fn replace_refuses_a_new_resting_for_a_different_instrument()
   assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 1 ), "order 1 is back on its own instrument, unchanged" );
 }
 
-// exchange_inbound/BUG-002 substrate/task/exchange_inbound/bug/verified/002_place_rests_self_match_cancelled_order.md
-// — bug_reproducer: an incoming Place cancelled by self-match prevention
-// (CancelIncoming/CancelBoth) was rested on the book anyway, because
-// `inbound_apply` never checked `crossing.cancelled` before resting
-// `crossing.remaining` — the same class of bug `exchange_core::step_place`
-// already found and fixed under its own `incoming_cancelled` check.
+/// An incoming order self-match prevention cancelled does not rest.
 ///
 /// # Root Cause
 ///
@@ -275,10 +264,8 @@ fn replace_refuses_a_new_resting_for_a_different_instrument()
 ///
 /// # Fix Applied
 ///
-/// `inbound_apply` now scans `crossing.cancelled` for an entry matching the
-/// incoming order's own id (`incoming_cancelled`) and skips resting when true
-/// — the same pattern already used by `exchange_core::step_place`'s own
-/// `incoming_cancelled` check (`module/exchange_core/src/lib.rs:611-621`).
+/// `inbound_apply` looks for the incoming order's id in `crossing.cancelled`
+/// and does not rest it when found, as `exchange_core::step_place` does.
 ///
 /// # Prevention
 ///
@@ -314,10 +301,7 @@ fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
   assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 1 ), "CancelIncoming leaves the resting side untouched" );
 }
 
-// exchange_inbound/BUG-003 substrate/task/exchange_inbound/bug/verified/003_duplicate_place_silently_dropped_in_release.md
-// — bug_reproducer: a `Place` whose remainder would rest, naming an id already
-// claimed by an earlier, still-resting `Place`, was silently dropped — `rest_place`'s
-// own `false` was only ever checked by a `debug_assert!`, compiled out in release.
+/// A `Place` naming an id that already rests is refused, not dropped.
 ///
 /// # Root Cause
 ///
@@ -328,15 +312,12 @@ fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
 ///
 /// # Why Not Caught
 ///
-/// Every pre-existing test built a fresh, non-colliding `OrderId` per order (see
-/// `resting()`'s own per-call `id` argument) — nothing ever submitted the same id
-/// twice through a live `Place`.
+/// Every test built a fresh `OrderId` per order; none submitted one twice.
 ///
 /// # Fix Applied
 ///
-/// `inbound_apply` now takes `seen : &mut IdSet` and calls
-/// `exchange_idem::idem_insert` before ever resting a `Place`'s remainder,
-/// returning `InboundApplyError::Idem` on a repeat instead of silently dropping it.
+/// `inbound_apply` claims each resting id in `Claims` and refuses a claimed
+/// one with `InboundApplyError::Idem` — since then, before it crosses.
 ///
 /// # Prevention
 ///

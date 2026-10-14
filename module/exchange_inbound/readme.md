@@ -1,7 +1,7 @@
 # exchange_inbound
 
 `InboundCmd` carried from a producer, through a `ring_factory`/`ring_handle`
-channel, to the book — the family's first genuinely concurrent code.
+channel, to the book — the family's concurrent edge.
 
 ```rust
 use exchange_book::Book;
@@ -23,51 +23,46 @@ for cmd in inbound_drain( &mut consumer )
 }
 ```
 
-## Genuinely new
+## Who calls it
 
-No ring integration exists anywhere in the real crates today — every order
-reaches `exchange_core::submit` by a direct function call. This crate is the
-family's first use of real concurrency, and closes hard problems 11 (inbound
-at the aeon edge), 23 (full order of inbound), and 24 (ring overflow is
-reject), and features 29 (inbound flush, drain, then rest or match) and 30
-(overflow → reject): [`inbound_drain`] is the already-drained slice hard
-problem 11 asks for; the fixed lane order the "Two producers" section below
-describes is hard problem 23's stable total order; and
-[`inbound_overflow_reject`]/`OverflowPolicy::Fail` is hard problem 24 and
-feature 30 together. [`inbound_flush`] → [`inbound_drain`] →
-[`inbound_apply`] is feature 29's flush-drain-then-rest-or-match sequence
-end to end.
+`exchange_core::Exchange::exchange_step` drains rings built here and
+applies each command itself, with escrow, caps and halt; it answers
+`Replace` with `StepOutcome::ReplaceNotWired`. `inbound_apply` is the
+book-level apply, without any of that: crossed, rested, cancelled and
+replaced through `exchange_match` and `exchange_rest`, with idempotency
+kept in `Claims`. `smoke_exchange_phases`' P28 and P29 drive the ring.
 
-## Diverges from the proposal
+Closes hard problems 11 (inbound at the aeon edge), 23 (full order of
+inbound) and 24 (ring overflow is reject), and features 29 (flush, drain,
+then rest or match) and 30 (overflow is reject).
 
-`ring_handle::Producer` cannot be cloned — "a second producer" is refused by
-that crate's own design, not a gap this crate works around. So "two
-producers" is built as **two rings**, each with its own exclusively-owned
-producer, genuinely raced from two OS threads, combined on the drain side in
-a fixed lane order decided ahead of time rather than by which thread
-finished first. See
+## One producer per ring
+
+`ring_handle::Producer` cannot be cloned, so "two producers" is two rings,
+each raced from its own thread and drained in a lane order fixed ahead of
+time, never by which thread finished first. See
 [`docs/decisions/001_two_producers_is_two_rings.md`](docs/decisions/001_two_producers_is_two_rings.md).
 
-`inbound_ring` always configures `OverflowPolicy::Fail` — never the ring
-family's own `DropNewest` default — since a full ring's `try_push` under the
-default returns `Ok` while silently discarding the record. See the module
-doc's "Overflow is a reject" section.
+`inbound_ring` always sets `OverflowPolicy::Fail`. Under the ring family's
+default, `DropNewest`, a full ring's `try_push` returns `Ok` and discards
+the record.
 
 ## Responsibility Table
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — `ring_factory`/`ring_handle`/`ring_types` plus the exchange crates `inbound_apply` dispatches to |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `ring_factory`/`ring_handle`/`ring_types`, and the exchange crates `inbound_apply` calls |
 | [`src/lib.rs`](src/lib.rs) | `InboundCmd`, `InboundOutcome`, `InboundApplyError`, `Claims`, `inbound_ring`, `inbound_flush`, `inbound_drain`, `inbound_apply`, `inbound_overflow_reject` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/decisions/` | Why "two producers" is two rings, not one shared one |
-| `docs/pitfall/` | The 3 "Ring" pitfalls this crate's ring construction and drain combine bear on |
+| `docs/pitfall/` | The three ring pitfalls: drain order, silent overflow, a shared single-producer ring |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
-| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
-| [`tests/exchange_inbound_test.rs`](tests/exchange_inbound_test.rs) | Test Matrix T01 (ring round-trip) and T02 (`inbound_apply` dispatch) |
+| `docs/item/` | Exposed surface, as built vs. proposed |
+| [`tests/exchange_inbound_test.rs`](tests/exchange_inbound_test.rs) | T01, the ring round trip; T02, `inbound_apply` and its claims |
 
 ## Related
 
 - [`exchange_rest/`](../exchange_rest/readme.md) — what `Cancel`/`Replace` call through to
 - [`exchange_match/`](../exchange_match/readme.md) — what `Place` is crossed against before any remainder rests
-- [`exchange_idem/`](../exchange_idem/readme.md) — supplies the `IdSet`s behind `Claims`: order ids checked before `Place` crosses, claimed once it rests, un-claimed on a successful `Cancel`/`Replace`; client ids checked the same way and never released
+- [`exchange_idem/`](../exchange_idem/readme.md) — the `IdSet`s behind `Claims`
+- [`exchange_core/`](../exchange_core/readme.md) — drains these rings in `exchange_step`

@@ -12,23 +12,16 @@ A dropped order when the ring is full is indistinguishable, to the submitter, fr
 
 ### How this crate avoids it
 
-[`inbound_ring`] always builds with `ring_types::OverflowPolicy::Fail` —
-never `RingConfig::new`'s own default, `OverflowPolicy::DropNewest`, under
-which (per `ring_handle::Producer::try_push`'s own doc comment) "an `Ok` is
-not by itself evidence the record was kept." The only `with_overflow` call
-site anywhere in this crate is inside [`inbound_ring`] itself, and it always
-passes `OverflowPolicy::Fail` — there is no code path that builds a ring any
-other way. [`inbound_overflow_reject`] is a thin forward to
-`Producer::try_push`, whose `Err` case is reachable *because* of that forced
-policy — see [`../../src/lib.rs`](../../src/lib.rs)'s own module doc,
-"Overflow is a reject, not a drop — by explicit configuration".
+[`inbound_ring`] always builds with `OverflowPolicy::Fail`, never
+`RingConfig::new`'s default, `DropNewest`, under which `try_push` returning
+`Ok` does not mean the record was kept. It is this crate's only
+`with_overflow` call. [`inbound_overflow_reject`] forwards to
+`Producer::try_push`, whose `Err` that policy makes reachable.
 
-**Verified**: [`tests/exchange_inbound_test.rs`](../../tests/exchange_inbound_test.rs)'s
+[`tests/exchange_inbound_test.rs`](../../tests/exchange_inbound_test.rs)'s
 `a_full_ring_rejects_the_next_publish_instead_of_dropping_it` fills a
-capacity-2 ring, then asserts the third `inbound_overflow_reject` call
-returns `Err(third)` — the rejected command itself, handed back, not a
-silent `Ok`. `smoke_exchange_phases`'s `demo_p29_over.rs` demonstrates the
-identical property end to end as P29's own phase-smoke.
+capacity-2 ring and gets the third command back as `Err`.
+`smoke_exchange_phases`' `demo_p29_over` shows the same end to end.
 
 ### Sources
 
