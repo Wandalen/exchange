@@ -309,6 +309,22 @@ fn rest_replace_refuses_a_replacement_that_would_take()
   assert_eq!( bid.arrival, Sequence( 10 ) );
 }
 
+/// A replacement reaching its own account's order is refused the same way:
+/// a self-cross is matching's to resolve, under a `SelfMatchPolicy`.
+#[ test ]
+fn rest_replace_refuses_a_replacement_reaching_its_own_account()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Buy, "2.40", 4, 10 ) ) );
+  let own_ask = resting( 2, Side::Sell, "2.50", 4, 20 );
+  assert!( rest_place( &mut book, Resting { order : Order { account : AccountId( 1 ), ..own_ask.order }, ..own_ask } ) );
+
+  let error = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Buy, "2.50", 4, 30 ) ).unwrap_err();
+
+  assert_eq!( error, RestReplaceError::WouldTake );
+  assert_eq!( book.best( InstrumentId( 1 ), Side::Buy ).unwrap().order.price, Price::parse( "2.40" ).unwrap() );
+}
+
 /// A replacement one tick short of the opposite side is not refused.
 #[ test ]
 fn rest_replace_up_to_the_opposite_side_is_accepted()
