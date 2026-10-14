@@ -6,7 +6,7 @@
 //! the first, so the audit could balance while one asset is created and
 //! another destroyed. `spec_register` refuses it instead.
 
-use exchange_core::{ AssetId, Exchange, ExchangeError, InstrumentId, Price, Quantity };
+use exchange_core::{ AssetId, Exchange, ExchangeError, InstrumentId, Price, Quantity, SpecError };
 
 fn grid() -> ( Price, Quantity )
 {
@@ -67,4 +67,26 @@ fn an_instrument_whose_base_is_its_quote_is_refused()
 
   assert_eq!( exchange.spec_register( id, AssetId( 1 ), AssetId( 1 ), tick, lot ), Err( ExchangeError::BaseIsQuote( id ) ) );
   assert_eq!( exchange.halt_is( id ), Err( ExchangeError::UnknownInstrument( id ) ) );
+}
+
+/// When several refusals apply, the first in this order wins: the id is
+/// already registered, the grid is degenerate, the base is the quote, the
+/// pair differs from the one registered.
+#[ test ]
+fn spec_register_refuses_in_a_fixed_order()
+{
+  let mut exchange = Exchange::new();
+  let ( tick, lot ) = grid();
+  let held = InstrumentId( 1 );
+  exchange.spec_register( held, AssetId( 1 ), AssetId( 2 ), tick, lot ).unwrap();
+  let other = InstrumentId( 2 );
+
+  let duplicate = exchange.spec_register( held, AssetId( 3 ), AssetId( 3 ), Price::ZERO, lot );
+  assert_eq!( duplicate, Err( ExchangeError::SpecAlreadyRegistered( held ) ) );
+
+  let degenerate = exchange.spec_register( other, AssetId( 3 ), AssetId( 3 ), Price::ZERO, lot );
+  assert_eq!( degenerate, Err( ExchangeError::Spec( SpecError::ZeroTick ) ) );
+
+  let same_asset = exchange.spec_register( other, AssetId( 3 ), AssetId( 3 ), tick, lot );
+  assert_eq!( same_asset, Err( ExchangeError::BaseIsQuote( other ) ) );
 }

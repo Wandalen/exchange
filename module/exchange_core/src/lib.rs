@@ -515,13 +515,16 @@ impl< E : EscrowPort > Exchange< E >
   ///
   /// # Errors
   ///
+  /// Checked in this order, the first that applies wins: the id, the spec on
+  /// its own (grid, then assets), then the pair against the one registered.
+  ///
   /// [`ExchangeError::SpecAlreadyRegistered`] if `id` is already registered —
   /// refused rather than overwritten, since replacing a live tick/lot grid
   /// would silently change the terms under orders already resting against the
-  /// old one. [`ExchangeError::BaseIsQuote`] if `base` is `quote`.
+  /// old one. [`ExchangeError::Spec`] if `tick` or `lot` is zero.
+  /// [`ExchangeError::BaseIsQuote`] if `base` is `quote`.
   /// [`ExchangeError::SecondAssetPair`] if another instrument is
   /// registered on a different `( base, quote )`: v0.1 trades one pair.
-  /// [`ExchangeError::Spec`] if `tick` or `lot` is zero.
   pub fn spec_register
   (
     &mut self,
@@ -536,6 +539,7 @@ impl< E : EscrowPort > Exchange< E >
     {
       return Err( ExchangeError::SpecAlreadyRegistered( id ) );
     }
+    let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
     if base == quote
     {
       return Err( ExchangeError::BaseIsQuote( id ) );
@@ -545,7 +549,6 @@ impl< E : EscrowPort > Exchange< E >
     {
       return Err( ExchangeError::SecondAssetPair { id, held, asked : ( base, quote ) } );
     }
-    let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
     self.specs.insert( id, spec );
     Ok( () )
   }
