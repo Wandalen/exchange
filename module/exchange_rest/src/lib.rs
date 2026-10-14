@@ -56,8 +56,9 @@ pub enum RestReplaceError
   /// [`Book::insert`] would refuse the replacement: a `remaining` of zero or
   /// above its order's quantity, or an `order.id` resting elsewhere.
   Refused,
-  /// The replacement's price reaches the best order on the opposite side.
-  /// Resting it would leave the book crossed; it has to be matched instead.
+  /// The replacement's price reaches the best order on the opposite side,
+  /// whoever's. Resting it would leave the book crossed; it has to be matched
+  /// instead, where a self-cross meets its `SelfMatchPolicy`.
   WouldTake,
 }
 
@@ -199,6 +200,8 @@ pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : Order
   // Root cause: only `insert`'s checks ran, so a replacement priced into the
   // opposite side rested there untraded and the book was left crossed.
   // Pitfall: the opposite side counts every account, the replacing one too.
+  // A self-cross is refused, not resolved: that takes a `SelfMatchPolicy`,
+  // and only matching applies one.
   let would_take = book.best( instrument, new.side.opposite() )
     .is_some_and( | best | side_accepts( new.side, new.price, best.order.price ) );
   if would_take
