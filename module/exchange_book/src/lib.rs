@@ -22,7 +22,7 @@
 //! per-instrument method takes it as its first argument. An instrument nothing
 //! has rested on behaves as an empty book. [`iter`](Book::iter),
 //! [`len`](Book::len) and [`is_empty`](Book::is_empty) span every instrument:
-//! `exchange_core::Exchange::cancel` finds an order by id alone.
+//! `exchange_core`'s cancel finds an order by id alone.
 //!
 //! # Representation
 //!

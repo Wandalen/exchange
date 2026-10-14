@@ -37,7 +37,7 @@ caller, with `book_new`, `book_instrument`, `book_best_bid`, `book_best_ask`,
 `book_level_get`, `book_rest_count`, `book_price_walk` and
 `BookError { UnknownInstrument, Halted }`.
 
-- **One `Book` holds every instrument**, keyed inside — `Exchange::cancel`
+- **One `Book` holds every instrument**, keyed inside — `exchange_core`'s cancel
   looks an order up by id alone. Per-instrument methods take the
   `InstrumentId`; `insert` reads it off the order.
 - **`best( instrument, side )`** replaces `book_best_bid`/`book_best_ask`;

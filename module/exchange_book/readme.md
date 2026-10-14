@@ -112,7 +112,7 @@ highest ever seated; callers minting ids in order never pay for it. Inserting
 
 ## Not built: an id index
 
-`Exchange::cancel` finds an order by walking every resting order, `cancel`
+`exchange_core`'s cancel finds an order by walking every resting order, `cancel`
 walks the instrument's levels for anything behind the front, and
 `account_rests` walks the instrument's book. An index from id to instrument,
 side and price, plus per-account counts, would make each logarithmic. But

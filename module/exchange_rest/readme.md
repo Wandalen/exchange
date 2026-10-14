@@ -62,7 +62,7 @@ tick and lot".
 ## Who calls it
 
 `exchange_core::step_place` rests every remainder through `rest_place`.
-`Exchange::cancel` cancels on the book itself, releasing escrow in the same
+A ring `Cancel` cancels on the book itself, releasing escrow in the same
 step, and `exchange_step` answers a drained `Replace` with
 `StepOutcome::ReplaceNotWired`. `exchange_inbound::inbound_apply` calls all
 three.

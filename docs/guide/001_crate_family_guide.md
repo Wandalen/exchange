@@ -252,14 +252,14 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
 - **`exchange_inbound`** (→ `exchange_book`, `exchange_id`, `exchange_idem`, `exchange_match`, `exchange_rest`, `exchange_tif`, plus `ring_factory`/`ring_handle`/`ring_types` and `exact_arith`) — `InboundCmd::{Place, Cancel, Replace}` carried from a `ring_factory`/`ring_handle` producer to the book: `inbound_ring`, `inbound_flush`, `inbound_drain`, `inbound_apply`, `inbound_overflow_reject`. `inbound_apply` refuses a `Place` for nothing, one whose `remaining` is not its quantity, one naming an order id that rests (it asks the book) and one reusing a client id (kept in `Claims`), all before it crosses. The family's first genuinely concurrent code, and — since Stage 9 — the ring `Exchange::exchange_step` (Tier 6) itself drains on every call.
   ```rust
   use exchange_book::Book;
-  use exchange_id::{ InstrumentId, OrderId };
-  use exchange_inbound::{ Claims, InboundCmd, inbound_apply, inbound_drain, inbound_ring };
+  use exchange_id::{ AccountId, InstrumentId, OrderId };
+  use exchange_inbound::{ Claims, InboundCmd, OrderRef, inbound_apply, inbound_drain, inbound_ring };
   use exchange_stp::SelfMatchPolicy;
 
   let mut split = inbound_ring( 8 ).unwrap();
   let mut ends = split.ends();
   let ( mut producer, mut consumer ) = ends.split();
-  producer.try_push( InboundCmd::Cancel { instrument : InstrumentId( 1 ), id : OrderId( 1 ) } ).unwrap();
+  producer.try_push( InboundCmd::Cancel { instrument : InstrumentId( 1 ), account : AccountId( 1 ), order : OrderRef::Id( OrderId( 1 ) ) } ).unwrap();
 
   let mut book = Book::new();
   let mut claims = Claims::new();

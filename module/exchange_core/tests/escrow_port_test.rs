@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use exchange_core::
 {
   AccountId, AssetId, Consumer, EscrowError, EscrowPort, EventKind, Exchange, ExchangeError, InboundCmd, InstrumentId,
-  Obligation, Order, OrderId, Price, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy,
+  Obligation, Order, OrderId, OrderRef, Price, Producer, Quantity, Receipt, RejectReason, Resting, SelfMatchPolicy,
   Sequence, Side, StepOutcome, Tif, Trade, inbound_flush, inbound_ring, obligation,
 };
 
@@ -138,6 +138,25 @@ fn place
   {
     Some( StepOutcome::Placed( result ) ) => result,
     other => panic!( "place() only ever pushes Place — got {other:?}" ),
+  }
+}
+
+/// Push one `Cancel` through the ring and apply it: the only way to cancel.
+fn cancel
+(
+  exchange : &mut Exchange< ScriptedEscrow >,
+  producer : &mut Producer< '_, InboundCmd >,
+  consumer : &mut Consumer< '_, InboundCmd >,
+  account : AccountId,
+  order : impl Into< OrderRef >,
+) -> Result< Quantity, ExchangeError >
+{
+  let order = order.into();
+  assert_eq!( inbound_flush( producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, account, order } ] ), 1 );
+  match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
+  {
+    Some( StepOutcome::Cancelled( result ) ) => result,
+    other => panic!( "cancel() only pushes Cancel — got {other:?}" ),
   }
 }
 
@@ -274,7 +293,7 @@ fn every_applied_escrow_call_has_its_event()
   run( order( AccountId( 1 ), Side::Sell, "2.00", 2, Tif::Gtc ), SelfMatchPolicy::CancelIncoming );
   let own = run( order( AccountId( 1 ), Side::Buy, "2.00", 1, Tif::Gtc ), SelfMatchPolicy::CancelIncoming );
   assert!( own.self_match_cancelled );
-  exchange.cancel( OrderId( 3 ) ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), OrderId( 3 ) ).unwrap();
 
   let calls = &exchange.escrow().calls;
   let count_calls = | pick : fn( &Call ) -> bool | calls.iter().filter( | call | pick( call ) ).count();
@@ -303,7 +322,7 @@ fn a_cancel_whose_release_fails_leaves_the_order_resting()
 
   place( &mut exchange, &mut producer, &mut consumer, order( AccountId( 1 ), Side::Sell, "1.00", 2, Tif::Gtc ), SelfMatchPolicy::CancelIncoming ).unwrap();
 
-  assert_eq!( exchange.cancel( OrderId( 0 ) ), Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
+  assert_eq!( cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), OrderId( 0 ) ), Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
   assert!( exchange.book().iter().any( | resting | resting.order.id == OrderId( 0 ) ), "the order must still rest" );
   assert!( !exchange.escrow().calls.contains( &Call::Release( OrderId( 0 ) ) ) );
   assert!( !exchange.events().iter().any( | event | matches!( event.kind, EventKind::OrderCancelled { .. } ) ) );

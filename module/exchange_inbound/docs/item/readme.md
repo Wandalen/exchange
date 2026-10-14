@@ -13,7 +13,8 @@ The exposed surface of `exchange_inbound`, as built.
 
 | Item | Kind | Signature |
 |------|------|-----------|
-| `InboundCmd` | enum | `{ Place(Resting), Cancel { instrument: InstrumentId, id: OrderId }, Replace { instrument: InstrumentId, old_id: OrderId, new_resting: Resting } }` |
+| `InboundCmd` | enum | `{ Place(Resting), Cancel { instrument: InstrumentId, account: AccountId, order: OrderRef }, Replace { instrument: InstrumentId, old_id: OrderId, new_resting: Resting } }` |
+| `OrderRef` | enum | `{ Id(OrderId), Client(ClientOrderId) }`; `fn resting_in(self, &Book, InstrumentId, AccountId) -> Option<&Resting>`; `Display`, `From<OrderId>`, `From<ClientOrderId>` |
 | `InboundOutcome` | enum | `{ Crossed(Crossing), Cancelled(Option<Resting>), Replaced(Result<Resting, RestReplaceError>) }` |
 | `InboundApplyError` | enum | `{ Match(MatchError), OrderIdRests, DuplicateClientId, ZeroQuantity, NotNew }`, with `Display`, `Error`, `From<MatchError>` |
 | `Claims` | struct | `{ /* private */ }`, `Claims::new()` — the `( AccountId, ClientOrderId )`s `inbound_apply` has accepted |

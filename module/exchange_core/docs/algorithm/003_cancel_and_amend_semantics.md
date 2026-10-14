@@ -172,7 +172,7 @@ version slot is not this instance's to assign.
 
 | File | Relationship |
 |------|--------------|
-| `src/lib.rs` | `Exchange::cancel` — release and removal in one operation; amend is not implemented |
+| `src/lib.rs` | `Exchange::exchange_step`'s `Cancel` — release and removal in one operation; amend is not implemented |
 | `../../../exchange_book/src/lib.rs` | `Book::cancel` — returns `None` for an absent order rather than panicking |
 
 ### Tests

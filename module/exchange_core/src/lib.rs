@@ -45,8 +45,8 @@
 //! [`Exchange::exchange_step`] drains an [`exchange_inbound`] ring and applies
 //! every [`InboundCmd`] it finds, in drain order — see that method's own doc
 //! for the full design (why it owns sequencing rather than trusting a
-//! caller-supplied id/arrival, why `Cancel` delegates to [`Exchange::cancel`]
-//! unchanged, and why `Replace` is not yet wired). Three of the four bullets
+//! caller-supplied id/arrival, why every cancel arrives through it, and why
+//! `Replace` is not yet wired). Three of the four bullets
 //! the previous revision of this doc named as "not implemented" are resolved
 //! as a direct consequence, not a separate effort:
 //!
@@ -101,7 +101,7 @@ pub use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_idem::{ IdSet, idem_insert, idem_seen };
 pub use exchange_inbound::
 {
-  BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
+  BuildError, Consumer, Drain, Ends, InboundCmd, OrderRef, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
   inbound_ring,
 };
 use exchange_inbound::inbound_drain;
@@ -135,7 +135,7 @@ pub use exchange_types::{ TypeError, notional, obligation };
 ///   call against a clone first, then replays the same calls for real,
 ///   `expect`ing each to succeed. An implementation that answers the replay
 ///   differently from the dry run panics the facade.
-/// - **A refused call changes nothing.** [`Exchange::cancel`] calls
+/// - **A refused call changes nothing.** A cancel calls
 ///   [`Self::release`] on the real escrow and leaves the order resting when it
 ///   refuses.
 /// - **`Clone` is a full, independent copy.** A dry run that writes through
@@ -268,9 +268,11 @@ pub enum ExchangeError
   Escrow( EscrowError ),
   /// Matching failed.
   Matching( MatchError ),
-  /// A cancel or a lookup named an order that is not resting — a race result
-  /// rather than a caller error, reported rather than ignored.
-  NotResting( OrderId ),
+  /// A cancel named no order the account has resting on that instrument:
+  /// never placed, already filled or cancelled, another account's, or on
+  /// another instrument. All four answer the same, so a ring producer cannot
+  /// learn which ids another account has live (ADR-003).
+  NotResting( OrderRef ),
   /// [`Exchange::spec_register`] was asked about an instrument no spec names.
   UnknownInstrument( InstrumentId ),
   /// [`Exchange::spec_register`] refused a degenerate tick or lot.
@@ -296,7 +298,7 @@ impl core::fmt::Display for ExchangeError
       Self::Rejected( reason ) => write!( f, "the order was rejected: {reason:?}" ),
       Self::Escrow( error ) => write!( f, "escrow refused: {error}" ),
       Self::Matching( error ) => write!( f, "matching failed: {error}" ),
-      Self::NotResting( id ) => write!( f, "order {} is not resting", id.0 ),
+      Self::NotResting( order ) => write!( f, "{order} is not resting" ),
       Self::UnknownInstrument( id ) => write!( f, "instrument {} has no registered spec", id.0 ),
       Self::Spec( error ) => write!( f, "spec refused: {error}" ),
       Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
@@ -378,9 +380,8 @@ pub enum StepOutcome
   /// pipeline the removed `submit` method used to run directly — see
   /// [`Exchange::exchange_step`]'s own doc for what changed.
   Placed( Result< Receipt, ExchangeError > ),
-  /// An [`InboundCmd::Cancel`] ran through [`Exchange::cancel`] unchanged —
-  /// see [`Exchange::exchange_step`]'s own doc for why this delegates rather
-  /// than re-implementing cancellation.
+  /// An [`InboundCmd::Cancel`] was applied: the withdrawn remainder, or why
+  /// nothing was withdrawn.
   Cancelled( Result< Quantity, ExchangeError > ),
   /// An [`InboundCmd::Replace`] was drained, but this facade does not yet
   /// apply it — see [`Exchange::exchange_step`]'s own doc, "Replace is not
@@ -597,9 +598,8 @@ impl< E : EscrowPort > Exchange< E >
 
   /// A copy of the running counters [`Self::exchange_step`] has kept so far.
   ///
-  /// Counts only activity processed through [`Self::exchange_step`] —
-  /// [`Self::cancel`]'s own direct, synchronous path is kept byte-for-byte
-  /// unchanged by this stage's own scope, so it does not feed these counters.
+  /// Every placement and cancel goes through [`Self::exchange_step`], so
+  /// these count all of them.
   #[ must_use ]
   pub fn stats_get( &self ) -> BookStats
   {
@@ -637,13 +637,12 @@ impl< E : EscrowPort > Exchange< E >
   /// order hold regardless of what (if anything) a producer stamped on the
   /// way in.
   ///
-  /// # `Cancel` delegates, it does not re-implement
+  /// # Cancel
   ///
-  /// [`InboundCmd::Cancel`]'s own `instrument` field is never consulted —
-  /// [`Self::cancel`] already does its own authoritative, instrument-agnostic
-  /// search and is already correct and tested, so a command arriving via the
-  /// ring gets exactly the same escrow-release behaviour a direct call would,
-  /// with no second implementation to keep in sync.
+  /// The ring is the only way to cancel; there is no direct call. A
+  /// [`InboundCmd::Cancel`] withdraws an order only when its account,
+  /// instrument and id (the exchange's, or the account's client id) all match
+  /// (ADR-003).
   ///
   /// # Replace is not yet wired
   ///
@@ -678,9 +677,9 @@ impl< E : EscrowPort > Exchange< E >
     match cmd
     {
       InboundCmd::Place( draft ) => StepOutcome::Placed( self.step_place( draft.order, policy ) ),
-      InboundCmd::Cancel { id, .. } =>
+      InboundCmd::Cancel { instrument, account, order } =>
       {
-        let result = self.cancel_resting( id );
+        let result = self.cancel_resting( instrument, account, order );
         if let Ok( resting ) = &result
         {
           self.count( resting.order.instrument, stats_cancel_add, 1 );
@@ -994,13 +993,13 @@ impl< E : EscrowPort > Exchange< E >
     self.reject( order, reason )
   }
 
-  /// Withdraw a resting order's remainder and return its reservation.
+  /// Withdraw a resting order's remainder and return its reservation, and the
+  /// order whole.
   ///
   /// # Errors
   ///
-  /// [`ExchangeError::NotResting`] if no such order rests — which happens
-  /// when it filled or was cancelled first, and is a defined outcome rather
-  /// than a caller error. On [`ExchangeError::Escrow`], the order is left
+  /// [`ExchangeError::NotResting`] if `account` has no order named `order`
+  /// resting on `instrument`. On [`ExchangeError::Escrow`], the order is left
   /// resting exactly as it was — cancellation only commits once the release
   /// it depends on has actually succeeded.
   ///
@@ -1020,17 +1019,11 @@ impl< E : EscrowPort > Exchange< E >
   /// safe ordering — "first find it, then let it go" — right up until the
   /// second call's failure mode is traced to something the first call
   /// cannot undo.
-  pub fn cancel( &mut self, id : OrderId ) -> Result< Quantity, ExchangeError >
+  fn cancel_resting( &mut self, instrument : InstrumentId, account : AccountId, order : OrderRef ) -> Result< Resting, ExchangeError >
   {
-    self.cancel_resting( id ).map( | resting | resting.remaining )
-  }
-
-  /// [`Self::cancel`], returning the withdrawn order whole.
-  fn cancel_resting( &mut self, id : OrderId ) -> Result< Resting, ExchangeError >
-  {
-    let ( account, instrument ) = self.book.iter().find( | resting | resting.order.id == id )
-      .map( | resting | ( resting.order.account, resting.order.instrument ) )
-      .ok_or( ExchangeError::NotResting( id ) )?;
+    let id = order.resting_in( &self.book, instrument, account )
+      .map( | resting | resting.order.id )
+      .ok_or( ExchangeError::NotResting( order ) )?;
     let released = self.escrow.release( account, id )?;
     let resting = self.book.cancel( instrument, id )
       .expect( "just confirmed resting above, and release does not touch the book" );
