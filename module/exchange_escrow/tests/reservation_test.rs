@@ -669,6 +669,100 @@ fn a_buyer_is_never_charged_above_its_own_limit()
   assert_eq!( escrow, before );
 }
 
+/// A seller is never paid below its own limit, as maker or as taker.
+///
+/// The seller's mirror of `a_buyer_is_never_charged_above_its_own_limit`:
+/// the reservation records the ask's limit, and a trade below it is refused.
+#[ test ]
+#[ ignore = "F2: settle checks the limit for the buyer only" ]
+fn a_seller_is_never_paid_below_its_own_limit()
+{
+  let mut escrow = two_sided();
+  let ask = order( 1, 1, Side::Sell, "15", 2 );
+  let bid = order( 2, 2, Side::Buy, "20", 2 );
+  escrow.reserve( &ask ).unwrap();
+  escrow.reserve( &bid ).unwrap();
+  let before = escrow.clone();
+
+  let as_maker = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert!( escrow.settle( &as_maker ).is_err(), "the ask sold at 1 against its limit of 15" );
+  assert_eq!( escrow, before );
+
+  let as_taker = Trade
+  {
+    taker : ask.id,
+    taker_account : ask.account,
+    taker_side : Side::Sell,
+    maker : bid.id,
+    maker_account : bid.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert!( escrow.settle( &as_taker ).is_err(), "the ask sold at 1 against its limit of 15" );
+  assert_eq!( escrow, before );
+
+  // The same trade at the ask's own limit settles, so the refusals above are
+  // about the price and nothing else.
+  let at_limit = Trade { price : price( "15" ), ..as_maker };
+  assert_eq!( escrow.settle( &at_limit ), Ok( () ) );
+}
+
+/// A buyer's partial fill settles even when its limit times the fill is not
+/// exactly representable, provided the price it pays is.
+///
+/// Limit 0.5 for 2 reserves exactly 1. A fill of 0.000005 at 0.2 costs
+/// exactly 0.000001, but 0.5 × 0.000005 = 0.0000025 needs a seventh decimal
+/// digit `Money` (scale 6) cannot hold.
+#[ test ]
+#[ ignore = "F4: settle needs limit × fill to be exact" ]
+fn a_partial_fill_settles_when_only_the_limit_notional_is_inexact()
+{
+  let mut escrow = two_sided();
+  let bid = order( 1, 2, Side::Buy, "0.5", 2 );
+  let ask = Order { quantity : Quantity::from_minor( 5 ).unwrap(), ..order( 2, 1, Side::Sell, "0.2", 1 ) };
+  escrow.reserve( &bid ).unwrap();
+  escrow.reserve( &ask ).unwrap();
+  let cash_before = escrow.total_cash().unwrap();
+
+  let trade = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "0.2" ),
+    quantity : ask.quantity,
+  };
+  assert_eq!( escrow.settle( &trade ), Ok( () ) );
+  assert_eq!( escrow.total_cash().unwrap(), cash_before );
+
+  // The rest, 0.5 × 1.999995 = 0.9999975, is inexact too, so a fix has to
+  // round. Its fills are exact amounts, so it can spend at most 0.999997, and
+  // at most 0.000001 has been paid.
+  assert!
+  (
+    matches!( escrow.reserved_for( bid.id ), Some( Obligation::Cash( held ) ) if money( "0.999997" ) <= held && held <= money( "0.999999" ) ),
+    "the rest of the bid is still covered: {:?}",
+    escrow.reserved_for( bid.id ),
+  );
+
+  // Cancelling the rest returns everything but the 0.000001 paid.
+  escrow.release( bid.account, bid.id ).unwrap();
+  let buyer = escrow.account( AccountId( 2 ) ).unwrap();
+  assert_eq!( buyer.cash.available(), money( "999.999999" ) );
+  assert_eq!( buyer.cash.reserved(), Money::ZERO );
+}
+
 /// A settlement that fails on its very last step — crediting the buyer's
 /// asset — leaves every earlier step's effect uncommitted too, not applied
 /// halfway.
