@@ -1,5 +1,7 @@
 # exchange
 
+[![RepoRanker](https://reporanker.com/badge/Wandalen/exchange)](https://reporanker.com/repos/Wandalen/exchange)
+
 A price-time-priority limit order book and matching engine: orders in, trades
 and an event stream out, with escrow reservation ahead of every match and a
 zero-sum conservation check on every settlement. Workstream 002's exchange
