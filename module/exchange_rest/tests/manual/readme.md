@@ -17,16 +17,16 @@ checks fail, and nothing else. The colliding id is now caught later as
 `NotAnAmend` (it names another account); the other two reach the cancel and
 then the `assert!` on the refused insert.
 
-**Observed 2026-10-13:**
+**Observed 2026-10-14:**
 
 ```
-test rest_replace_refused_by_zero_quantity_leaves_the_original ... FAILED
 test rest_replace_refused_by_a_colliding_id_leaves_the_original ... FAILED
+test rest_replace_refused_by_zero_quantity_leaves_the_original ... FAILED
 test rest_replace_refused_keeps_the_originals_place_among_shared_arrivals ... FAILED
-test result: FAILED. 12 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: FAILED. 15 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
 
-Reverted; all 15 tests plus the doctest pass again.
+Reverted; all 18 tests plus the doctest pass again.
 
 ## Run Record
 
@@ -35,3 +35,4 @@ Reverted; all 15 tests plus the doctest pass again.
 | 2026-10-03 | M0 | Disproved-by-mutation that the rollback call in `rest_replace`'s refusal branch is load-bearing — removing it breaks exactly the two tests that observe the original order's survival, and nothing else. |
 | 2026-10-12 | M0 | The rollback is gone; re-targeted at the `insertable` check that replaced it. Removing it breaks exactly the three refusal tests. |
 | 2026-10-13 | M0 | Same three, after the `NotAnAmend` and `WouldTake` checks landed. |
+| 2026-10-14 | M0 | Same three, after the `JumpsQueue` and client-id checks landed. |
