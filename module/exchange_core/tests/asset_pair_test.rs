@@ -37,7 +37,21 @@ fn an_instrument_on_another_pair_is_refused()
   {
     let other = InstrumentId( 2 );
     let refused = exchange.spec_register( other, AssetId( base ), AssetId( quote ), tick, lot );
-    assert_eq!( refused, Err( ExchangeError::SecondAssetPair( other ) ), "pair ( {base}, {quote} )" );
+    let asked = ( AssetId( base ), AssetId( quote ) );
+    assert_eq!( refused, Err( ExchangeError::SecondAssetPair { id : other, held : ( AssetId( 1 ), AssetId( 2 ) ), asked } ) );
     assert_eq!( exchange.halt_is( other ), Err( ExchangeError::UnknownInstrument( other ) ) );
   }
+}
+
+/// The refusal names both pairs, so a swapped base and quote reads as one.
+#[ test ]
+fn a_second_pair_refusal_names_the_held_and_the_asked_pair()
+{
+  let mut exchange = Exchange::new();
+  let ( tick, lot ) = grid();
+  exchange.spec_register( InstrumentId( 1 ), AssetId( 1 ), AssetId( 2 ), tick, lot ).unwrap();
+
+  let refused = exchange.spec_register( InstrumentId( 2 ), AssetId( 2 ), AssetId( 1 ), tick, lot ).unwrap_err();
+
+  assert_eq!( refused.to_string(), "instrument 2 trades asset 2 for asset 1; this exchange trades asset 1 for asset 2" );
 }

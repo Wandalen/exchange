@@ -285,7 +285,15 @@ pub enum ExchangeError
   /// asset pair other than the one already registered. Escrow keeps one cash
   /// and one asset holding per account, so a second pair would share both
   /// with the first, and [`verify`] could not tell them apart.
-  SecondAssetPair( InstrumentId ),
+  SecondAssetPair
+  {
+    /// The instrument refused.
+    id : InstrumentId,
+    /// The `( base, quote )` already registered.
+    held : ( AssetId, AssetId ),
+    /// The `( base, quote )` `id` asked for.
+    asked : ( AssetId, AssetId ),
+  },
   /// [`Exchange::depth_get`] was asked for the top zero levels.
   Depth( DepthError ),
   /// [`Exchange::halt_set`]/[`Exchange::halt_clear`] asked for a state the
@@ -306,7 +314,12 @@ impl core::fmt::Display for ExchangeError
       Self::UnknownInstrument( id ) => write!( f, "instrument {} has no registered spec", id.0 ),
       Self::Spec( error ) => write!( f, "spec refused: {error}" ),
       Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
-      Self::SecondAssetPair( id ) => write!( f, "instrument {} trades a second asset pair", id.0 ),
+      Self::SecondAssetPair { id, held, asked } => write!
+      (
+        f,
+        "instrument {} trades asset {} for asset {}; this exchange trades asset {} for asset {}",
+        id.0, asked.0.0, asked.1.0, held.0.0, held.1.0,
+      ),
       Self::Depth( error ) => write!( f, "depth refused: {error}" ),
       Self::Halt( error ) => write!( f, "halt refused: {error}" ),
     }
@@ -325,7 +338,7 @@ impl core::error::Error for ExchangeError
       Self::Depth( error ) => Some( error ),
       Self::Halt( error ) => Some( error ),
       Self::Rejected( _ ) | Self::NotResting( _ ) | Self::UnknownInstrument( _ )
-      | Self::SpecAlreadyRegistered( _ ) | Self::SecondAssetPair( _ ) => None,
+      | Self::SpecAlreadyRegistered( _ ) | Self::SecondAssetPair { .. } => None,
     }
   }
 }
@@ -517,9 +530,10 @@ impl< E : EscrowPort > Exchange< E >
     {
       return Err( ExchangeError::SpecAlreadyRegistered( id ) );
     }
-    if self.specs.values().next().is_some_and( | held | ( held.base, held.quote ) != ( base, quote ) )
+    if let Some( held ) = self.specs.values().next().map( | held | ( held.base, held.quote ) )
+      && held != ( base, quote )
     {
-      return Err( ExchangeError::SecondAssetPair( id ) );
+      return Err( ExchangeError::SecondAssetPair { id, held, asked : ( base, quote ) } );
     }
     let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
     self.specs.insert( id, spec );
