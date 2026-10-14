@@ -1126,6 +1126,62 @@ fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
   assert_eq!( exchange.stats_get().cancels, 1 );
 }
 
+/// A resting order withdrawn by self-match prevention is on record before the
+/// trade the incoming order then makes behind it.
+///
+/// # Root Cause
+///
+/// `exchange_match::Crossing` kept trades and self-match cancellations in two
+/// lists, and `step_place` recorded every trade, then every cancellation. A
+/// withdrawal that came first was recorded after a trade at a worse price,
+/// so the stream showed that trade while a better ask still stood.
+///
+/// # Why Not Caught
+///
+/// The self-match tests here check that a cancellation is recorded, not
+/// where.
+///
+/// # Fix Applied
+///
+/// Each cancellation records how many trades came before it, and
+/// `step_place` settles, releases and records in that order.
+///
+/// # Prevention
+///
+/// A stream documented as "in order" is checked for order.
+///
+/// # Pitfall
+///
+/// Only cancel-resting withdraws before trading; the other two policies end
+/// the loop, so their cancellations already came last.
+#[ test ]
+fn a_self_match_withdrawal_is_recorded_before_the_trade_behind_it()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let own = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  let other = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Sell, price( "2.60" ), qty( 4 ) ).unwrap();
+  let before = exchange.events().len();
+
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : price( "2.60" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
+  inbound_flush( &mut producer, [ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
+  let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
+  assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.len() == 1 ) );
+
+  let recorded : Vec< ( &str, OrderId ) > = exchange.events()[ before .. ].iter().map( | event | match event.kind
+  {
+    EventKind::OrderAccepted { .. } => ( "accepted", event.order ),
+    EventKind::OrderCancelled { .. } => ( "cancelled", event.order ),
+    EventKind::Trade( trade ) => ( "trade", trade.maker ),
+    EventKind::OrderRejected { .. } => ( "rejected", event.order ),
+  } ).collect();
+  let buy = recorded[ 0 ].1;
+  assert_eq!( recorded, vec![ ( "accepted", buy ), ( "cancelled", own.order ), ( "trade", other.order ) ] );
+}
+
 /// Each instrument keeps its own counters; the exchange-wide ones are their
 /// sum.
 #[ test ]

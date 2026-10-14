@@ -2,11 +2,8 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_rest`'s own
 `rest_replace`) and now lives at
-[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md)'s
-"Closes hard problem 9, and features 8 and 25" section. (The central Design
-status this entry used to carry — "Not built as a dedicated operation...
-no `replace` method" — is stale: `exchange_rest::rest_replace` is built and
-tested, as an atomic cancel-then-reinsert, checked before the cancel.)
+[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md):
+an atomic cancel-and-insert, the replacement checked before the cancel.
 
 ### Sources
 

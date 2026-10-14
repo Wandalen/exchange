@@ -2,8 +2,7 @@
 
 **Relocated.** This feature is single-crate-relevant (`exchange_match`'s own
 `cross`) and now lives at
-[`../../module/exchange_match/readme.md`](../../module/exchange_match/readme.md)'s
-"Closes feature 9" section.
+[`../../module/exchange_match/readme.md`](../../module/exchange_match/readme.md).
 
 ### Sources
 

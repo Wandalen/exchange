@@ -17,7 +17,7 @@ entirely (the same reasoning `exchange_book`'s own module doc gives for using
 
 ### How this crate avoids it
 
-`snap_take( book : &Book, instrument : InstrumentId, tick : Money )` takes
+`snap_take( book : &Book, instrument : InstrumentId, tick : u64 )` takes
 `tick` as a plain parameter, supplied by the caller — nothing in this
 crate's source imports `std::time` or calls any clock. Grep-verifiable:
 

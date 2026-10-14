@@ -6,23 +6,17 @@
 
 ## Context
 
-The source design's crate list names `exchange_order` and `exchange_book` as
+The source design names `exchange_order` and `exchange_book` as
 `exchange_snap`'s dependencies
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:470-475`).
-At the time this crate was scoped, `exchange_order` did not yet exist in the
-real build; by the time it was implemented, a concurrent session had built
-it. Re-checked against the real, now-existing `exchange_order` crate rather
-than assumed stale: its own public surface
-(`module/exchange_order/src/lib.rs`) is `Order`/`Obligation`, and nothing in
-`exchange_snap`'s design needs either — [`RestRow`] holds a plain
-`exchange_id::OrderId`, not a full `Order`, since a snapshot row only needs
-to name *which* order rests, not carry its whole record a second time.
+`exchange_order`'s surface is `Order`/`Obligation`, and nothing here needs
+either: a [`RestRow`] names its order by `exchange_id::OrderId` rather than
+carrying the whole record a second time.
 
 ## Decision
 
-`exchange_snap` depends on `exchange_book` and `exchange_id` (for `OrderId`
-and `InstrumentId`). `exchange_order` is not taken, now or provisionally —
-nothing in this crate's own code would reference `Order`/`Obligation`.
+`exchange_snap` depends on `exchange_book`, `exchange_id` and
+`exchange_side`, not on `exchange_order`.
 
 ## Alternatives Considered
 
@@ -30,17 +24,14 @@ nothing in this crate's own code would reference `Order`/`Obligation`.
 
 Rejected: same reasoning as `exchange_stats`'s own
 [dropped `exchange_id` dependency](../../../exchange_stats/docs/decisions/001_no_exchange_id_dependency.md)
-— an imported-but-unused dependency is dead weight with nothing in this
-crate's code to anchor it.
+— an unused dependency is dead weight.
 
 ## Consequences
 
-**Positive:** `exchange_snap` depends only on the two crates its own code
-actually names.
+**Positive:** `exchange_snap` depends only on the crates its code names.
 
-**Negative:** none identified — if a later revision of `RestRow` needs the
-full `Order` (not just its id), this decision is the one to revisit, not a
-silent dependency creep.
+**Negative:** none identified — if `RestRow` ever needs the full `Order`,
+this decision is the one to revisit.
 
 ## Related
 

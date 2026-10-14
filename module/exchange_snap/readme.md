@@ -1,47 +1,62 @@
 # exchange_snap
 
-Plain, copied rows of what rests on a book — independent of the live `Book`
-the moment they're taken. Depends on `exchange_book` and `exchange_id`, plus
-the family's own `exact_arith` facade.
+Plain, copied rows of what rests on one instrument's book, independent of the
+live `Book` once taken. Depends on `exchange_book`, `exchange_id`,
+`exchange_side` and `exact_arith`. Closes hard problems 16 (closed types) and
+22 (snapshot of a book), and feature 27 (book snapshot rows).
 
 ```rust
-use exact_arith::Money;
 use exchange_book::Book;
 use exchange_id::InstrumentId;
 use exchange_snap::{ snap_len, snap_take };
 
 let book = Book::new();
-let snap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+let snap = snap_take( &book, InstrumentId( 1 ), 0 );
 assert_eq!( snap_len( &snap ), 0 );
 ```
 
-## Genuinely new
+## Rows, not a save format
 
-No snapshot type exists anywhere in the real crates today —
-`exchange_book::Book::iter()` can walk the live book, but nothing can be
-persisted, compared, or diffed without reaching back into it. This crate
-closes hard problems 16 (closed types) and 22 (snapshot of a book), and
-feature 27 (book snapshot rows).
+`BookSnap` holds one row per resting order — id, side, price, remainder —
+copied out of the book, bids then asks, each side in priority order. A later
+cancel or fill cannot reach it, and two snapshots compare with `==`. It is the
+row shape another crate persists or diffs — not file format 012, which stores
+the rows.
+
+`tick` is the caller's step count, stamped as given: the simulation's clock,
+not the exchange's, and never `Instant::now()`.
 
 ## Diverges from the proposal
 
-`RestRow`/`BookSnap`'s fields match the proposal exactly — see
-[`docs/item/readme.md`](docs/item/readme.md) for the field-by-field check.
-Two real divergences get their own ADRs: no `exchange_order` dependency
+No `exchange_order` dependency
 ([`docs/decisions/001_no_exchange_order_dependency.md`](docs/decisions/001_no_exchange_order_dependency.md))
 and no `SnapError { Full }`
 ([`docs/decisions/002_no_snap_error.md`](docs/decisions/002_no_snap_error.md)).
+
+## Not built: restoring a book
+
+A row holds the order's id, side, price and remainder, not its account,
+arrival, quantity, time in force or client id, so no book can be rebuilt from
+rows. Adding them is the easy half: restored orders need their reservations
+back, and `exchange_escrow` has no snapshot. Both belong in one consistent
+save, which is file format 012's design.
 
 ## Responsibility Table
 
 | File | Responsibility |
 |------|----------------|
-| [`Cargo.toml`](Cargo.toml) | Manifest — depends on `exchange_book`, `exchange_id`, `exact_arith` |
+| [`Cargo.toml`](Cargo.toml) | Manifest — `exchange_book`, `exchange_id`, `exchange_side`, `exact_arith` |
 | [`src/lib.rs`](src/lib.rs) | `RestRow`, `BookSnap`, `snap_take`, `snap_len` |
 | `docs/workaround/` | External constraints this crate absorbs — none |
 | `docs/decisions/` | Why `exchange_order` and `SnapError` are not part of this build |
 | `docs/pitfall/` | The 3 snapshot pitfalls this crate avoids by construction |
 | `docs/definition/` | Module index — every `pub` item and where it's documented |
-| `docs/item/` | Consolidated exposed-surface listing, as built vs. proposed |
+| `docs/item/` | Exposed surface, as built vs. proposed |
 | [`tests/exchange_snap_test.rs`](tests/exchange_snap_test.rs) | Test Matrix T01 — content, ordering, independence from the live book |
 | [`tests/manual/readme.md`](tests/manual/readme.md) | Manual mutation-testing plan |
+
+## Related
+
+- [`exchange_book/`](../exchange_book/readme.md) — the book copied here
+- [`exchange_depth/`](../exchange_depth/readme.md) — the same book, aggregated by price
+- [`exchange_core/`](../exchange_core/readme.md) — `Exchange::snap_take` calls `snap_take`

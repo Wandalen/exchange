@@ -7,17 +7,15 @@
 - **In Scope**: Rest, cancel, replace.
 - **Out of Scope**: Crossing — this crate does not cross.
 
-**Design status**: Built as its own real crate — `rest_place`, `rest_cancel`,
-`rest_replace`, and `RestReplaceError` all present, `rest_replace`'s atomic
-cancel-then-reinsert, checked before the cancel, the one genuinely new operation
-(verified via direct read of `module/exchange_rest/src/lib.rs`). Not yet
-wired into `exchange_core`'s own `Exchange::cancel`, but `exchange_inbound`'s
-`inbound_apply` already calls through to all three functions — see
-[`../../module/exchange_rest/readme.md`](../../module/exchange_rest/readme.md).
-Carries no `exact_*` edge in `[dependencies]` either — `exact_arith` appears
-only as a `[dev-dependencies]` entry (test fixtures) — confirming a
-2026-10-07 user-supplied specification's claim that this crate has no direct
-006 dependency; see `../neighbor_contract/001_006_supplies_money_qty_price.md`.
+**Design status**: Built — `rest_place`, `rest_cancel`, `rest_replace` and
+`RestReplaceError`; depends on `exchange_book`, `exchange_id` and
+`exchange_side`, not on idem, cap, escrow or spec, which stay with the
+caller.
+`exchange_core::step_place` rests through `rest_place`;
+`exchange_inbound::inbound_apply` calls all three. `exact_arith` is a
+dev-dependency only — see `../neighbor_contract/001_006_supplies_money_qty_price.md`.
+Built-vs-proposed comparison:
+[`../../module/exchange_rest/docs/item/readme.md`](../../module/exchange_rest/docs/item/readme.md).
 
 ### Statement
 

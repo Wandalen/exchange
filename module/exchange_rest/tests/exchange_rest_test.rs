@@ -10,7 +10,7 @@
 
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
-use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_order::Order;
 use exchange_rest::{ RestReplaceError, rest_cancel, rest_place, rest_replace };
 use exchange_seq::Sequence;
@@ -106,9 +106,7 @@ fn rest_replace_swaps_price_and_quantity_atomically()
 }
 
 /// A replacement that moves an order to a worse price loses queue priority
-/// to whatever already rested at the better price — the same rule any
-/// fresh `insert` follows, since `rest_replace` adds no priority rule of
-/// its own.
+/// to whatever already rested at the better price.
 #[ test ]
 fn rest_replace_at_a_new_price_loses_its_old_queue_position()
 {
@@ -222,41 +220,33 @@ fn rest_replace_refused_keeps_the_originals_place_among_shared_arrivals()
 
 // --- rest_replace: InstrumentMismatch ------------------------------------
 
-// BUG-001 substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md — bug_reproducer: `new_resting`'s
-// own `order.instrument` disagreeing with the `instrument` parameter used to go unnoticed —
-// the old order was cancelled on one instrument while the new one was inserted onto a
-// different one entirely, with `rest_replace` returning `Ok`.
+/// A replacement naming another instrument is refused, and the original
+/// stays on its own.
 ///
 /// # Root Cause
 ///
-/// `rest_replace` read its `instrument` parameter only for the `book.cancel` lookup;
-/// the subsequent `book.insert( new_resting )` derives its target book purely from
-/// `new_resting.order.instrument`, with no comparison between the two anywhere in the
-/// function (`module/exchange_rest/src/lib.rs:133-151`, pre-fix).
+/// `rest_replace` read `instrument` only to find the original; `Book::insert`
+/// seats the replacement on its own order's instrument. The two were never
+/// compared, so the original was cancelled on one book and the replacement
+/// rested on another, with `Ok`.
 ///
 /// # Why Not Caught
 ///
-/// Every pre-existing test's `order()`/`resting()` helper hardcoded `InstrumentId( 1 )`
-/// for both the explicit `instrument` argument and the constructed order, so the two
-/// values were structurally identical in every call this crate's own suite made —
-/// no test ever supplied two disagreeing values.
+/// Every test built both values from one hardcoded `InstrumentId( 1 )`.
 ///
 /// # Fix Applied
 ///
-/// `rest_replace` now checks `new_resting.order.instrument == instrument` first, before
-/// calling `book.cancel`, returning `RestReplaceError::InstrumentMismatch` on disagreement
-/// so nothing is touched (`module/exchange_rest/src/lib.rs:133-145`).
+/// `rest_replace` compares them first and returns
+/// `RestReplaceError::InstrumentMismatch`.
 ///
 /// # Prevention
 ///
-/// Any function taking both an explicit selector and a payload carrying its own copy of
-/// the same identity must assert the two agree before either drives an effectful
-/// operation — see `substrate/task/exchange_rest/bug/completed/001_rest_replace_trusts_instrument.md § Prevention`.
+/// When a function takes one identity twice, test it with the two apart.
 ///
 /// # Pitfall
 ///
-/// A lookup keyed on one value and a write keyed on a different, untrusted value that is
-/// assumed to agree with it is a silent cross-target hazard — assert agreement first.
+/// A lookup keyed on one value and a write keyed on another, assumed equal,
+/// acts on a target nobody checked.
 #[ test ]
 fn rest_replace_refuses_a_new_resting_for_a_different_instrument()
 {
@@ -271,4 +261,243 @@ fn rest_replace_refuses_a_new_resting_for_a_different_instrument()
   let restored = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
   assert_eq!( restored.order.id, OrderId( 1 ), "order 1 is back on its own instrument, unchanged" );
   assert_eq!( restored.order.price, Price::parse( "2.50" ).unwrap() );
+}
+
+// --- rest_replace: WouldTake ---------------------------------------------
+
+/// A replacement priced into the opposite side is refused, and the original
+/// stays.
+///
+/// # Root Cause
+///
+/// `rest_replace` checked only what `Book::insert` checks. A bid moved above
+/// the best ask rested there untraded, leaving the book crossed: the next
+/// seller traded against that bid at its price while the cheaper ask sat on.
+///
+/// # Why Not Caught
+///
+/// Every replacement in the suite moved an order away from the other side.
+///
+/// # Fix Applied
+///
+/// `rest_replace` refuses a replacement whose price reaches the best opposite
+/// order with `RestReplaceError::WouldTake`.
+///
+/// # Prevention
+///
+/// A move onto the book that does not match must be one that could not have.
+///
+/// # Pitfall
+///
+/// The opposite side counts every account: a crossing against one's own
+/// order is still a crossed book.
+#[ test ]
+fn rest_replace_refuses_a_replacement_that_would_take()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Buy, "2.40", 4, 10 ) ) );
+  assert!( rest_place( &mut book, resting( 2, Side::Sell, "2.50", 4, 20 ) ) );
+
+  for price in [ "2.50", "2.60" ]
+  {
+    let error = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Buy, price, 4, 30 ) ).unwrap_err();
+    assert_eq!( error, RestReplaceError::WouldTake, "a bid at {price} reaches the 2.50 ask" );
+  }
+
+  let bid = book.best( InstrumentId( 1 ), Side::Buy ).unwrap();
+  assert_eq!( bid.order.price, Price::parse( "2.40" ).unwrap(), "the original bid still rests" );
+  assert_eq!( bid.arrival, Sequence( 10 ) );
+}
+
+/// A replacement reaching its own account's order is refused the same way:
+/// a self-cross is matching's to resolve, under a `SelfMatchPolicy`.
+#[ test ]
+fn rest_replace_refuses_a_replacement_reaching_its_own_account()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Buy, "2.40", 4, 10 ) ) );
+  let own_ask = resting( 2, Side::Sell, "2.50", 4, 20 );
+  assert!( rest_place( &mut book, Resting { order : Order { account : AccountId( 1 ), ..own_ask.order }, ..own_ask } ) );
+
+  let error = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Buy, "2.50", 4, 30 ) ).unwrap_err();
+
+  assert_eq!( error, RestReplaceError::WouldTake );
+  assert_eq!( book.best( InstrumentId( 1 ), Side::Buy ).unwrap().order.price, Price::parse( "2.40" ).unwrap() );
+}
+
+/// A replacement one tick short of the opposite side is not refused.
+#[ test ]
+fn rest_replace_up_to_the_opposite_side_is_accepted()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Buy, "2.40", 4, 10 ) ) );
+  assert!( rest_place( &mut book, resting( 2, Side::Sell, "2.50", 4, 20 ) ) );
+
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Buy, "2.49", 4, 30 ) ).unwrap();
+
+  assert_eq!( book.best( InstrumentId( 1 ), Side::Buy ).unwrap().order.price, Price::parse( "2.49" ).unwrap() );
+}
+
+// --- rest_replace: NotAnAmend --------------------------------------------
+
+/// A replacement with another side, account or time in force is refused,
+/// and the original stays.
+///
+/// # Root Cause
+///
+/// Nothing compared the replacement with the order it replaces. A replace
+/// could turn a bid into an ask, hand the order and its place in the queue to
+/// another account, or make it an IOC left resting on the book.
+///
+/// # Why Not Caught
+///
+/// Every replacement in the suite came from the same helper as its original,
+/// differing only in price and quantity.
+///
+/// # Fix Applied
+///
+/// `rest_replace` looks the original up first and refuses any of the three
+/// changes with `RestReplaceError::NotAnAmend`.
+///
+/// # Prevention
+///
+/// `exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md` lists
+/// what an amend may change; test each thing it may not.
+///
+/// # Pitfall
+///
+/// The id may change in a replace, so it cannot be what says "the same order".
+#[ test ]
+fn rest_replace_refuses_a_replacement_that_is_another_order()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
+  let replacement = resting( 1, Side::Sell, "2.60", 4, 20 );
+
+  let other_side = Resting { order : Order { side : Side::Buy, price : Price::parse( "2.40" ).unwrap(), ..replacement.order }, ..replacement };
+  let other_account = Resting { order : Order { account : AccountId( 9 ), ..replacement.order }, ..replacement };
+  let ioc = Resting { order : Order { tif : Tif::Ioc, ..replacement.order }, ..replacement };
+
+  for changed in [ other_side, other_account, ioc ]
+  {
+    assert_eq!( rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), changed ), Err( RestReplaceError::NotAnAmend ) );
+    let original = book.best( InstrumentId( 1 ), Side::Sell ).unwrap();
+    assert_eq!( ( original.order.price, original.order.tif ), ( Price::parse( "2.50" ).unwrap(), Tif::Gtc ) );
+    assert_eq!( book.len(), 1 );
+  }
+}
+
+/// A replacement under another client id is refused, and the original
+/// stays.
+///
+/// # Root Cause
+///
+/// The client id was left out of the comparison with the original. A caller
+/// that claims client ids per order, as `exchange_inbound::inbound_apply`
+/// does, never claimed the new one, so a later order could reuse it while the
+/// replacement rested under it.
+///
+/// # Why Not Caught
+///
+/// Every order in the suite has no client id.
+///
+/// # Fix Applied
+///
+/// `rest_replace` compares the client id along with side, account and time in
+/// force, and refuses a change with `RestReplaceError::NotAnAmend`.
+///
+/// # Prevention
+///
+/// Test each field that names an order to its owner, not only the book's.
+///
+/// # Pitfall
+///
+/// Dropping the client id is a change too.
+#[ test ]
+fn rest_replace_refuses_a_replacement_under_another_client_id()
+{
+  let mut book = Book::new();
+  let with_client = | resting : Resting, client | Resting { order : Order { client, ..resting.order }, ..resting };
+  let original = with_client( resting( 1, Side::Sell, "2.50", 4, 10 ), Some( ClientOrderId( 5 ) ) );
+  assert!( rest_place( &mut book, original ) );
+
+  for client in [ Some( ClientOrderId( 6 ) ), None ]
+  {
+    let changed = with_client( resting( 1, Side::Sell, "2.60", 4, 20 ), client );
+    assert_eq!( rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), changed ), Err( RestReplaceError::NotAnAmend ) );
+    assert_eq!( book.best( InstrumentId( 1 ), Side::Sell ).unwrap().order, original.order );
+  }
+
+  let kept = with_client( resting( 1, Side::Sell, "2.60", 4, 20 ), Some( ClientOrderId( 5 ) ) );
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), kept ).unwrap();
+}
+
+/// A replacement under a new id is still the same order.
+#[ test ]
+fn rest_replace_may_rename_the_order()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
+  let renamed = Resting { order : Order { id : OrderId( 7 ), ..resting( 1, Side::Sell, "2.60", 4, 20 ).order }, ..resting( 1, Side::Sell, "2.60", 4, 20 ) };
+
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), renamed ).unwrap();
+
+  assert_eq!( book.best( InstrumentId( 1 ), Side::Sell ).unwrap().order.id, OrderId( 7 ) );
+  assert_eq!( book.len(), 1 );
+}
+
+// --- rest_replace: JumpsQueue --------------------------------------------
+
+/// A replacement that raises its quantity or moves its price must arrive
+/// after the original, and one that keeps both no earlier than it.
+///
+/// # Root Cause
+///
+/// `rest_replace` took the replacement's arrival as given. Carrying the
+/// original's, a replacement kept the original's place whatever it changed,
+/// though the amend rule gives that place up for a larger quantity or
+/// another price.
+///
+/// # Why Not Caught
+///
+/// Every replacement in the suite carried a later arrival.
+///
+/// # Fix Applied
+///
+/// `rest_replace` refuses an arrival the rule does not allow with
+/// `RestReplaceError::JumpsQueue`.
+///
+/// # Prevention
+///
+/// One case per row of the priority table in
+/// `exchange_core/docs/algorithm/003_cancel_and_amend_semantics.md`.
+///
+/// # Pitfall
+///
+/// `rest_replace` cannot tell which later arrival is right, only that an
+/// amend never arrives before the order it amends.
+#[ test ]
+fn rest_replace_refuses_a_replacement_that_jumps_the_queue()
+{
+  let mut book = Book::new();
+  assert!( rest_place( &mut book, resting( 1, Side::Sell, "2.50", 4, 10 ) ) );
+  assert!( rest_place( &mut book, resting( 2, Side::Sell, "2.50", 4, 20 ) ) );
+  assert!( rest_place( &mut book, resting( 3, Side::Sell, "2.40", 4, 15 ) ) );
+  assert!( rest_place( &mut book, resting( 4, Side::Sell, "2.50", 4, 7 ) ) );
+  let queue = | book : &Book | book.side( InstrumentId( 1 ), Side::Sell ).map( | resting | resting.order.id.0 ).collect::< Vec< _ > >();
+  assert_eq!( queue( &book ), vec![ 3, 4, 1, 2 ] );
+
+  // Ahead of order 2 with more to sell, ahead of order 3 at its price, ahead
+  // of order 4 with less.
+  for ( price, quantity, arrival ) in [ ( "2.50", 5, 10 ), ( "2.40", 4, 10 ), ( "2.50", 3, 5 ) ]
+  {
+    let error = rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Sell, price, quantity, arrival ) ).unwrap_err();
+    assert_eq!( error, RestReplaceError::JumpsQueue, "{quantity} at {price}, arriving at {arrival}" );
+    assert_eq!( queue( &book ), vec![ 3, 4, 1, 2 ] );
+  }
+
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Sell, "2.50", 3, 10 ) ).unwrap();
+  assert_eq!( queue( &book ), vec![ 3, 4, 1, 2 ], "a smaller quantity at one price keeps its place" );
+  rest_replace( &mut book, InstrumentId( 1 ), OrderId( 1 ), resting( 1, Side::Sell, "2.50", 5, 30 ) ).unwrap();
+  assert_eq!( queue( &book ), vec![ 3, 4, 2, 1 ], "a larger one, arriving later, goes behind order 2" );
 }

@@ -23,11 +23,11 @@ Every file also carries a verified **Design status** comparing the proposed surf
 | [`013_exchange_fill_items.md`](013_exchange_fill_items.md) | Built, own crate — `Trade`/`Event`/`RejectReason`/`CancelCause` extracted from `exchange_types` |
 | [`014_exchange_conserve_items.md`](014_exchange_conserve_items.md) | Built, own crate — pure function, not extracted from `exchange_escrow`'s totals (deliberate) |
 | [`015_exchange_rest_items.md`](015_exchange_rest_items.md) | Built, own crate — `rest_place`/`rest_cancel` thin wrappers; `rest_replace` new, narrower `RestReplaceError` |
-| [`016_exchange_match_items.md`](016_exchange_match_items.md) | Built — `cross()`, now TIF/STP-aware |
+| [`016_exchange_match_items.md`](016_exchange_match_items.md) | Built — one `cross()`, TIF- and STP-aware; no `MatchOut::rejects` |
 | [`017_exchange_depth_items.md`](017_exchange_depth_items.md) | Built, own crate — full match |
 | [`018_exchange_halt_items.md`](018_exchange_halt_items.md) | Built, own crate — declined `exchange_book` dependency |
 | [`019_exchange_event_items.md`](019_exchange_event_items.md) | Built, own crate — `push`/`drain`/`len`/`clear`; declined `EventDrain`/`EventError` |
-| [`020_exchange_snap_items.md`](020_exchange_snap_items.md) | Built, own crate — full field match; declined `exchange_order` dep/`SnapError` |
+| [`020_exchange_snap_items.md`](020_exchange_snap_items.md) | Built, own crate — `RestRow` adds `side`; declined `exchange_order` dep/`SnapError` |
 | [`021_exchange_stats_items.md`](021_exchange_stats_items.md) | Built, own crate — includes `cancels` counter |
 | [`022_exchange_inbound_items.md`](022_exchange_inbound_items.md) | Built — `InboundCmd` + flush/drain/apply/overflow_reject; no standalone `Inbound`/`InboundError` types |
 | [`023_exchange_core_items.md`](023_exchange_core_items.md) | Built — facade over 13 real crates, ring-fed `exchange_step`; only `order_replace` still deferred |

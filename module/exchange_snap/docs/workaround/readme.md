@@ -11,16 +11,15 @@ External constraints `exchange_snap` absorbs.
 
 ### Overview
 
-**None.** `exchange_snap` depends on sibling workspace crates
-(`exchange_book`, `exchange_id`) and the family's own `exact_arith` facade.
-Verify with:
+**None.** `exchange_snap` depends on `exchange_book`, `exchange_id`,
+`exchange_side` and `exact_arith`, and no published crate. Verify with:
 
 ```bash
 cd module/exchange_snap && cargo tree --depth 1
 ```
 
-**Expected:** `exchange_book`, `exchange_id`, `exact_arith` — all
-in-workspace or in-family, no external crate.
+**Expected:** `exchange_book`, `exchange_id` and `exchange_side` from
+`module/`, and `exact_arith` from its pinned git revision.
 
 ### Sources
 

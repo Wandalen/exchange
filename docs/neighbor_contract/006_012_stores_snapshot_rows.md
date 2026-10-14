@@ -7,11 +7,11 @@
 - **In Scope**: `exchange_snap`'s `BookSnap`/`RestRow` as the handoff format.
 - **Out of Scope**: Any live matching logic living in 012.
 
-**Design status**: Not built — no `exchange_snap` crate or snapshot type exists in the real family yet.
+**Design status**: The 002 side is built — `exchange_snap`'s `BookSnap`/`RestRow`, reached through `Exchange::snap_take`. Nothing in this repository stores them; that is 012's.
 
 ### Statement
 
-012 (the save/replay format workstream, referenced but not detailed in this transcript) is the consumer of 002's snapshot rows — plain, copyable records of resting orders and the instrument's tick — never a second order book with its own matching logic. This keeps persistence a one-way, read-only export from 002's perspective.
+012 (the save/replay format workstream, referenced but not detailed in this transcript) is the consumer of 002's snapshot rows — plain, copyable records of resting orders and the caller's tick — never a second order book with its own matching logic. This keeps persistence a one-way, read-only export from 002's perspective.
 
 ### Sources
 

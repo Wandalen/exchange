@@ -5,11 +5,13 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_depth`.
 - **Responsibility**: Top-N book depth without a full walk.
 
-**Design status**: Built, in its own `exchange_depth` crate — this summary predates that extraction. `LevelView`, `Depth`, `depth_top`, and `DepthError { BadN }` all exist, matching the proposal exactly. Verified built-vs-proposed comparison: [`../../module/exchange_depth/docs/item/readme.md`](../../module/exchange_depth/docs/item/readme.md).
+**Design status**: Built as proposed — `LevelView`, `Depth`, `depth_top`,
+`DepthError { BadN }`. Built-vs-proposed comparison:
+[`../../module/exchange_depth/docs/item/readme.md`](../../module/exchange_depth/docs/item/readme.md).
 
 ### Statement
 
-Prompt 3 specifies a dedicated `Depth`/`depth_top` pair avoiding a full book walk. See the per-crate doc linked above — the real build has exactly this, in its own crate.
+Prompt 3 specifies a dedicated `Depth`/`depth_top` pair avoiding a full book walk.
 
 ### Sources
 

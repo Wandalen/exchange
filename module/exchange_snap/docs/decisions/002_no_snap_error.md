@@ -8,15 +8,11 @@
 
 The source design's exposed-item list names `SnapError { Full }`
 (`../../../../../../codename_space_sandbox/intake/core_exchange.txt:641-645`)
-alongside `RestRow`/`BookSnap`/`snap_take`/`snap_len`. A `Full` variant only
-has meaning against a bounded-capacity row collection — some fixed-size
-buffer that `snap_take` could overrun. No such bounded type exists anywhere
-in the real build today: `exchange_book::Book` itself is two unbounded
-`Vec<Resting>`s, and the crate's own purpose line closes hard problem 16
-("closed types"), which is an aspiration this crate alone cannot retire —
-introducing a fixed-capacity `BookSnap::rows` here, with nothing else in the
-family actually bounded yet, would be a new architectural pattern invented
-for one crate rather than an adopted family-wide convention.
+alongside `RestRow`/`BookSnap`/`snap_take`/`snap_len`. `Full` only has
+meaning against a fixed-capacity row buffer `snap_take` could overrun.
+`exchange_cap` limits what may rest, but no type in the family is a
+fixed-capacity buffer, and making `BookSnap::rows` one would be a pattern
+invented for one crate.
 
 ## Decision
 

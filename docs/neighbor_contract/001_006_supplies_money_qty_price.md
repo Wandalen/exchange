@@ -39,7 +39,7 @@ each 002 crate would use under the fine-grained route instead of the facade:
 | `exchange_snap` | `exact_kind` | `exact_arith` (facade) |
 | `exchange_escrow` | `exact_kind` | `exact_arith` (facade) |
 | `exchange_rest` | none directly | none directly, confirmed — `exact_arith` appears only as a `[dev-dependencies]` entry (test fixtures) |
-| `exchange_match` | none directly | **`exact_arith` directly, in `[dependencies]`** — the one confirmed divergence from the pasted claim. `module/exchange_match/src/lib.rs:101` reads `use exact_arith::{ KindError, Quantity };`, both re-exported from `exact_kind` beneath the facade (`exact_arith/src/lib.rs:88`) |
+| `exchange_match` | none directly | **`exact_arith` directly, in `[dependencies]`** — the one confirmed divergence from the pasted claim. `module/exchange_match/src/lib.rs` imports `KindError`, `Price` and `Quantity` from it, all re-exported from `exact_kind` beneath the facade |
 
 Crates confirmed to carry no `exact_*` edge anywhere in `[dependencies]`:
 `exchange_id`, `exchange_side`, `exchange_tif`, `exchange_stp`, `exchange_seq`,

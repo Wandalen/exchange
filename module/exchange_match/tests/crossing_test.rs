@@ -113,9 +113,7 @@ fn t06_the_parts_sum_to_the_submitted_quantity()
 
 /// T07 — priced through no liquidity: zero trades, everything remaining.
 ///
-/// This is the control arm's case, asserted here as well as in the lane
-/// because the lane proves the engine *can* decline and this proves it
-/// declines for the right reason — the book still holds its ask afterwards.
+/// Declining for the right reason: the book still holds its ask afterwards.
 #[ test ]
 fn t07_an_order_priced_through_no_liquidity_does_not_cross()
 {
@@ -251,4 +249,28 @@ fn crossing_the_same_book_twice_gives_the_same_trades()
   let second = cross( &mut build(), &order( 9, Side::Buy, "3.00", 5 ) ).unwrap();
 
   assert_eq!( first, second );
+}
+
+/// A fill whose price paid needs a seventh decimal is declined, and the loop
+/// stops at that order rather than skip past it to a worse price. A remainder
+/// no fill can pay — 0.001 at 1.0001 — so stops every taker on its side, and
+/// the 1.0002 ask behind it is never reached.
+///
+/// The documented cost of refusing to round a settlement, pinned so a change
+/// to it is deliberate. Through `Exchange` it needs an instrument whose tick
+/// times lot is inexact at the money scale; see the readme's "Not built:
+/// refusing an inexact tick and lot".
+#[ test ]
+fn an_unpayable_fill_at_the_front_stops_the_taker_there()
+{
+  let mut book = Book::new();
+  let dust = Order { quantity : Quantity::parse( "0.001" ).unwrap(), ..order( 1, Side::Sell, "1.0001", 1 ) };
+  assert!( book.insert( Resting { order : dust, remaining : dust.quantity, arrival : Sequence( 10 ) } ) );
+  rest( &mut book, 2, Side::Sell, "1.0002", 10, 20 );
+
+  let crossing = cross( &mut book, &order( 3, Side::Buy, "1.0002", 1 ) ).unwrap();
+
+  assert!( crossing.trades.is_empty(), "0.001 × 1.0001 is 0.0010001" );
+  assert_eq!( crossing.remaining, qty( 1 ) );
+  assert_eq!( book.len(), 2, "both asks still rest" );
 }

@@ -2,10 +2,10 @@
 
 ### Scope
 
-- **Purpose**: Record the traps named for workstream 002's "Match policy" design area that are cleanly this crate's own execution mechanism to avoid, so this crate's own code and tests can show each is actually avoided rather than merely cited.
-- **Responsibility**: Document the pitfall, how `exchange_match` avoids it, and the test or grep that verifies the avoidance.
-- **In Scope**: The two "Match policy" pitfalls whose defense (FOK's probe-then-commit; STP's before-any-trade-is-built ordering) is entirely this crate's own mechanism.
-- **Out of Scope**: Pitfall 017 ("IOC that rests the remainder") — this crate's own module doc states directly that it "has never inserted the incoming order's remainder itself," so resting-or-not is `exchange_core`'s/`exchange_rest`'s decision, not this crate's; pitfall 019 ("self-trade allowed by default") — `exchange_stp`'s own policy-API design, not this crate's. Both stay in the central catalog (→ [`../../../../docs/pitfall/readme.md`](../../../../docs/pitfall/readme.md)); external constraints this crate absorbs (→ [`../workaround/`](../workaround/readme.md)).
+- **Purpose**: Record the "Match policy" traps whose defence is this crate's own mechanism, so its code and tests can show each is avoided.
+- **Responsibility**: Document the pitfall, how `exchange_match` avoids it, and the test that verifies it.
+- **In Scope**: The two "Match policy" pitfalls this crate's FOK probe and self-match ordering avoid.
+- **Out of Scope**: Pitfall 017 ("IOC that rests the remainder") — `cross` never rests the incoming order, so resting is the caller's decision; pitfall 019 ("self-trade allowed by default") — `exchange_stp`'s policy design. Both stay in the central catalog (→ [`../../../../docs/pitfall/readme.md`](../../../../docs/pitfall/readme.md)). External constraints (→ [`../workaround/`](../workaround/readme.md)).
 
 ### Overview Table
 

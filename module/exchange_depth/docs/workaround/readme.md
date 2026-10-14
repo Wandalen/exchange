@@ -11,16 +11,15 @@ External constraints `exchange_depth` absorbs.
 
 ### Overview
 
-**None.** `exchange_depth` depends only on sibling workspace crates
-(`exchange_book`, `exchange_side`) and the family's own `exact_arith`
-facade. Verify with:
+**None.** `exchange_depth` depends on `exchange_book`, `exchange_id`,
+`exchange_side` and `exact_arith`, and no published crate. Verify with:
 
 ```bash
 cd module/exchange_depth && cargo tree --depth 1
 ```
 
-**Expected:** `exchange_book`, `exchange_side`, `exact_arith` — all
-in-workspace or in-family, no external crate.
+**Expected:** `exchange_book`, `exchange_id` and `exchange_side` from
+`module/`, and `exact_arith` from its pinned git revision.
 
 ### Sources
 

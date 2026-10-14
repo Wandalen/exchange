@@ -1,7 +1,7 @@
 //! Phase P27 — a snapshot taken before a live cancel still shows the
 //! cancelled row afterward. Golden: `snap=1 live=0` then `ok`.
 
-use exact_arith::{ Money, Price, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -21,7 +21,7 @@ fn main()
     arrival : Sequence( 1 ),
   } ), "fresh id, must succeed" );
 
-  let snap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+  let snap = snap_take( &book, InstrumentId( 1 ), 1 );
   assert!( book.cancel( InstrumentId( 1 ), OrderId( 1 ) ).is_some(), "the order must actually be there to cancel" );
 
   println!( "snap={} live={}", snap_len( &snap ), book.len() );

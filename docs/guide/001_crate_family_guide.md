@@ -212,7 +212,7 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
 
 ## Tier 4
 
-- **`exchange_depth`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `depth_top(book, instrument, n)`, reading `Book`'s own priority-ordered slices directly rather than walking every rest. Wired since Stage 9: `Exchange::depth_get` calls `depth_top` directly, no registered spec required.
+- **`exchange_depth`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `depth_top(book, instrument, n)`: the best `n` prices per side, one `LevelView` each, read off `Book::side` without walking past them. A level past the quantity ceiling reads as `Quantity::MAX`. `Exchange::depth_get` calls it, no registered spec required.
   ```rust
   use exchange_book::Book;
   use exchange_depth::depth_top;
@@ -221,29 +221,29 @@ A crate's tier is `1 + max(tier of every exchange_* dependency)`; a root is tier
   let depth = depth_top( &book, InstrumentId( 1 ), 10 ).unwrap();
   assert!( depth.bids.is_empty() && depth.asks.is_empty() );
   ```
-- **`exchange_match`** (→ `exchange_book`, `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_stp`, `exchange_tif`, `exchange_types`) — `cross()`: price-time matching, self-match prevention, and TIF (IOC needs no special handling; FOK probes a cloned book first and only commits for real on a full fill). Fully wired into `exchange_core`. The `exchange_types` edge survived the 2026-10-05 retirement narrowed to `notional` alone — the other four names here (`exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`) were added directly then, having previously arrived only transitively through the old aggregator.
+- **`exchange_match`** (→ `exchange_book`, `exchange_conserve`, `exchange_fill`, `exchange_id`, `exchange_order`, `exchange_side`, `exchange_stp`, `exchange_tif`, `exchange_types`) — `cross()`: price-time matching, self-match prevention and TIF (IOC needs no special handling; FOK probes a cloned book first and commits only on a full fill; a post-only order that would take is refused). A fill whose price paid is inexact is declined, and the loop stops there. `Crossing::steps` gives trades and self-match withdrawals in the order they happened. `exchange_core::step_place` calls `cross`, and `would_take` for post-only.
   ```rust
   // cross( book: &mut Book, incoming: &Order, policy: SelfMatchPolicy ) -> Result<Crossing, MatchError>
   // A Fok order that cannot fill completely leaves the book untouched: cross()
   // probes a clone first and returns Crossing{ remaining: incoming.quantity, .. }
   // without ever mutating `book`, rather than resting or partially filling it.
   ```
-- **`exchange_rest`** (→ `exchange_book`, `exchange_id`) — `rest_place`/`rest_cancel` (thin wrappers over `Book`) and `rest_replace` (new: atomic cancel-then-reinsert; a replacement `Book::insertable` refuses touches nothing). Partially wired since Stage 9: `step_place` calls `rest_place` for every order that has a remainder to rest; `Exchange::cancel` still orchestrates escrow/book cancellation inline rather than calling `rest_cancel`. `rest_replace` is imported nowhere in `exchange_core` — `exchange_step` drains an `InboundCmd::Replace` but returns `StepOutcome::ReplaceNotWired` instead of calling it (see Introduction, point 2, and `exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md`).
+- **`exchange_rest`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `rest_place`/`rest_cancel` (forwards to `Book`) and `rest_replace`: one order swapped for its amended replacement in one step, the replacement checked before the original is touched. `step_place` rests every remainder through `rest_place`; `Exchange::cancel` cancels on the book itself, releasing escrow in the same step. `rest_replace` is reached only through `exchange_inbound` — `exchange_step` drains an `InboundCmd::Replace` and returns `StepOutcome::ReplaceNotWired` (see Introduction, point 2, and `exchange_core/docs/decisions/001_submit_replaced_by_ring_fed_exchange_step.md`).
   ```rust
   // rest_replace( book: &mut Book, instrument, old_id: OrderId, new_resting: Resting )
   //   -> Result<Resting, RestReplaceError>
-  // Cancels `old_id`, inserts `new_resting`; on a refused insert (duplicate id,
-  // cap reached) it re-inserts the original and returns Err(Refused) rather
-  // than leaving the book with neither order resting.
+  // Refuses, touching nothing, a replacement for another instrument, one
+  // Book::insert would refuse, a missing original, another side, account,
+  // time in force or client id (NotAnAmend), an arrival the amend rule forbids
+  // (JumpsQueue), or a price that would take (WouldTake).
   ```
-- **`exchange_snap`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `snap_take(book, instrument, tick)`: plain copied rows, independent of the live book the moment they're taken. Wired since Stage 9: `Exchange::snap_take` calls `snap_take` directly, one-to-one by name.
+- **`exchange_snap`** (→ `exchange_book`, `exchange_id`, `exchange_side`) — `snap_take(book, instrument, tick)`: one copied row per resting order — id, side, price, remainder — independent of the live book once taken; `tick` is the caller's step count. `Exchange::snap_take` calls it.
   ```rust
-  use exact_arith::Money;
   use exchange_book::Book;
   use exchange_id::InstrumentId;
   use exchange_snap::{ snap_len, snap_take };
   let book = Book::new();
-  let snap = snap_take( &book, InstrumentId( 1 ), Money::parse( "0.01" ).unwrap() );
+  let snap = snap_take( &book, InstrumentId( 1 ), 0 );
   assert_eq!( snap_len( &snap ), 0 );
   ```
 
@@ -350,7 +350,7 @@ for c in exchange_cap exchange_conserve exchange_depth exchange_event exchange_h
 done
 ```
 
-**Expected:** `absent` for exactly `exchange_conserve`; `referenced` for the other ten. A `referenced` crate still needs a second look to tell a real call (e.g. `exchange_halt::halt_set(...)`) apart from a doc-comment mention alone — `exchange_rest` is the one name in this list where that distinction matters: `rest_place` is called, `rest_replace` is not (see Tier 5's `exchange_rest` entry and Introduction, point 2).
+**Expected:** `absent` for exactly `exchange_conserve`; `referenced` for the other ten. A `referenced` crate still needs a second look to tell a real call (e.g. `exchange_halt::halt_set(...)`) apart from a doc-comment mention alone — `exchange_rest` is the one name in this list where that distinction matters: `rest_place` is called, `rest_replace` is not (see Tier 4's `exchange_rest` entry and Introduction, point 2).
 
 ## Sources
 

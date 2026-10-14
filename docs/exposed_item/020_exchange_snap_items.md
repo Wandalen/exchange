@@ -5,11 +5,16 @@
 - **Purpose**: The full exposed surface Prompt 3 specifies for `exchange_snap`.
 - **Responsibility**: Plain rows of resting orders, with the tick supplied by the caller.
 
-**Design status**: Built, in its own `exchange_snap` crate — this summary predates that extraction. `RestRow`/`BookSnap`/`snap_take`/`snap_len` all exist, matching the proposal's fields exactly; the two real divergences are a dropped `exchange_order` dependency and no `SnapError`. Verified built-vs-proposed comparison: [`../../module/exchange_snap/docs/item/readme.md`](../../module/exchange_snap/docs/item/readme.md).
+**Design status**: Built — `RestRow`, `BookSnap`, `snap_take`, `snap_len`;
+`RestRow` adds `side`, `tick` is a `u64`, and there is no `SnapError`.
+Built-vs-proposed comparison:
+[`../../module/exchange_snap/docs/item/readme.md`](../../module/exchange_snap/docs/item/readme.md).
 
 ### Statement
 
-Prompt 3 specifies a snapshot-row pair for save/replay/extract use. See the per-crate doc linked above — the real build has exactly this, in its own crate.
+Prompt 3 specifies `RestRow { order, price, qty }`, `BookSnap { instrument,
+tick, rows }`, `snap_take`, `snap_len` and `SnapError { Full }`, for
+save/replay/extract use.
 
 ### Sources
 

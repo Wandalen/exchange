@@ -21,23 +21,18 @@
 //! notice the gap. The two further dependencies below are each a deliberate,
 //! documented exception, not a quiet widening of that rule.
 //!
-//! # The two things `exchange_core` deliberately does not wire in
+//! # Why `exchange_idem` and `exchange_conserve` are called directly
 //!
-//! `exchange_idem` and `exchange_conserve` are both real checks with no path
-//! through the facade at all:
-//!
-//! - **Idempotency**: `Exchange::claim_order` always reassigns a submitted
-//!   order's id internally, so a caller-chosen duplicate id can never be
-//!   observed through [`Exchange::exchange_step`] — `exchange_core` has zero
-//!   dependency on `exchange_idem` for exactly this reason. The `dup=1`
-//!   field below checks `exchange_idem` directly and standalone, the same
-//!   way `smoke_exchange_phases::demo_p13_dup` already does.
-//! - **Conservation**: `exchange_match::cross` has zero dependency on
-//!   `exchange_conserve` — settlement conservation is an external audit, not
-//!   something the matching loop checks on its own behalf. The `conserve=0`
-//!   field below runs that audit itself, on the real trades the scene below
-//!   produced, rather than trusting that a batch which filled without error
-//!   must have conserved.
+//! - **Idempotency**: `Exchange::claim_order` assigns every order's id
+//!   itself, so a duplicate order id cannot reach
+//!   [`Exchange::exchange_step`]; `exchange_core` uses `exchange_idem` for
+//!   client ids only. The `dup=1` field checks `exchange_idem` on an order
+//!   id directly, as `smoke_exchange_phases::demo_p13_dup` does.
+//! - **Conservation**: `exchange_match::cross` asserts each batch with
+//!   `conserve_assert`, and [`Exchange::postings`] feeds the event stream's
+//!   trades to `exact_arith`'s auditor. The `conserve=0` field runs
+//!   `conserve_assert` again over the scene's trades together, rather than
+//!   trusting that a batch which filled without error conserved.
 //!
 //! # Why price fields are repadded before printing
 //!
@@ -451,8 +446,7 @@ pub fn ring_overflow_rejects() -> bool
 }
 
 /// Whether a batch of real trades nets to zero across its buy and sell legs
-/// — run here because nothing in the matching path checks this on its own
-/// behalf; see this module's own doc.
+/// — see this module's doc for why it runs here too.
 #[ must_use ]
 pub fn conserve_ok( fills : &[ Trade ] ) -> bool
 {
