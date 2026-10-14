@@ -27,8 +27,9 @@ order reaches the book, and refuses the order whole.
 
 Each reservation records its order's account and limit. `release` and
 `settle` refuse any account but the one that reserved
-(`EscrowError::NotOwner`), and `settle` takes the buyer's limit from its
-reservation, refusing a trade priced above it (`NotReserved`).
+(`EscrowError::NotOwner`), and `settle` takes both limits from the
+reservations, refusing a trade above the buy's or below the sell's
+(`OutsideLimit`).
 
 ## Price improvement, released
 
@@ -58,6 +59,14 @@ from going below zero. `Holding::movement` refuses a negative *amount* before
 any edge runs — without it a negative price ran every edge backwards, and no
 balance went below zero to notice. `receive` keeps a holding's *total* within
 the ceiling, so a reservation always has room to come back.
+
+## Room for what a resting order brings in
+
+A resting ask will be paid and a resting bid will receive the asset. Each
+keeps room for that under the ceiling, in `Holding::incoming`, from `reserve`
+until it fills or is released. A deposit, proceeds or another order that
+would take the room is refused with `Arithmetic`, so a resting order can
+always settle and never blocks a level it cannot trade at.
 
 `Holding`'s edges are private. Value moves only through `Escrow`'s own
 methods, so nothing changes one side of the partition without the other.

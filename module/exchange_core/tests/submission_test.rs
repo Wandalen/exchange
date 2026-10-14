@@ -8,7 +8,7 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, Entry, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
+  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, Entry, EscrowError, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
   InstrumentId, Money, Obligation, Order, OrderId, PostingAsset, Price, Producer, Quantity, Receipt, RejectReason, Resting,
   SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, postings, verify,
 };
@@ -494,10 +494,10 @@ fn replaying_the_same_submissions_from_empty_gives_the_same_result()
 /// `submit`'s own doc asserted `ExchangeError::Escrow` was unreachable here, so
 /// no test looked for it.
 ///
-/// **Fix Applied.** `exchange_match::settleable` checks both notionals
-/// settlement will compute — the trade price, and for a taking buy its own
-/// limit as well — before `consume_best`. An unsettleable fill breaks the loop,
-/// reaching the already-documented "no cross" outcome.
+/// **Fix Applied.** `exchange_match::settleable` checks the notional
+/// settlement will compute exactly — the trade price — before `consume_best`.
+/// An unsettleable fill breaks the loop, reaching the already-documented "no
+/// cross" outcome.
 ///
 /// **Prevention.** The check sits before the irreversible step, matching the
 /// submission path's own reserve-before-match rule. Anything that later widens
@@ -544,45 +544,39 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().asset.available(), qty( 100 ) );
 }
 
-/// The second notional settlement computes is checked too.
-///
-/// A taking buy is handed back the difference between its own limit and the
-/// maker's price, which is a notional at the *taker's* price. Checking only the
-/// trade price leaves this half reachable: 1.0 × one minor unit is exact, 1.5 ×
-/// one minor unit is not, so this fill passes the first check and fails the
-/// second.
-#[ test ]
-fn a_taking_buys_own_limit_is_checked_not_just_the_trade_price()
-{
-  let mut exchange = market();
-  let mut ring = inbound_ring( 8 ).unwrap();
-  let mut ends = ring.ends();
-  let ( mut producer, mut consumer ) = ends.split();
-
-  submit
-  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), Quantity::from_minor( 1 ).unwrap() )
-  .unwrap();
-
-  let asset_before = exchange.escrow().total_asset().unwrap();
-  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "1.50" ), qty( 1 ) ).unwrap();
-
-  // This leaves the bid at 1.50 resting above the ask at 1.00. The fix for
-  // `a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for` makes it fill.
-  assert!( taking.trades.is_empty(), "the improvement notional is inexpressible" );
-  assert_eq!( exchange.book().len(), 2 );
-  assert_eq!( exchange.escrow().total_asset().unwrap(), asset_before );
-}
-
 /// A taking buy that can pay for a fill exactly takes it, rather than resting
 /// above the ask.
 ///
 /// The facade side of `exchange_escrow`'s
-/// `a_partial_fill_settles_when_only_the_limit_notional_is_inexact`: the fill
-/// costs exactly 0.000001, and only 0.5 × 0.000005 is inexact. `settleable`
-/// declines it on that second notional, and the bid at 0.5 rests above the ask
-/// at 0.2: a crossed book.
+/// `a_partial_fill_settles_when_only_the_limit_notional_is_inexact`.
+///
+/// # Root Cause
+///
+/// `settle` computed the buy's `limit × quantity` exactly, and `settleable`
+/// mirrored it. The fill costs exactly 0.000001, but 0.5 × 0.000005 is
+/// inexact, so the fill was declined and the bid at 0.5 rested above the ask
+/// at 0.2.
+///
+/// # Why Not Caught
+///
+/// `a_taking_buys_own_limit_is_checked_not_just_the_trade_price` pinned the
+/// decline as correct. It asserted no trade and two orders on the book, not
+/// that the two crossed.
+///
+/// # Fix Applied
+///
+/// `settle` keeps `limit × unfilled` rounded down for the rest of the buy, so
+/// only the price paid has to be exact, and `settleable` checks only that.
+///
+/// # Prevention
+///
+/// A declined fill leaves the book crossed; a test of one asserts what rests.
+///
+/// # Pitfall
+///
+/// A fill whose price paid is inexact is still declined, and still leaves the
+/// book crossed — see `a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact`.
 #[ test ]
-#[ ignore = "F4: settleable declines a fill whose limit notional is inexact" ]
 fn a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for()
 {
   let mut exchange = market();
@@ -722,9 +716,10 @@ fn a_negative_price_is_refused_before_it_can_rest()
 /// # Pitfall
 ///
 /// This first surfaced as `reserve`'s pooled `reserved` check failing beside
-/// ample `available`. Escrow now keeps each holding's total within the
-/// ceiling, so that state is refused where it would start — at the proceeds
-/// below — and the refusal still has to read as a ceiling, not a shortfall.
+/// ample `available`. Escrow now keeps room under the ceiling for what an
+/// order brings in, so that state is refused where it would start — at the
+/// ask whose proceeds have no room — and the refusal still has to read as a
+/// ceiling, not a shortfall.
 #[ test ]
 fn a_ceiling_breach_is_distinguished_from_a_funds_shortfall()
 {
@@ -732,32 +727,23 @@ fn a_ceiling_breach_is_distinguished_from_a_funds_shortfall()
   instrument_register( &mut exchange );
   // Account 1 holds the whole-unit ceiling in cash, plus asset to sell.
   exchange.open_account( AccountId( 1 ), money( "9000000000" ), qty( 600 ) ).unwrap();
-  exchange.open_account( AccountId( 2 ), money( "2000" ), qty( 0 ) ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  // A huge resting buy at $1 reserves nearly all of account 1's cash, and a
-  // sell at $2 rests above it, so the two do not cross.
-  let huge = Quantity::from_minor( 8_999_999_999_999_500 ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1" ), huge ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 500 ) ).unwrap();
-
   let account_1_before = *exchange.escrow().account( AccountId( 1 ) ).unwrap();
-  let account_2_before = *exchange.escrow().account( AccountId( 2 ) ).unwrap();
   let events_before = exchange.events().len();
 
-  // Account 2 can pay the $1000; account 1's cash cannot take it.
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2" ), qty( 500 ) );
+  // Account 1 holds the 500 it sells; its cash has no room for the $1000.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 500 ) );
 
   assert_eq!
   (
     refused,
     Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ),
-    "funds are sufficient; only account 1's ceiling is breached",
+    "the asset is there; only account 1's ceiling is breached",
   );
   assert_eq!( *exchange.escrow().account( AccountId( 1 ) ).unwrap(), account_1_before, "a rejected order moves nothing" );
-  assert_eq!( *exchange.escrow().account( AccountId( 2 ) ).unwrap(), account_2_before, "a rejected order moves nothing" );
   assert_eq!( exchange.events().len(), events_before + 1, "exactly the rejection event was recorded" );
   assert!
   (
@@ -804,8 +790,8 @@ fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
 }
 
 /// A resting order stays cancellable however close its account sits to the
-/// ceiling: a trade whose proceeds would leave no room to return the order's
-/// reservation is refused instead.
+/// ceiling: proceeds that would leave no room to return the order's
+/// reservation are refused instead.
 ///
 /// # Root Cause
 ///
@@ -824,7 +810,8 @@ fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
 /// # Fix Applied
 ///
 /// `Holding::receive` refuses an amount that would carry `available +
-/// reserved` past the ceiling, so the sale is rejected in the dry run.
+/// reserved` past the ceiling. An ask keeps room for its proceeds, so the one
+/// here is refused when placed.
 ///
 /// # Prevention
 ///
@@ -832,8 +819,8 @@ fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
 ///
 /// # Pitfall
 ///
-/// Refusing the sale is the cost: an account at the ceiling cannot take
-/// proceeds until it spends or withdraws a reservation.
+/// Refusing the ask is the cost: an account at the ceiling cannot offer to
+/// sell until it spends or withdraws a reservation.
 #[ test ]
 fn a_resting_order_stays_cancellable_at_the_ceiling()
 {
@@ -842,19 +829,16 @@ fn a_resting_order_stays_cancellable_at_the_ceiling()
   // Account 1 starts three cash units short of the whole-unit ceiling, plus
   // asset to sell.
   exchange.open_account( AccountId( 1 ), money( "8999999997" ), qty( 10 ) ).unwrap();
-  exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  // A small resting buy reserving 1, and a sell of 2 at $2 resting above it.
+  // A small resting buy reserving 1.
   let order_1 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1" ), qty( 1 ) ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) ).unwrap();
 
-  // Account 2's $4 would carry account 1's cash one unit past the ceiling.
-  // The fix for `a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill`
-  // changes this: the ask is refused when placed, or the buy no longer is.
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2" ), qty( 2 ) );
+  // A sell of 2 at $2: its $4 would carry account 1's cash one unit past the
+  // ceiling.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) );
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ) );
 
   let account = exchange.escrow().account( AccountId( 1 ) ).unwrap();
@@ -872,7 +856,6 @@ fn a_resting_order_stays_cancellable_at_the_ceiling()
 /// ask behind it can, and a buy crossing both is not refused for account 1's
 /// sake.
 #[ test ]
-#[ ignore = "F1: a maker at the ceiling gets the whole crossing buy rejected" ]
 fn a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill()
 {
   let mut exchange = Exchange::new();
@@ -885,9 +868,9 @@ fn a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill()
   let ( mut producer, mut consumer ) = ends.split();
 
   // Account 1: an ask of 2 at $2 whose $4 of proceeds would carry its cash
-  // past the ceiling. Account 3: an ask of 2 at $3.
-  // A fix may refuse this ask up front instead; either way it must not block the buy below.
-  let _ = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) );
+  // past the ceiling, refused before it can rest. Account 3: an ask of 2 at $3.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) );
+  assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ) );
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Sell, price( "3" ), qty( 2 ) ).unwrap();
 
   let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3" ), qty( 2 ) );
@@ -898,12 +881,11 @@ fn a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill()
   assert_eq!( exchange.escrow().account( AccountId( 3 ) ).unwrap().cash.available(), money( "6" ) );
 }
 
-/// Same, when account 1 reaches the ceiling only after its ask rests.
+/// Same, when account 1 would reach the ceiling only after its ask rests.
 ///
-/// A check at placement passes the ask; the deposit after it is what leaves
-/// no room for its proceeds.
+/// A check at placement passes the ask; the deposit after it would leave no
+/// room for its proceeds, and is refused.
 #[ test ]
-#[ ignore = "F1: a maker at the ceiling gets the whole crossing buy rejected" ]
 fn a_maker_reaching_the_ceiling_after_it_rests_does_not_block_a_buy()
 {
   let mut exchange = Exchange::new();
@@ -919,14 +901,16 @@ fn a_maker_reaching_the_ceiling_after_it_rests_does_not_block_a_buy()
   // an ask of 2 at $3.
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) ).unwrap();
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Sell, price( "3" ), qty( 2 ) ).unwrap();
-  // Takes account 1 to $8999999997, $3 short of the ceiling. A fix may refuse
-  // this deposit instead, which leaves account 1's ask fillable.
-  let _ = exchange.open_account( AccountId( 1 ), money( "8999998997" ), Quantity::ZERO );
+  // Would take account 1 to $8999999997, $3 short of the ceiling: into the
+  // room its ask keeps for $4.
+  let deposit = exchange.open_account( AccountId( 1 ), money( "8999998997" ), Quantity::ZERO );
+  assert_eq!( deposit, Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
 
   let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3" ), qty( 2 ) );
 
   let taking = taking.expect( "the buy can be filled in full" );
   assert!( taking.is_complete() );
+  assert_eq!( taking.trades[ 0 ].price, price( "2" ), "account 1's ask, at the front, filled it" );
   assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().asset.available(), qty( 2 ) );
 }
 

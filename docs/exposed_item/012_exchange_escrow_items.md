@@ -7,7 +7,7 @@
 
 **Design status**: Built as `Escrow`, a concrete ledger holding real
 balances, with `reserve`/`release`/`settle` for `hold_try`/`hold_release`/
-`hold_commit`, a 10-variant `EscrowError`, and `Holding`/`Account`/`Conserved`.
+`hold_commit`, an 11-variant `EscrowError`, and `Holding`/`Account`/`Conserved`.
 The port is `exchange_core::EscrowPort`, which `Escrow` implements; no `Hold`
 type. Built-vs-proposed comparison:
 [`../../module/exchange_escrow/docs/item/readme.md`](../../module/exchange_escrow/docs/item/readme.md).
