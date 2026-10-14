@@ -40,14 +40,13 @@
 use exact_arith::Quantity;
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
-use exchange_idem::{ idem_insert, idem_seen };
+use exchange_idem::{ idem_insert, idem_seen, IdSet };
 use exchange_match::{ cross, Crossing, MatchError, SelfMatchPolicy };
 use exchange_rest::{ rest_cancel, rest_place, rest_replace, RestReplaceError };
 use exchange_tif::tif_rests;
 use ring_factory::Factory;
 use ring_types::OverflowPolicy;
 
-pub use exchange_idem::{ IdemError, IdSet };
 pub use ring_factory::{ BuildError, RingConfig };
 pub use ring_handle::{ Consumer, Drain, Ends, Producer, Split };
 
@@ -98,9 +97,8 @@ pub enum InboundApplyError
   /// [`exchange_match::cross`] refused: in practice
   /// [`MatchError::PostOnlyWouldTake`], with `book` untouched.
   Match( MatchError ),
-  /// A [`InboundCmd::Place`] named an order id that rests on the book — a
-  /// retry, not a new order.
-  Idem( IdemError ),
+  /// A [`InboundCmd::Place`] named an order id that rests on the book.
+  OrderIdRests,
   /// A [`InboundCmd::Place`] carried a client id its account already placed
   /// an order under — a retry, not a new order.
   DuplicateClientId,
@@ -118,7 +116,7 @@ impl core::fmt::Display for InboundApplyError
     match self
     {
       Self::Match( error ) => write!( f, "matching failed: {error}" ),
-      Self::Idem( error ) => write!( f, "place refused: {error}" ),
+      Self::OrderIdRests => write!( f, "place refused: an order under this id rests on the book" ),
       Self::DuplicateClientId => write!( f, "place refused: this account already placed an order under this client id" ),
       Self::ZeroQuantity => write!( f, "place refused: the quantity is zero" ),
       Self::NotNew => write!( f, "place refused: a new order's remaining must be its whole quantity" ),
@@ -133,8 +131,7 @@ impl core::error::Error for InboundApplyError
     match self
     {
       Self::Match( error ) => Some( error ),
-      Self::Idem( error ) => Some( error ),
-      Self::DuplicateClientId | Self::ZeroQuantity | Self::NotNew => None,
+      Self::OrderIdRests | Self::DuplicateClientId | Self::ZeroQuantity | Self::NotNew => None,
     }
   }
 }
@@ -144,14 +141,6 @@ impl From< MatchError > for InboundApplyError
   fn from( error : MatchError ) -> Self
   {
     Self::Match( error )
-  }
-}
-
-impl From< IdemError > for InboundApplyError
-{
-  fn from( error : IdemError ) -> Self
-  {
-    Self::Idem( error )
   }
 }
 
@@ -237,9 +226,9 @@ pub fn inbound_drain( consumer : &mut Consumer< '_, InboundCmd > ) -> Vec< Inbou
 /// `cross` refuses, in practice a post-only order that would take;
 /// [`InboundApplyError::ZeroQuantity`] for a `Place` for nothing;
 /// [`InboundApplyError::NotNew`] for one whose `remaining` is not its
-/// quantity; [`InboundApplyError::Idem`] for one naming a resting order id;
-/// [`InboundApplyError::DuplicateClientId`] for one carrying a client id its
-/// account already used.
+/// quantity; [`InboundApplyError::OrderIdRests`] for one naming a resting
+/// order id; [`InboundApplyError::DuplicateClientId`] for one carrying a
+/// client id its account already used.
 pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatchPolicy, cmd : InboundCmd ) -> Result< InboundOutcome, InboundApplyError >
 {
   match cmd
@@ -283,7 +272,7 @@ pub fn inbound_apply( book : &mut Book, claims : &mut Claims, policy : SelfMatch
       // refuse the id.
       if !book.insertable( &resting, None )
       {
-        return Err( InboundApplyError::Idem( IdemError::Duplicate ) );
+        return Err( InboundApplyError::OrderIdRests );
       }
       let client = order.client.map( | client | ( order.account, client ) );
       if client.is_some_and( | key | idem_seen( &claims.clients, key ) )

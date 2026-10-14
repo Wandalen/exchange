@@ -4,7 +4,6 @@
 use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
-use exchange_idem::IdemError;
 use exchange_inbound::{ inbound_apply, inbound_drain, inbound_flush, inbound_overflow_reject, inbound_ring, Claims, InboundApplyError, InboundCmd, InboundOutcome };
 use exchange_match::MatchError;
 use exchange_order::Order;
@@ -363,7 +362,7 @@ fn place_does_not_rest_an_order_the_self_match_policy_cancelled()
 /// # Fix Applied
 ///
 /// `inbound_apply` refuses a `Place` whose id rests with
-/// `InboundApplyError::Idem` — now before it crosses, asking the book.
+/// `InboundApplyError::OrderIdRests` — now before it crosses, asking the book.
 ///
 /// # Prevention
 ///
@@ -392,7 +391,7 @@ fn duplicate_place_id_is_refused_not_silently_dropped()
   let repeat = InboundCmd::Place( resting( 1, Side::Buy, "0.90", 3, Tif::Gtc ) );
   let error = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ).unwrap_err();
 
-  assert_eq!( error, InboundApplyError::Idem( IdemError::Duplicate ) );
+  assert_eq!( error, InboundApplyError::OrderIdRests );
   assert_eq!( book.best( INSTRUMENT, Side::Buy ).unwrap().order.price, Price::parse( "1.00" ).unwrap(), "the duplicate must not have touched the book at all" );
   assert_eq!( book.len(), 1, "exactly the first order rests — the repeat neither joined nor replaced it" );
 }
@@ -432,7 +431,7 @@ fn a_duplicate_place_id_is_refused_before_it_trades()
   let repeat = InboundCmd::Place( resting( 1, Side::Sell, "0.90", 8, Tif::Gtc ) );
   let error = inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ).unwrap_err();
 
-  assert_eq!( error, InboundApplyError::Idem( IdemError::Duplicate ) );
+  assert_eq!( error, InboundApplyError::OrderIdRests );
   let bid = book.best( INSTRUMENT, Side::Buy ).expect( "the refused repeat must not have traded the bid away" );
   assert_eq!( ( bid.order.id, bid.remaining ), ( OrderId( 2 ), Quantity::from_int( 5 ).unwrap() ) );
 }
@@ -685,7 +684,7 @@ fn a_place_whose_id_rests_is_refused_before_it_trades()
   assert!( book.insert( resting( 5, Side::Sell, "1.00", 2, Tif::Gtc ) ) );
 
   let repeat = InboundCmd::Place( resting( 1, Side::Buy, "1.00", 5, Tif::Gtc ) );
-  assert_eq!( inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ), Err( InboundApplyError::Idem( IdemError::Duplicate ) ) );
+  assert_eq!( inbound_apply( &mut book, &mut claims, SelfMatchPolicy::CancelResting, repeat ), Err( InboundApplyError::OrderIdRests ) );
 
   assert_eq!( book.best( INSTRUMENT, Side::Sell ).unwrap().order.id, OrderId( 5 ), "order 5 was not traded" );
   assert_eq!( book.len(), 2 );

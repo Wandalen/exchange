@@ -6,7 +6,7 @@ The exposed surface of `exchange_inbound`, as built.
 
 - **Purpose**: What this crate exports, and how it compares to the source design's exposed-item list for it.
 - **Responsibility**: One table, every `pub` item, with a note on fidelity to the proposal.
-- **In Scope**: This crate's own public surface, including the `ring_factory`, `ring_handle` and `exchange_idem` types it re-exports.
+- **In Scope**: This crate's own public surface, including the `ring_factory` and `ring_handle` types it re-exports.
 - **Out of Scope**: Per-declaration files.
 
 ### Overview Table
@@ -15,7 +15,7 @@ The exposed surface of `exchange_inbound`, as built.
 |------|------|-----------|
 | `InboundCmd` | enum | `{ Place(Resting), Cancel { instrument: InstrumentId, id: OrderId }, Replace { instrument: InstrumentId, old_id: OrderId, new_resting: Resting } }` |
 | `InboundOutcome` | enum | `{ Crossed(Crossing), Cancelled(Option<Resting>), Replaced(Result<Resting, RestReplaceError>) }` |
-| `InboundApplyError` | enum | `{ Match(MatchError), Idem(IdemError), DuplicateClientId, ZeroQuantity, NotNew }`, with `Display`, `Error`, `From<MatchError>`, `From<IdemError>` |
+| `InboundApplyError` | enum | `{ Match(MatchError), OrderIdRests, DuplicateClientId, ZeroQuantity, NotNew }`, with `Display`, `Error`, `From<MatchError>` |
 | `Claims` | struct | `{ /* private */ }`, `Claims::new()` — the `( AccountId, ClientOrderId )`s `inbound_apply` has accepted |
 | `inbound_ring` | fn | `(capacity: usize) -> Result<Split<InboundCmd>, BuildError>` |
 | `inbound_flush` | fn | `(producer: &mut Producer<'_, InboundCmd>, cmds: &[InboundCmd]) -> usize` — publishes a prefix, `cmds[n..]` stays the caller's |
@@ -24,7 +24,6 @@ The exposed surface of `exchange_inbound`, as built.
 | `inbound_apply` | fn | `(book: &mut Book, claims: &mut Claims, policy: SelfMatchPolicy, cmd: InboundCmd) -> Result<InboundOutcome, InboundApplyError>` |
 | `BuildError`, `RingConfig` | re-export | `ring_factory`'s |
 | `Consumer`, `Drain`, `Ends`, `Producer`, `Split` | re-export | `ring_handle`'s |
-| `IdemError`, `IdSet` | re-export | `exchange_idem`'s, so a caller can match `InboundApplyError::Idem` without naming that crate |
 
 ### Differs from the proposal
 
@@ -48,8 +47,8 @@ The source design (`core_exchange.txt:482-487`, `652-661`) names
   `BuildError`, `MatchError`, `RestReplaceError` inside
   `InboundOutcome::Replaced`, the refused command on overflow. Nothing can
   report a ring closed, and a drain cannot fail. `InboundApplyError` holds
-  only what `inbound_apply` adds: the cross refusal, the two idempotency
-  refusals and the order checks.
+  only what `inbound_apply` adds: the cross refusal, a resting order id, a
+  used client id and the order checks.
 - **`InboundOutcome`, `Claims` and the re-exports** are not in the proposal.
   No `Claim` or `GatingSet` is exported.
 
