@@ -1,7 +1,7 @@
 # Feature: Partial Fill, Rest The Leftover
 
 **Relocated.** This feature is single-crate-relevant (`exchange_core`'s own
-`Exchange::submit` step 5) and now lives at
+`Exchange::exchange_step` step 5) and now lives at
 [`../../module/exchange_core/readme.md`](../../module/exchange_core/readme.md)'s
 "Closes hard problem 4, and feature 10" section.
 

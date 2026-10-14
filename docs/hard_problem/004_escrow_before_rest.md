@@ -1,7 +1,7 @@
 # Hard Problem: Escrow Before Rest
 
 **Relocated.** This hard problem is single-crate-relevant (`exchange_core`'s
-own `Exchange::submit`/`Exchange::cancel` step ordering) and now lives at
+own `Exchange::exchange_step` step ordering) and now lives at
 [`../../module/exchange_core/readme.md`](../../module/exchange_core/readme.md)'s
 "Closes hard problem 4, and feature 10" section.
 
