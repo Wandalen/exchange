@@ -78,8 +78,9 @@ explicit `Err`, never a silent drop — `overflow=1`.
 
 **Conservation, standalone.** `conserve=0` — `exchange_conserve::conserve_assert`
 audits the GTC and IOC takers' real trades and finds zero violations.
-`exchange_match::cross` asserts each batch it produces too, but `Exchange`
-exposes no audit, so the lane runs one itself on what came out.
+`exchange_match::cross` asserts each batch too, and `Exchange::postings`
+feeds the event stream to `exact_arith`'s auditor; the lane checks both
+takers' trades together once more.
 
 ## Three dependencies, each named for what it buys
 
@@ -92,12 +93,10 @@ here, not a gap nobody notices.
 
 [`exchange_idem`](../exchange_idem/readme.md) and
 [`exchange_conserve`](../exchange_conserve/readme.md) are each a deliberate,
-named exception to that rule — not a quiet widening of it. Both check
-properties `exchange_core` never wires into the facade at all (see "Nine
-properties" above for why each one specifically has no path through
-`exchange_step`), so there is no re-export to depend on in the first place;
-depending on the leaf crate directly is the only way to check either
-property anywhere.
+named exception to that rule — not a quiet widening of it. The facade
+re-exports neither check: a duplicate order id cannot reach it, and it runs
+`conserve_assert` only inside `cross`. Depending on the leaf crates is the
+only way to call either directly.
 
 ## Why four probes never touch the scene's own `Exchange`
 
