@@ -116,23 +116,27 @@ discovered as gaps:
 
 - **Stop orders.** Out of v0.1.
 - **More than one asset pair.** `Exchange::spec_register` admits one pair: escrow holds one cash and one asset balance per account.
-- **Amend.** [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) covers cancel, which exists; amend does not.
+- **Amend.** [`algorithm/003`](docs/algorithm/003_cancel_and_amend_semantics.md) specifies it; which version carries it is open. A drained `Replace` answers `StepOutcome::ReplaceNotWired` and changes nothing; see `exchange_step`'s own doc and [`docs/decisions/`](docs/decisions/readme.md) for why.
 - **Fees.** [`algorithm/004`](docs/algorithm/004_fee_assessment_point.md) fixes the assessment point; no schedule is decided, so nothing is charged.
+
+**Cold recovery is required, not excluded.** It is v0.1 exit criterion 4,
+and it is not met: nothing rebuilds the book and escrow from the event log,
+and replaying the log could not do it yet, because the admin methods
+(`open_account`, `spec_register`, `caps_set`, `halt_set`, `halt_clear`)
+change state without emitting an event.
 
 A market order is a limit order whose price is a cap, sent IOC or FOK; see
 [`tests/market_order_test.rs`](tests/market_order_test.rs).
 
 Two more are resolved, not absent, as a side effect of routing through the
 ring rather than a direct call: **Time-in-Force** is a real, caller-chosen
-field on every placed order now (`{ FOK, IOC, GTC }`, no longer pinned to
-`GTC`), and **self-match policy** is a parameter on
+field on every placed order now (`{ GTC, IOC, FOK, post-only }`, no longer
+pinned to `GTC`), and **self-match policy** is a parameter on
 [`Exchange::exchange_step`] itself, supplied per call rather than hardcoded.
 [`algorithm/002`](docs/algorithm/002_self_match_prevention.md) states the
 self-match ban;
 [`exchange_match/tests/self_match_test.rs`](../exchange_match/tests/self_match_test.rs)
-covers all three configured policies. `Replace` is drained but not yet
-applied — see `exchange_step`'s own doc and
-[`docs/decisions/`](docs/decisions/readme.md) for why.
+covers all three configured policies.
 
 ## Two questions this implementation closed
 

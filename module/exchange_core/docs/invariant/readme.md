@@ -5,7 +5,7 @@
 - **Purpose**: State the properties the matching engine must hold under every code path, so a violation is a recognised defect rather than absorbed behaviour.
 - **Responsibility**: Document `exchange_core`'s own invariants and how the crate enforces each.
 - **In Scope**: Properties of the book and ledger the engine owns — what backs an order, when reservations release, the order arrivals are processed in, and the shape a holding has.
-- **Out of Scope**: Conservation of the value types themselves (→ [`exact_conserve`](https://github.com/Wandalen/exact/blob/master/module/exact_conserve/readme.md)); determinism of the hosting substrate, not yet integrated.
+- **Out of Scope**: Conservation of the value types themselves (→ [`exact_conserve`](https://github.com/Wandalen/exact/blob/master/module/exact_conserve/readme.md)); determinism of the inbound ring itself (→ [`exchange_inbound`](../../../exchange_inbound/readme.md)).
 
 ### Overview Table
 

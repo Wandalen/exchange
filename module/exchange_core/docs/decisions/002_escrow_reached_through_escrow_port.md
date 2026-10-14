@@ -67,10 +67,10 @@ The build collapsed it into the concrete struct.
 - A future workstream 010 crate implementing the port would have to depend on
   this facade to name the trait. If that happens, move the trait to its own
   crate.
-- The family docs' "Design status" lines still say no `EscrowPort` trait
-  exists — `docs/escrow_port/*`, `docs/decision/003`,
-  `docs/neighbor_contract/003`, `docs/boundary/002_out.md`. Left as they are,
-  outside this crate.
+- The family docs name the trait: `docs/escrow_port/*` and
+  `docs/neighbor_contract/003` say where it is built. `docs/decision/003` and
+  `docs/boundary/002_out.md` are about who holds balances, which this does not
+  change.
 
 ## Related
 

@@ -128,11 +128,13 @@ here, and its central question is not mechanical.
 **Open — whether amend exists in v0.1 at all.**
 [Exchange Core v0.1](../feature/001_exchange_core_v0_1.md) does not list it
 among its commitments, and the design corpus contains no amend operation of
-any kind. This instance specifies the semantics so that adding the operation
-later is an increment rather than a redesign — and specifically so that the
-priority rule is decided before an implementation decides it by accident,
-which is the failure mode a rule discovered during coding always has. The
-version slot is not this instance's to assign.
+any kind. Today a drained `Replace` answers `StepOutcome::ReplaceNotWired`
+and changes nothing. This instance specifies
+the semantics so that adding the operation later is an increment rather than
+a redesign — and specifically so that the priority rule is decided before an
+implementation decides it by accident, which is the failure mode a rule
+discovered during coding always has. The version slot is not this
+instance's to assign.
 
 ### Algorithms
 

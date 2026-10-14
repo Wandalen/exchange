@@ -120,7 +120,7 @@ claim never acquires queue position.
 state, `remaining == submitted − Σ fills`, exactly. With exact types that
 equality is literal rather than approximate — there is no rounding slack for
 a residual to hide in
-(→ [Conservation-Exact Split](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md)).
+(→ [Conserved Value Types](https://github.com/Wandalen/exact/blob/master/module/exact_kind/readme.md)).
 `remaining` is never negative, and reaching zero is what *defines* Filled
 rather than a separate condition that could disagree with it.
 
@@ -149,7 +149,7 @@ finite, enumerable set of instants rather than an appeal to wall-clock time.
 
 | File | Relationship |
 |------|--------------|
-| [https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md) | Why BI4's equality is exact rather than approximate across a partial-fill sequence |
+| [https://github.com/Wandalen/exact/blob/master/module/exact_kind/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_kind/readme.md) | Why BI4's equality is exact rather than approximate across a partial-fill sequence |
 | [../algorithm/001_price_time_priority_matching.md](../algorithm/001_price_time_priority_matching.md) | Drives every transition: steps 1–2 leave Submitted, step 3 produces the fill edges, step 5 produces the Time-in-Force cancel edges |
 | [../algorithm/002_self_match_prevention.md](../algorithm/002_self_match_prevention.md) | Supplies the self-match cause on the Accepted → Cancelled and PartiallyFilled → Cancelled edges |
 | [../algorithm/003_cancel_and_amend_semantics.md](../algorithm/003_cancel_and_amend_semantics.md) | Supplies the cancel edges and the two amend self-transitions, and decides the race BI1 declares non-fatal |

@@ -61,8 +61,14 @@ deliberately not here yet, named rather than left to be discovered as gaps:
 |----------------|-------------------|
 | Stop orders | out of v0.1; a market order is a limit order whose price is a cap, sent IOC or FOK |
 | More than one asset pair | `spec_register` admits one pair; escrow holds one cash and one asset balance per account |
-| Amend | cancel exists; amend does not |
+| Amend | specified, version open; a ring `Replace` answers `StepOutcome::ReplaceNotWired` and changes nothing |
 | Fees | the assessment point is fixed; no schedule is decided, nothing is charged |
+
+Cold recovery is not on that list because it is required, not excluded: it
+is v0.1 exit criterion 4, and it is not met. Nothing rebuilds the book and
+escrow from the event log, and replaying the log could not do it yet, because
+the admin methods (`open_account`, `spec_register`, `caps_set`, `halt_set`,
+`halt_clear`) change state without emitting an event.
 
 Self-match prevention is **not** on that list — it is implemented, with three
 configurable policies enforced before a candidate fill is ever built.

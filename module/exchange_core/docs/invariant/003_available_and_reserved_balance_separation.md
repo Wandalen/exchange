@@ -166,7 +166,7 @@ right one. Recovery is not a repair mechanism for this class.
 | File | Relationship |
 |------|--------------|
 | [https://github.com/Wandalen/exact/blob/master/module/exact_conserve/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_conserve/readme.md) | Detects a violated sum; explicitly cannot detect a violated partition, which is why the bridge assertion exists |
-| [https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_dust/readme.md) | Why a partial fill's move across the partition is exact rather than two independently rounded figures |
+| [https://github.com/Wandalen/exact/blob/master/module/exact_kind/readme.md](https://github.com/Wandalen/exact/blob/master/module/exact_kind/readme.md) | Why a partial fill's move across the partition is exact rather than two independently rounded figures: the value types never round on their own |
 | [../algorithm/001_price_time_priority_matching.md](../algorithm/001_price_time_priority_matching.md) | Step 2 performs the `available → reserved` move; steps 4–5 perform the two reverse moves |
 | [../algorithm/003_cancel_and_amend_semantics.md](../algorithm/003_cancel_and_amend_semantics.md) | An amend adjusts the partition in one event — a release-then-reserve decomposition opens the very window this invariant closes |
 | [../algorithm/004_fee_assessment_point.md](../algorithm/004_fee_assessment_point.md) | The fee obligation whose reservation status is this instance's first open question |
