@@ -100,6 +100,9 @@ impl Book
   /// above `resting.order.quantity`, or `resting.order.id` already rests on
   /// either side — the same "caller error that would silently corrupt the
   /// book" class [`Self::consume_best`] guards.
+  ///
+  /// Any price is seated, a negative one too: its sign and tick are the
+  /// caller's to check, as `exchange_core`'s `step_place` does.
   //
   // Fix(book_insert_had_no_duplicate_order_id_rejection):
   // Root cause: `insert` seated a second order under an id already resting.

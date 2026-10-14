@@ -20,7 +20,8 @@ use exchange_side::{ Side, side_accepts };
 /// Place `resting` on `book` — [`Book::insert`].
 ///
 /// Returns `false` on the same terms: a `remaining` of zero or above
-/// `order.quantity`, or an `order.id` already resting.
+/// `order.quantity`, or an `order.id` already resting. Any price rests; its
+/// sign and tick are the caller's to check.
 #[ must_use ]
 pub fn rest_place( book : &mut Book, resting : Resting ) -> bool
 {
@@ -96,6 +97,9 @@ impl core::error::Error for RestReplaceError {}
 /// smaller or equal quantity at the same price keep the original's arrival;
 /// anything else must arrive after it. Which later arrival is the caller's:
 /// only it stamps them.
+///
+/// The replacement's price is checked against the opposite side only; its
+/// sign and tick are the caller's to check, as for [`rest_place`].
 ///
 /// # Errors
 ///
