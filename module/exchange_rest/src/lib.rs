@@ -154,12 +154,15 @@ pub fn rest_replace( book : &mut Book, instrument : InstrumentId, old_id : Order
     return Err( RestReplaceError::Refused );
   }
 
-  let Some( old ) = book.side( instrument, Side::Buy ).chain( book.side( instrument, Side::Sell ) )
-    .find( | resting | resting.order.id == old_id )
-    .copied()
+  // The replacement's own side, best first: replacing the best order costs
+  // what cancelling it does. Found only on the other side, it is no amend.
+  let side = new_resting.order.side;
+  let find = | on : Side | book.side( instrument, on ).find( | resting | resting.order.id == old_id ).copied();
+  let Some( old ) = find( side )
   else
   {
-    return Err( RestReplaceError::Missing );
+    let elsewhere = find( side.opposite() ).is_some();
+    return Err( if elsewhere { RestReplaceError::NotAnAmend } else { RestReplaceError::Missing } );
   };
 
   // Fix(rest_replace_refuses_a_replacement_that_is_another_order):
