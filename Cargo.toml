@@ -40,8 +40,8 @@ members = [
 #   ring_types = { path = "../ring/ring_types" }
 [workspace.dependencies]
 exact_arith = { version = "0.1.0" }
-ring_factory = { version = "0.2.1" }
-ring_handle = { version = "0.2.1" }
+ring_factory = { version = "0.3.1" }
+ring_handle = { version = "0.3.1" }
 ring_types = { version = "0.2.1" }
 
 [workspace.package]
