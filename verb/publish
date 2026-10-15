@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+#@ purpose: Really publish every publishable crate in this workspace to crates.io, in
+#@          dependency order (`cargo publish --workspace` sorts and resolves not-yet-
+#@          published siblings from a local temp registry during verify — confirmed
+#@          empirically on cargo 1.98.0, in the sibling `exact` family). Before every
+#@          attempt, including retries, checks crates.io directly for which workspace
+#@          members are already live at their current version and `--exclude`s them:
+#@          `cargo publish --workspace` has no built-in skip for an already-published
+#@          sibling and hard-errors ("already exists on ... index") if asked to
+#@          re-publish one, so retrying the bare command verbatim can never get past
+#@          the first crate a prior attempt already finished — confirmed empirically
+#@          in `exact`'s own first real run: it published 5 crates, 429'd on the 6th,
+#@          and a bare retry immediately died re-attempting the 1st. Retries on
+#@          crates.io's own 429 by sleeping exactly the server-told Retry-After
+#@          instead of a guessed delay. dry::1 prints the command without running it.
+#@          Uploads for real: crates.io has no delete, only yank. Needs `cargo login`
+#@          already done by hand.
+#@ tags: verb, publish
+set -uo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+_dry_run=0
+for _arg in "$@"; do
+  case "$_arg" in
+    dry::1) _dry_run=1 ;;
+    *)
+      echo "verb/publish: unrecognized parameter '$_arg' — expected dry::1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+_is_published()
+{
+  curl -fsS --max-time 10 -A "verb-publish-resume-check/1.0" "https://crates.io/api/v1/crates/$1/$2" >/dev/null 2>&1
+}
+
+_publishable_specs()
+{
+  cargo metadata --no-deps --format-version 1 2>/dev/null \
+    | jq -r '.packages[] | select(.publish == null) | "\(.name) \(.version)"'
+}
+
+_already_done()
+{
+  while IFS=' ' read -r _name _version; do
+    [[ -z "$_name" ]] && continue
+    _is_published "$_name" "$_version" && printf '%s\n' "$_name"
+  done < <( _publishable_specs )
+}
+
+_max_attempts=20
+_attempt=0
+while true; do
+  _attempt=$(( _attempt + 1 ))
+  if [[ "$_attempt" -gt "$_max_attempts" ]]; then
+    echo "verb/publish: giving up after $_max_attempts attempts" >&2
+    exit 1
+  fi
+
+  mapfile -t _done < <( _already_done )
+  _total=$( _publishable_specs | wc -l )
+
+  if [[ "${#_done[@]}" -ge "$_total" ]]; then
+    echo "verb/publish: done (all $_total crates already published)"
+    exit 0
+  fi
+
+  _cmd=( cargo publish --workspace --allow-dirty )
+  for _n in "${_done[@]}"; do _cmd+=( --exclude "$_n" ); done
+
+  if (( _dry_run )); then
+    printf '%s\n' "${_cmd[*]}"
+    exit 0
+  fi
+
+  _output=$( "${_cmd[@]}" 2>&1 )
+  _code=$?
+  printf '%s\n' "$_output"
+
+  if [[ "$_code" -eq 0 ]]; then
+    echo "verb/publish: done"
+    exit 0
+  fi
+
+  if printf '%s' "$_output" | grep -qi "too many requests\|try again after"; then
+    _retry_at=$(printf '%s' "$_output" | grep -oE '[A-Za-z]{3}, [0-9]{2} [A-Za-z]{3} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} GMT' | head -1)
+    _retry_epoch=$(date -u -d "$_retry_at" +%s 2>/dev/null || echo 0)
+    _now_epoch=$(date -u +%s)
+    _wait_s=$(( _retry_epoch - _now_epoch + 15 ))
+    if [[ "$_wait_s" -lt 30 ]]; then _wait_s=630; fi
+    echo "verb/publish: rate limited (retry after: ${_retry_at:-unparsed}) — sleeping ${_wait_s}s"
+    sleep "$_wait_s"
+    continue
+  fi
+
+  if printf '%s' "$_output" | grep -qi "already exists on.*index"; then
+    echo "verb/publish: a crate finished publishing between the check and this attempt — rechecking"
+    sleep 5
+    continue
+  fi
+
+  echo "verb/publish: failed for an unrecognized reason" >&2
+  exit 1
+done

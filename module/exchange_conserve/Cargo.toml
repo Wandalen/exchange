@@ -1,0 +1,20 @@
+[package]
+name = "exchange_conserve"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "A batch of fills nets to zero across its signed legs, or is refused as unbalanced"
+
+[dependencies]
+exact_arith = { workspace = true }
+exchange_fill = { path = "../exchange_fill", version = "0.1.0" }
+exchange_side = { path = "../exchange_side", version = "0.1.0" }
+exchange_types = { path = "../exchange_types", version = "0.1.0" }
+
+[dev-dependencies]
+# The test helper's `trade()` fixture needs raw `OrderId`/`AccountId` values —
+# nothing in this crate's own src/ reads either type directly.
+exchange_id = { path = "../exchange_id", version = "0.1.0" }
+
+[lints]
+workspace = true
