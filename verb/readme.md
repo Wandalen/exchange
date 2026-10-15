@@ -67,6 +67,12 @@ catch is that the published crate builds against the registry release, not the r
 that uses an API only present at the rev builds here and fails for anyone installing from
 crates.io; `verb/publish_check`'s dry-run verify build is the step that catches it.
 
+`exact_arith` is the exception today, pinned by `{ git, rev }` alone: exchange uses `+` and
+`-` on `Money`, `Quantity` and `Price` (exact's ADR-005), which no crates.io release of
+`exact` has yet. Until one does, `verb/publish` and `verb/publish_check` refuse every crate
+that depends on it. Once `exact` publishes them, add that release's `version` back next to
+the `rev` and rerun `verb/publish_check`.
+
 Both verbs otherwise match `exact`'s own, including `publish`'s resume mechanism: a bare
 retry of `cargo publish --workspace` is not itself resumable (confirmed on `exact`'s own
 first real run — it published 5 crates, 429'd on the 6th, and the immediate retry died
