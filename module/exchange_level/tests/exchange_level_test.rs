@@ -141,7 +141,7 @@ fn the_front_nodes_remaining_can_be_reduced_in_place()
   level_push( &mut level, node( 1, 4, 1 ) );
 
   let front = level.nodes.front_mut().unwrap();
-  front.remaining = front.remaining.checked_sub( Quantity::from_int( 1 ).unwrap() ).unwrap();
+  front.remaining = ( front.remaining - Quantity::from_int( 1 ).unwrap() ).unwrap();
 
   assert_eq!( level.nodes[ 0 ].remaining, Quantity::from_int( 3 ).unwrap() );
   assert_eq!( level.nodes[ 0 ].order.id, OrderId( 1 ), "reducing remaining must not disturb identity" );

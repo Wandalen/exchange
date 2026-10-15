@@ -55,6 +55,6 @@ fn t01_an_order_holds_exact_values()
 {
   let submitted = order();
 
-  let doubled = submitted.price.checked_add( submitted.price );
+  let doubled = submitted.price + submitted.price;
   assert_eq!( doubled.unwrap(), Price::parse( "2.50" ).unwrap() );
 }

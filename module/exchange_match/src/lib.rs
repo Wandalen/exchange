@@ -103,7 +103,7 @@ impl Crossing
   /// quantity.
   pub fn filled( &self ) -> Result< Quantity, KindError >
   {
-    self.trades.iter().try_fold( Quantity::ZERO, | sum, trade | sum.checked_add( trade.quantity ) )
+    self.trades.iter().try_fold( Quantity::ZERO, | sum, trade | sum + trade.quantity )
   }
 
   /// Every trade and self-match withdrawal, in the order `cross` made them —
@@ -379,7 +379,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       return Err( MatchError::BookDesynchronized );
     }
 
-    remaining = remaining.checked_sub( taken )?;
+    remaining = ( remaining - taken )?;
     trades.push( trade );
   }
 
