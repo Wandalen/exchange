@@ -36,7 +36,7 @@ fn t01_the_price_path_is_not_floating_point()
   let tenth = Money::parse( "0.1" ).unwrap();
   let fifth = Money::parse( "0.2" ).unwrap();
 
-  assert_eq!( tenth.checked_add( fifth ).unwrap(), Money::parse( "0.3" ).unwrap() );
+  assert_eq!( ( tenth + fifth ).unwrap(), Money::parse( "0.3" ).unwrap() );
 
   #[ allow( clippy::float_cmp ) ]
   let float_disagrees = 0.1_f64 + 0.2_f64 != 0.3_f64;

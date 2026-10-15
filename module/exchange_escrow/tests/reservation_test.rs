@@ -400,7 +400,7 @@ fn the_stored_reserve_agrees_with_the_orders_behind_it()
     {
       panic!( "a buy commits currency" );
     };
-    expected = expected.checked_add( committed ).unwrap();
+    expected = ( expected + committed ).unwrap();
 
     assert_eq!
     (
@@ -849,7 +849,7 @@ fn a_settlement_failing_late_leaves_nothing_committed()
   // The seller has room for its ask's proceeds at its own limit, 1, and no
   // more.
   escrow.open( AccountId( 1 ), money( "10" ), Quantity::ZERO ).unwrap();
-  escrow.open( AccountId( 2 ), Money::MAX.checked_sub( money( "1" ) ).unwrap(), qty( 1 ) ).unwrap();
+  escrow.open( AccountId( 2 ), ( Money::MAX - money( "1" ) ).unwrap(), qty( 1 ) ).unwrap();
   let bid = order( 10, 1, Side::Buy, "2", 1 );
   let ask = order( 11, 2, Side::Sell, "1", 1 );
   escrow.reserve( &bid ).unwrap();
@@ -1152,7 +1152,7 @@ fn a_resting_order_keeps_room_for_what_it_brings_in()
 {
   let mut escrow = Escrow::new();
   // Exactly enough room for an ask's $4 and a bid's 2 units.
-  escrow.open( AccountId( 1 ), Money::MAX.checked_sub( money( "4" ) ).unwrap(), Quantity::from_int( CEILING_WHOLE_UNITS - 2 ).unwrap() ).unwrap();
+  escrow.open( AccountId( 1 ), ( Money::MAX - money( "4" ) ).unwrap(), Quantity::from_int( CEILING_WHOLE_UNITS - 2 ).unwrap() ).unwrap();
   let ask = order( 1, 1, Side::Sell, "2", 2 );
   let bid = order( 2, 1, Side::Buy, "1", 2 );
   escrow.reserve( &ask ).unwrap();

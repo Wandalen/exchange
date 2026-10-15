@@ -14,7 +14,7 @@ wrong number that looks like success.
 
 ### How this crate avoids it
 
-Every balance edit goes through `checked_add`/`checked_sub`
+Every balance edit goes through `exact_arith`'s checked `+`/`-`, which return a `Result`
 (`grep -n "saturating" module/exchange_escrow/src/lib.rs` returns nothing). A
 subtraction below zero is refused as `Insufficient` or `NotReserved`, an
 addition past the ceiling as `Arithmetic` — never clamped.

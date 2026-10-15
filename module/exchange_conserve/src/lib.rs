@@ -107,7 +107,7 @@ pub fn conserve_assert( fills : &[ Trade ] ) -> Result< (), ConserveError >
   for trade in fills
   {
     let notional = exchange_types::notional( trade.price, trade.quantity ).map_err( ConserveError::Notional )?;
-    let debit = Money::ZERO.checked_sub( notional ).map_err( | _ | ConserveError::Overflow )?;
+    let debit = ( Money::ZERO - notional ).map_err( | _ | ConserveError::Overflow )?;
 
     match trade.taker_side
     {

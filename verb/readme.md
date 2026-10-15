@@ -50,18 +50,28 @@ rather than assumed:
   gate, and after clearing that would have hit this one next. All 19 affected `Cargo.toml`
   files now carry `version = "0.1.0"` (every member's real current version) alongside
   every internal path dependency.
-- **`ring_factory`/`ring_handle`/`ring_types` were pinned by git `rev`, not a registry
-  version.** crates.io refuses a published crate with a git dependency, full stop — a
-  `version` alongside `git` does not change that. Confirmed `ring`'s own crates are
+- **`ring_factory`/`ring_handle`/`ring_types` were pinned by git `rev` alone.** crates.io
+  refuses a published crate with a git-only dependency. Confirmed `ring`'s own crates are
   already live at `0.2.1` (`curl` against `crates.io`'s own API), switched the three
   `[workspace.dependencies]` entries to `{ version = "0.2.1" }`, and reran the full
   workspace test suite to confirm `0.2.1`'s real API still matches what the pinned
   revision expected — 109 `test result: ok` blocks, 0 failures, same as before the switch.
-  `exact_arith` stays git-pinned for now: `exact` itself was still mid-publish when this
-  migration ran, so switching it over too would have broken every normal build in the
-  window before it landed on crates.io. Whoever finishes wiring it over should repeat the
-  same two steps — confirm the version is live, then swap `git`+`rev` for `version` and
-  rerun the suite — rather than assume compatibility from the pinned revision alone.
+  `exact_arith` stayed git-pinned at first, because `exact` itself was still mid-publish
+  when this migration ran, and moved to `{ version = "0.1.0" }` once that release was live.
+
+The pins have since gone back to upstream revisions, this time with the `version` kept
+alongside: `{ version, git, rev }`. A local build uses the rev; `cargo package` drops `git`
+and `rev` and publishes the `version` — confirmed: `cargo package -p exchange_inbound`
+writes bare `version` requirements and its verify build compiles against crates.io. The
+catch is that the published crate builds against the registry release, not the rev. Code
+that uses an API only present at the rev builds here and fails for anyone installing from
+crates.io; `verb/publish_check`'s dry-run verify build is the step that catches it.
+
+`exact_arith` is the exception today, pinned by `{ git, rev }` alone: exchange uses `+` and
+`-` on `Money`, `Quantity` and `Price` (exact's ADR-005), which no crates.io release of
+`exact` has yet. Until one does, `verb/publish` and `verb/publish_check` refuse every crate
+that depends on it. Once `exact` publishes them, add that release's `version` back next to
+the `rev` and rerun `verb/publish_check`.
 
 Both verbs otherwise match `exact`'s own, including `publish`'s resume mechanism: a bare
 retry of `cargo publish --workspace` is not itself resumable (confirmed on `exact`'s own

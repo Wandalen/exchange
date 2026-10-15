@@ -310,9 +310,9 @@ fn an_emptied_instrument_leaves_no_trace_in_equality()
 /// own doc comment states the invariant "always greater than zero — a
 /// resting order with nothing left is removed rather than kept at zero."
 /// `consume_best` only ever removes a zero-remaining order from inside a
-/// `checked_sub` that just reached zero — a zero-remaining `Resting` seated
-/// directly by `insert` never passes through that arithmetic, so nothing
-/// ever evicts it.
+/// checked `remaining - taken` that just reached zero — a zero-remaining
+/// `Resting` seated directly by `insert` never passes through that arithmetic,
+/// so nothing ever evicts it.
 /// Why Not Caught: every `insert` call in this file builds its `Resting`
 /// through `rest(...)`, which always derives `remaining` from a positive
 /// `quantity` argument — none of them ever tried to seat a `Resting` whose
@@ -326,7 +326,7 @@ fn an_emptied_instrument_leaves_no_trace_in_equality()
 /// must enforce it, not assume it.
 /// Pitfall: a zero-remaining order that does get seated is not merely inert
 /// — it jams the book. `consume_best` subtracts `taken` from `remaining` via
-/// `checked_sub`, which underflows and returns `false` the moment `taken` is
+/// the checked `-`, which underflows and returns `false` the moment `taken` is
 /// positive against an already-zero `remaining`, so the phantom order is
 /// never evicted and sits at the front blocking every future match against
 /// that side.
