@@ -1,6 +1,6 @@
 //! Test Matrix T01 — the opposite relation, and Phase P02's own smoke assertion.
 
-use exchange_side::{ Side, side_is_ask, side_is_bid, side_opposite };
+use exchange_side::{ Side, side_accepts, side_ahead, side_is_ask, side_is_bid, side_opposite };
 
 /// T01 — every side has exactly one opposite.
 #[ test ]
@@ -26,6 +26,30 @@ fn bid_and_ask_are_complementary()
   assert!( !side_is_ask( Side::Buy ) );
   assert!( side_is_ask( Side::Sell ) );
   assert!( !side_is_bid( Side::Sell ) );
+}
+
+/// A higher bid and a lower ask rank ahead; an equal price does not.
+#[ test ]
+fn side_ahead_ranks_by_aggressiveness()
+{
+  assert!( side_ahead( Side::Buy, 11, 10 ) );
+  assert!( !side_ahead( Side::Buy, 10, 11 ) );
+  assert!( side_ahead( Side::Sell, 10, 11 ) );
+  assert!( !side_ahead( Side::Sell, 11, 10 ) );
+  assert!( !side_ahead( Side::Buy, 10, 10 ) );
+  assert!( !side_ahead( Side::Sell, 10, 10 ) );
+}
+
+/// A buy accepts at or below its limit, a sell at or above.
+#[ test ]
+fn side_accepts_is_inclusive_at_the_limit()
+{
+  assert!( side_accepts( Side::Buy, 10, 9 ) );
+  assert!( side_accepts( Side::Buy, 10, 10 ) );
+  assert!( !side_accepts( Side::Buy, 10, 11 ) );
+  assert!( side_accepts( Side::Sell, 10, 11 ) );
+  assert!( side_accepts( Side::Sell, 10, 10 ) );
+  assert!( !side_accepts( Side::Sell, 10, 9 ) );
 }
 
 /// Phase P02 — the opposite of bid is ask.

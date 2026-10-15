@@ -1,22 +1,13 @@
 //! Tick, lot, the asset pair, and the halt flag on one instrument.
 //!
-//! A single-tier dependent: `exchange_id` for `InstrumentId`, `exact_kind`
-//! for the decimal grid itself, `exact_snap`/`exact_round` for the snap
-//! machinery. This crate does not implement snapping —
-//! [`price_snap`]/[`qty_snap`] are thin wrappers over `exact_snap`'s own
-//! `price_snap_tick`/`qty_snap_lot`, which already refuse a zero-sized grid
-//! and already pick the rounding. Reimplementing either here would be a
-//! second source of truth for one piece of arithmetic, which is exactly what
-//! this family's own module documentation warns against for `Trade`/`Fill`.
-//!
-//! Before this crate, an illegal price could enter the book with no grid to
-//! reject it against, and nothing distinguished one instrument from another —
-//! closes hard problems 1 (one book per instrument), 8 (tick and lot), 18
-//! (halt), and 19 (more than one asset).
+//! Snapping is not implemented here: [`price_snap`]/[`qty_snap`] wrap
+//! `exact_arith`'s `price_snap_tick`/`qty_snap_lot`, which already refuse a
+//! zero grid and pick the rounding — one source of truth for the arithmetic.
+//! Closes hard problems 1, 8 and 18, and features 4 and 5. Not 19: `base`
+//! and `quote` are recorded, but `exchange_escrow` holds one asset per
+//! account.
 
-use exact_kind::{ Price, Quantity };
-use exact_round::rounding_default;
-use exact_snap::{ Lot, SnapError, Tick, price_snap_tick, qty_snap_lot };
+use exact_arith::{ Lot, Price, Quantity, SnapError, Tick, price_snap_tick, qty_snap_lot, rounding_default };
 use exchange_id::InstrumentId;
 
 /// The identity of one of the two assets an instrument trades — the base
@@ -88,12 +79,12 @@ pub const fn spec_halted_is( spec : &InstrumentSpec ) -> bool
 
 /// Snap `price` to `spec`'s tick grid.
 ///
-/// Uses `exact_round::rounding_default()` (ties-to-even) rather than a
+/// Uses `exact_arith::rounding_default()` (ties-to-even) rather than a
 /// direction this crate invents on its own — `exchange_spec` has no side to
 /// reason from (a buy and a sell would want opposite directions), so picking
 /// `Down` or `Up` here would be an arbitrary bias dressed up as a default.
 /// A caller that needs a directional snap applies its own `Rounding` via
-/// `exact_snap::price_snap_tick` directly, bypassing this wrapper.
+/// `exact_arith::price_snap_tick` directly, bypassing this wrapper.
 ///
 /// # Errors
 ///
@@ -101,7 +92,7 @@ pub const fn spec_halted_is( spec : &InstrumentSpec ) -> bool
 /// range.
 ///
 /// ```rust
-/// use exact_kind::{ Price, Quantity };
+/// use exact_arith::{ Price, Quantity };
 /// use exchange_id::InstrumentId;
 /// use exchange_spec::{ AssetId, price_snap, spec_new };
 ///
@@ -125,3 +116,32 @@ pub fn qty_snap( spec : &InstrumentSpec, qty : Quantity ) -> Result< Quantity, S
   qty_snap_lot( qty, spec.lot, rounding_default() )
 }
 
+
+/// Whether `price` lies on `spec`'s tick grid — what `exchange_core` checks
+/// before accepting an order.
+///
+/// A point on the grid snaps to itself under any rounding, so this asks
+/// [`price_snap`] rather than redoing the arithmetic. A snap that overflows is
+/// off the grid.
+///
+/// ```rust
+/// use exact_arith::{ Price, Quantity };
+/// use exchange_id::InstrumentId;
+/// use exchange_spec::{ AssetId, price_fits, spec_new };
+///
+/// let spec = spec_new( InstrumentId( 1 ), AssetId( 1 ), AssetId( 2 ), Price::parse( "0.05" ).unwrap(), Quantity::from_int( 1 ).unwrap() ).unwrap();
+/// assert!( price_fits( &spec, Price::parse( "1.25" ).unwrap() ) );
+/// assert!( !price_fits( &spec, Price::parse( "1.26" ).unwrap() ) );
+/// ```
+#[ must_use ]
+pub fn price_fits( spec : &InstrumentSpec, price : Price ) -> bool
+{
+  price_snap( spec, price ) == Ok( price )
+}
+
+/// Whether `qty` lies on `spec`'s lot grid. See [`price_fits`].
+#[ must_use ]
+pub fn qty_fits( spec : &InstrumentSpec, qty : Quantity ) -> bool
+{
+  qty_snap( spec, qty ) == Ok( qty )
+}

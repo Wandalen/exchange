@@ -5,8 +5,7 @@
 //! are right, and a customer's currency is locked away forever. Testing the
 //! cancel path is the only thing that sees it.
 
-use exact_kind::{ Money, Quantity };
-use exact_scale::CEILING_WHOLE_UNITS;
+use exact_arith::{ CEILING_WHOLE_UNITS, Money, Price, Quantity };
 use exchange_escrow::{ Escrow, EscrowError };
 use exchange_fill::Trade;
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -17,6 +16,11 @@ use exchange_tif::Tif;
 fn money( text : &str ) -> Money
 {
   Money::parse( text ).unwrap()
+}
+
+fn price( text : &str ) -> Price
+{
+  Price::parse( text ).unwrap()
 }
 
 fn qty( whole : i64 ) -> Quantity
@@ -32,9 +36,10 @@ fn order( id : u64, account : u64, side : Side, price : &str, quantity : i64 ) -
     instrument : InstrumentId( 1 ),
     account : AccountId( account ),
     side,
-    price : money( price ),
+    price : Price::parse( price ).unwrap(),
     quantity : qty( quantity ),
     tif : Tif::Gtc,
+    client : None,
   }
 }
 
@@ -208,10 +213,10 @@ fn t09_a_fill_settles_and_leaves_nothing_reserved()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
-  escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
+  escrow.settle( &trade ).unwrap();
 
   let seller_account = escrow.account( AccountId( 1 ) ).unwrap();
   let buyer_account = escrow.account( AccountId( 2 ) ).unwrap();
@@ -223,6 +228,43 @@ fn t09_a_fill_settles_and_leaves_nothing_reserved()
   assert_eq!( buyer_account.asset.available(), qty( 104 ), "and received 4" );
   assert_eq!( buyer_account.cash.reserved(), Money::ZERO );
   assert_eq!( escrow.reservation_count(), 0, "both reservations are discharged" );
+}
+
+/// A hold resolves once: a fill that discharged it cannot be cancelled, and a
+/// cancelled one cannot be filled. Nothing moves on the second attempt.
+#[ test ]
+fn a_hold_resolves_once()
+{
+  let mut escrow = two_sided();
+  let seller = order( 1, 1, Side::Sell, "2.50", 4 );
+  let buyer = order( 2, 2, Side::Buy, "2.50", 4 );
+  escrow.reserve( &seller ).unwrap();
+  escrow.reserve( &buyer ).unwrap();
+  let trade = Trade
+  {
+    taker : buyer.id,
+    taker_account : buyer.account,
+    taker_side : Side::Buy,
+    maker : seller.id,
+    maker_account : seller.account,
+    price : price( "2.50" ),
+    quantity : qty( 4 ),
+  };
+
+  escrow.settle( &trade ).unwrap();
+  let settled = escrow.clone();
+  assert_eq!( escrow.release( buyer.account, buyer.id ), Err( EscrowError::NoReservation( buyer.id ) ), "settled, then released" );
+  assert_eq!( escrow.settle( &trade ), Err( EscrowError::NoReservation( buyer.id ) ), "settled twice" );
+  assert_eq!( escrow, settled );
+
+  let mut escrow = two_sided();
+  escrow.reserve( &seller ).unwrap();
+  escrow.reserve( &buyer ).unwrap();
+  escrow.release( buyer.account, buyer.id ).unwrap();
+  let released = escrow.clone();
+  assert_eq!( escrow.settle( &trade ), Err( EscrowError::NoReservation( buyer.id ) ), "released, then settled" );
+  assert_eq!( escrow.release( buyer.account, buyer.id ), Err( EscrowError::NoReservation( buyer.id ) ), "released twice" );
+  assert_eq!( escrow, released );
 }
 
 /// A buyer who executes better than its limit gets the difference back.
@@ -249,10 +291,10 @@ fn a_price_improvement_returns_the_unused_reservation()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
-  escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
+  escrow.settle( &trade ).unwrap();
 
   let buyer_account = escrow.account( AccountId( 2 ) ).unwrap();
   assert_eq!( buyer_account.cash.available(), money( "990" ), "it paid 10, not the 12 it committed" );
@@ -280,10 +322,10 @@ fn a_partial_fill_leaves_the_remainder_covered()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
-  escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
+  escrow.settle( &trade ).unwrap();
 
   assert_eq!
   (
@@ -321,10 +363,10 @@ fn the_totals_are_unchanged_by_the_whole_matching_path()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
+    price : price( "2.50" ),
     quantity : qty( 4 ),
   };
-  escrow.settle( &trade, Side::Buy, buyer.price ).unwrap();
+  escrow.settle( &trade ).unwrap();
   escrow.release( AccountId( 2 ), idle.id ).unwrap();
   escrow.release( AccountId( 1 ), seller.id ).unwrap();
 
@@ -358,7 +400,7 @@ fn the_stored_reserve_agrees_with_the_orders_behind_it()
     {
       panic!( "a buy commits currency" );
     };
-    expected = expected.checked_add( committed ).unwrap();
+    expected = ( expected + committed ).unwrap();
 
     assert_eq!
     (
@@ -384,6 +426,7 @@ fn every_refusal_names_itself()
     EscrowError::NotReserved,
     EscrowError::NoReservation( OrderId( 9 ) ),
     EscrowError::AlreadyReserved( OrderId( 9 ) ),
+    EscrowError::OutsideLimit( OrderId( 9 ) ),
     EscrowError::ObligationMismatch,
     EscrowError::NegativeAmount,
     EscrowError::Arithmetic,
@@ -488,14 +531,14 @@ fn a_negative_obligation_is_refused_rather_than_minting_spendable_currency()
 ///
 /// # Why Not Caught
 ///
-/// Every existing settlement test passes `settle` a `taker_limit` that
-/// genuinely matches the order's own reserved price, because that is what
-/// `Exchange::submit` always supplies. Nothing exercised a caller reaching
-/// `Escrow` directly with a `taker_limit` inflated past what was actually
-/// reserved, while the *account's* total reserved balance — padded by a
-/// second, unrelated order — still had plenty of room to absorb it. That
-/// combination is exactly the condition needed to see the per-order ledger
-/// diverge from the account-level one.
+/// Every settlement test filled at most what the order had left, because
+/// that is all `exchange_core` ever settles. Nothing exercised a caller
+/// reaching `Escrow` directly with a trade larger than the order, while the
+/// *account's* total reserved balance — padded by a second, unrelated order —
+/// still had plenty of room to absorb it. That combination is exactly the
+/// condition needed to see the per-order ledger diverge from the
+/// account-level one. (The first version of this test inflated the limit
+/// passed to `settle`; `settle` now reads the limit from the reservation.)
 ///
 /// # Fix Applied
 ///
@@ -528,7 +571,7 @@ fn a_settlement_naming_more_than_the_orders_own_reservation_is_refused()
   // (order 2, this test's target) and an unrelated large one (order 9) that
   // pads the account's pooled `cash.reserved` well past what order 2 alone
   // committed.
-  let seller = order( 1, 1, Side::Sell, "2.50", 4 );
+  let seller = order( 1, 1, Side::Sell, "2.50", 5 );
   let buyer_small = order( 2, 2, Side::Buy, "2.50", 4 );
   let buyer_padding = order( 9, 2, Side::Buy, "2.50", 200 );
   escrow.reserve( &seller ).unwrap();
@@ -538,13 +581,10 @@ fn a_settlement_naming_more_than_the_orders_own_reservation_is_refused()
 
   let before = escrow.clone();
 
-  // The trade itself is honest — 4 units at 2.50, exactly what the seller
-  // reserved, so nothing on the asset side objects. The inconsistency is
-  // isolated to the *claimed limit* passed to `settle`: a caller reaching
-  // `Escrow` directly names 30.00 as order 2's reserved limit rather than its
-  // true 2.50, inflating `reserved_for_this_fill` to 120 — an amount the
+  // 5 units at 2.50 — within what the seller reserved, so nothing on the
+  // asset side objects. Order 2 is for 4: the fill's $12.50 is an amount the
   // account's pooled $510 easily absorbs, but order 2 itself only ever
-  // committed $10 of.
+  // committed $10.
   let trade = Trade
   {
     taker : buyer_small.id,
@@ -552,40 +592,237 @@ fn a_settlement_naming_more_than_the_orders_own_reservation_is_refused()
     taker_side : Side::Buy,
     maker : seller.id,
     maker_account : seller.account,
-    price : money( "2.50" ),
-    quantity : qty( 4 ),
+    price : price( "2.50" ),
+    quantity : qty( 5 ),
   };
 
   assert_eq!
   (
-    escrow.settle( &trade, Side::Buy, money( "30.00" ) ),
+    escrow.settle( &trade ),
     Err( EscrowError::NotReserved ),
     "order 2's own reservation cannot cover this, regardless of the account total",
   );
   assert_eq!( escrow, before, "a refused settlement changes nothing at all — not order 2, not order 9, not either account" );
 }
 
-/// A settlement that fails on its very last step — crediting the buyer's
-/// asset — leaves every earlier step's effect uncommitted too, not applied
-/// halfway.
+/// A buyer is never charged above the limit its reservation recorded,
+/// whether it took or rested.
+///
+/// # Root Cause
+///
+/// `settle` took the taker's limit as an argument and took a buying maker's
+/// limit to be the trade price. A bid for 2 at 10 holds 20; one unit settled
+/// at 15 as a maker drew 15 of it, leaving 5 behind the unit still resting.
+///
+/// # Why Not Caught
+///
+/// `exchange_match` always executes at the maker's own price, so through
+/// `exchange_core` the trade price and the maker's limit never differ.
+///
+/// # Fix Applied
+///
+/// The reservation records its order's limit, and `settle` reads it from
+/// there for either role; a trade above it is refused as `OutsideLimit`.
+///
+/// # Prevention
+///
+/// What the ledger recorded at reserve time is the authority at settle time,
+/// not an argument restating it.
+///
+/// # Pitfall
+///
+/// A full fill above the limit was already refused — the order's own entry
+/// could not cover it. Only a partial fill slipped through.
+#[ test ]
+fn a_buyer_is_never_charged_above_its_own_limit()
+{
+  let mut escrow = two_sided();
+  let bid = order( 1, 2, Side::Buy, "10", 2 );
+  let ask = order( 2, 1, Side::Sell, "15", 1 );
+  escrow.reserve( &bid ).unwrap();
+  escrow.reserve( &ask ).unwrap();
+  let before = escrow.clone();
+
+  let as_maker = Trade
+  {
+    taker : ask.id,
+    taker_account : ask.account,
+    taker_side : Side::Sell,
+    maker : bid.id,
+    maker_account : bid.account,
+    price : price( "15" ),
+    quantity : qty( 1 ),
+  };
+  assert_eq!( escrow.settle( &as_maker ), Err( EscrowError::OutsideLimit( bid.id ) ) );
+  assert_eq!( escrow, before );
+
+  let as_taker = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "15" ),
+    quantity : qty( 1 ),
+  };
+  assert_eq!( escrow.settle( &as_taker ), Err( EscrowError::OutsideLimit( bid.id ) ) );
+  assert_eq!( escrow, before );
+}
+
+/// A seller is never paid below its own limit, as maker or as taker.
+///
+/// The seller's mirror of `a_buyer_is_never_charged_above_its_own_limit`.
+///
+/// # Root Cause
+///
+/// `settle` checked the trade price against the buy's recorded limit only.
+/// The ask's limit was recorded beside it and never read.
+///
+/// # Why Not Caught
+///
+/// `exchange_match` executes at the maker's own price, inside both limits, so
+/// only a direct `Escrow` caller reaches this.
+///
+/// # Fix Applied
+///
+/// A trade below the sell's limit is refused as `OutsideLimit`, as one above
+/// the buy's is.
+///
+/// # Prevention
+///
+/// A limit is checked wherever it is recorded.
+///
+/// # Pitfall
+///
+/// Neither account goes short: the seller is simply paid less than it asked.
+#[ test ]
+fn a_seller_is_never_paid_below_its_own_limit()
+{
+  let mut escrow = two_sided();
+  let ask = order( 1, 1, Side::Sell, "15", 2 );
+  let bid = order( 2, 2, Side::Buy, "20", 2 );
+  escrow.reserve( &ask ).unwrap();
+  escrow.reserve( &bid ).unwrap();
+  let before = escrow.clone();
+
+  let as_maker = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert_eq!( escrow.settle( &as_maker ), Err( EscrowError::OutsideLimit( ask.id ) ) );
+  assert_eq!( escrow, before );
+
+  let as_taker = Trade
+  {
+    taker : ask.id,
+    taker_account : ask.account,
+    taker_side : Side::Sell,
+    maker : bid.id,
+    maker_account : bid.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert_eq!( escrow.settle( &as_taker ), Err( EscrowError::OutsideLimit( ask.id ) ) );
+  assert_eq!( escrow, before );
+
+  let at_limit = Trade { price : price( "15" ), ..as_maker };
+  assert_eq!( escrow.settle( &at_limit ), Ok( () ) );
+}
+
+/// A buyer's partial fill settles even when its limit times the fill is not
+/// exactly representable, provided the price it pays is.
+///
+/// Limit 0.5 for 2 reserves exactly 1. A fill of 0.000005 at 0.2 costs
+/// exactly 0.000001, but 0.5 × 0.000005 = 0.0000025 needs a seventh decimal
+/// digit `Money` (scale 6) cannot hold.
+///
+/// # Root Cause
+///
+/// `settle` took the buy's share of a fill as `limit × quantity`, computed
+/// exactly, and refused the fill when that was inexact.
+///
+/// # Why Not Caught
+///
+/// Every limit and fill in the suite multiplied out exactly.
+///
+/// # Fix Applied
+///
+/// The buy keeps `limit × unfilled` rounded down. Its fills pay exact amounts
+/// at prices within the limit, so the rest can never spend more.
+///
+/// # Prevention
+///
+/// Bound what a reservation keeps, not each fill's share of it.
+///
+/// # Pitfall
+///
+/// The rest, 0.5 × 1.999995, is inexact too: no exact share of the fill
+/// leaves it covered and nothing over.
+#[ test ]
+fn a_partial_fill_settles_when_only_the_limit_notional_is_inexact()
+{
+  let mut escrow = two_sided();
+  let bid = order( 1, 2, Side::Buy, "0.5", 2 );
+  let ask = Order { quantity : Quantity::from_minor( 5 ).unwrap(), ..order( 2, 1, Side::Sell, "0.2", 1 ) };
+  escrow.reserve( &bid ).unwrap();
+  escrow.reserve( &ask ).unwrap();
+  let cash_before = escrow.total_cash().unwrap();
+
+  let trade = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "0.2" ),
+    quantity : ask.quantity,
+  };
+  assert_eq!( escrow.settle( &trade ), Ok( () ) );
+  assert_eq!( escrow.total_cash().unwrap(), cash_before );
+
+  // The rest, 0.5 × 1.999995 = 0.9999975, is inexact too, so a fix has to
+  // round. Its fills are exact amounts, so it can spend at most 0.999997, and
+  // at most 0.000001 has been paid.
+  assert!
+  (
+    matches!( escrow.reserved_for( bid.id ), Some( Obligation::Cash( held ) ) if money( "0.999997" ) <= held && held <= money( "0.999999" ) ),
+    "the rest of the bid is still covered: {:?}",
+    escrow.reserved_for( bid.id ),
+  );
+
+  // Cancelling the rest returns everything but the 0.000001 paid.
+  escrow.release( bid.account, bid.id ).unwrap();
+  let buyer = escrow.account( AccountId( 2 ) ).unwrap();
+  assert_eq!( buyer.cash.available(), money( "999.999999" ) );
+  assert_eq!( buyer.cash.reserved(), Money::ZERO );
+}
+
+/// A settlement that fails late — on the seller's proceeds — leaves every
+/// earlier step's effect uncommitted too, not applied halfway.
 ///
 /// # Root Cause
 ///
 /// `settle` used to mutate the buyer's account directly, one `Holding` edge
 /// at a time (`deliver`, then `release`, then `receive`), each through `?`.
-/// A failure on the *last* edge left the first two already written into
+/// A failure on a later edge left the earlier ones already written into
 /// `self.accounts` — cash delivered out of the buyer's reservation with
-/// nothing credited back anywhere, no seller ever paid, and — on the real
-/// `Exchange::submit` path — the resting order already gone from the book by
-/// the time this function is even called.
+/// nothing credited back anywhere, no seller ever paid, and — on
+/// `exchange_core`'s placement path — the resting order already gone from
+/// the book by the time this function is even called.
 ///
 /// # Why Not Caught
 ///
 /// Every existing settlement test uses account balances comfortably inside
 /// the representable ceiling, so `receive` never had a reason to fail after
-/// `deliver`/`release` had already succeeded. Reaching the failure needs an
-/// account already holding the maximum representable asset quantity — legal,
-/// if extreme — one more unit away from overflowing.
+/// `deliver`/`release` had already succeeded.
 ///
 /// # Fix Applied
 ///
@@ -602,63 +839,48 @@ fn a_settlement_naming_more_than_the_orders_own_reservation_is_refused()
 ///
 /// # Pitfall
 ///
-/// The failure this test drives has nothing to do with insufficient funds —
-/// the buyer's cash is ample. It is the asset side's own representable
-/// ceiling, independent of the trade's price or size, refusing the very last
-/// unit of headroom.
+/// The original last step, crediting the buyer's asset, can no longer fail: a
+/// bid keeps room for it. A taking sell paid above its own limit, past the
+/// room its ask kept, is the latest step that still can.
 #[ test ]
-fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
+fn a_settlement_failing_late_leaves_nothing_committed()
 {
   let mut escrow = Escrow::new();
-  // The buyer already holds the maximum representable asset quantity, and
-  // just enough cash for one more, vanishingly small trade.
-  escrow.open( AccountId( 1 ), money( "1" ), Quantity::from_int( CEILING_WHOLE_UNITS ).unwrap() ).unwrap();
-  escrow.open( AccountId( 2 ), Money::ZERO, Quantity::from_minor( 1 ).unwrap() ).unwrap();
-
-  let buyer = Order
-  {
-    id : OrderId( 10 ), instrument : InstrumentId( 1 ), account : AccountId( 1 ), side : Side::Buy,
-    price : money( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
-  };
-  let seller = Order
-  {
-    id : OrderId( 11 ), instrument : InstrumentId( 1 ), account : AccountId( 2 ), side : Side::Sell,
-    price : money( "1" ), quantity : Quantity::from_minor( 1 ).unwrap(), tif : Tif::Gtc,
-  };
-  escrow.reserve( &buyer ).unwrap();
-  escrow.reserve( &seller ).unwrap();
+  // The seller has room for its ask's proceeds at its own limit, 1, and no
+  // more.
+  escrow.open( AccountId( 1 ), money( "10" ), Quantity::ZERO ).unwrap();
+  escrow.open( AccountId( 2 ), ( Money::MAX - money( "1" ) ).unwrap(), qty( 1 ) ).unwrap();
+  let bid = order( 10, 1, Side::Buy, "2", 1 );
+  let ask = order( 11, 2, Side::Sell, "1", 1 );
+  escrow.reserve( &bid ).unwrap();
+  escrow.reserve( &ask ).unwrap();
 
   let before = escrow.clone();
 
+  // The ask takes the bid at the bid's own price.
   let trade = Trade
   {
-    taker : buyer.id,
-    taker_account : buyer.account,
-    taker_side : Side::Buy,
-    maker : seller.id,
-    maker_account : seller.account,
-    price : money( "1" ),
-    quantity : Quantity::from_minor( 1 ).unwrap(),
+    taker : ask.id,
+    taker_account : ask.account,
+    taker_side : Side::Sell,
+    maker : bid.id,
+    maker_account : bid.account,
+    price : price( "2" ),
+    quantity : qty( 1 ),
   };
 
-  assert_eq!
-  (
-    escrow.settle( &trade, Side::Buy, buyer.price ),
-    Err( EscrowError::Arithmetic ),
-    "the buyer's asset holding is already at the representable ceiling",
-  );
+  assert_eq!( escrow.settle( &trade ), Err( EscrowError::Arithmetic ), "the seller has room for 1 of the 2 it is paid" );
   assert_eq!
   (
     escrow, before,
-    "a settlement failing on its last step changes nothing at all — not even the earlier \
+    "a settlement failing late changes nothing at all — not even the earlier \
      steps that, in isolation, would have succeeded",
   );
 }
 
 /// A release naming the wrong account for an order fails without deleting
 /// that order's reservation record — even though the wrong-but-real account
-/// exists and its own lookup succeeds; only its own, unrelated balance turns
-/// out not to cover the amount.
+/// exists and its own lookup succeeds.
 ///
 /// # Root Cause
 ///
@@ -673,7 +895,7 @@ fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
 /// # Why Not Caught
 ///
 /// Every existing call to `release` in this suite, and both call sites in
-/// the exchange engine (`Exchange::cancel` and the self-match cancellation
+/// the exchange engine (a ring `Cancel` and the self-match cancellation
 /// path), name the order's own true owner — each derives `owner` from the very order
 /// record that was used to reserve it, so `owner` can never mismatch through
 /// either mediated path. Nothing exercised a caller reaching `Escrow` directly
@@ -694,11 +916,11 @@ fn a_settlement_failing_on_its_last_step_leaves_nothing_committed()
 ///
 /// # Pitfall
 ///
-/// The account-level failure here is `NotReserved`, not `UnknownAccount` — the
-/// wrong account is perfectly real, just uninvolved with this order. A fix
-/// that only special-cased an unknown account would miss this path entirely,
-/// since `self.accounts.get_mut(&owner)` succeeds right up until the
-/// `Holding::release` call after it.
+/// The wrong account is perfectly real, just uninvolved with this order, so
+/// a fix that only special-cased an unknown account would miss this path.
+/// The failure was `NotReserved`, from the account-level move, until the
+/// reservation recorded its owner; it is `NotOwner` now, before anything
+/// moves — see `a_release_naming_another_account_that_holds_enough_is_refused`.
 #[ test ]
 fn a_release_naming_the_wrong_account_leaves_the_reservation_intact()
 {
@@ -708,12 +930,11 @@ fn a_release_naming_the_wrong_account_leaves_the_reservation_intact()
 
   let account_2_before = *escrow.account( AccountId( 2 ) ).unwrap();
 
-  // Account 2 is real, but holds no reservation of its own — the account
-  // lookup succeeds, and only the account-level `release` itself fails.
+  // Account 2 is real, but did not reserve order 1.
   assert_eq!
   (
     escrow.release( AccountId( 2 ), OrderId( 1 ) ),
-    Err( EscrowError::NotReserved ),
+    Err( EscrowError::NotOwner( OrderId( 1 ) ) ),
     "account 2 exists but never reserved anything for order 1",
   );
 
@@ -732,6 +953,232 @@ fn a_release_naming_the_wrong_account_leaves_the_reservation_intact()
   assert_eq!( released, Obligation::Cash( money( "25" ) ) );
   assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().cash.available(), money( "1000" ), "correctly released afterwards" );
   assert_eq!( escrow.reservation_count(), 0 );
+}
+
+/// A release naming another account is refused even when that account holds
+/// enough `reserved` of its own to absorb the move.
+///
+/// # Root Cause
+///
+/// A reservation did not record its owner, so `release` moved the amount out
+/// of whichever account was named. With account 2 holding 25 reserved for its
+/// own order, releasing account 1's order as account 2 succeeded: account 1's
+/// 25 stayed locked with no entry left to release it, and account 2's own
+/// order could no longer be released.
+///
+/// # Why Not Caught
+///
+/// The wrong-account test above named an account with nothing reserved, so
+/// the account-level move failed and hid the missing check.
+///
+/// # Fix Applied
+///
+/// `reserve` records the order's account; `release` and `settle` refuse any
+/// other with `EscrowError::NotOwner` before anything moves.
+///
+/// # Prevention
+///
+/// A ledger keyed by order must know whose order it is; a caller-supplied
+/// owner is a claim to check, not a fact.
+///
+/// # Pitfall
+///
+/// Both accounts' totals stayed right through the bad release; only the
+/// split between `available` and `reserved` went wrong.
+#[ test ]
+fn a_release_naming_another_account_that_holds_enough_is_refused()
+{
+  let mut escrow = two_sided();
+  escrow.reserve( &order( 1, 1, Side::Buy, "2.50", 10 ) ).unwrap();
+  escrow.reserve( &order( 2, 2, Side::Buy, "2.50", 10 ) ).unwrap();
+  let before = escrow.clone();
+
+  assert_eq!( escrow.release( AccountId( 2 ), OrderId( 1 ) ), Err( EscrowError::NotOwner( OrderId( 1 ) ) ) );
+  assert_eq!( escrow, before, "nothing moved" );
+
+  assert_eq!( escrow.release( AccountId( 1 ), OrderId( 1 ) ), Ok( Obligation::Cash( money( "25" ) ) ) );
+  assert_eq!( escrow.release( AccountId( 2 ), OrderId( 2 ) ), Ok( Obligation::Cash( money( "25" ) ) ) );
+  assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().cash.available(), money( "1000" ) );
+  assert_eq!( escrow.account( AccountId( 2 ) ).unwrap().cash.available(), money( "1000" ) );
+}
+
+/// A settlement whose trade names the wrong account for an order is refused,
+/// even when the named account holds enough to deliver.
+///
+/// Account 3 sells 4 of its own; the trade names account 3 as the maker of
+/// account 1's order. Without the owner check, account 3 delivered, account
+/// 1's reservation was discharged, and account 1's asset stayed locked.
+#[ test ]
+fn a_settlement_naming_another_account_for_an_order_is_refused()
+{
+  let mut escrow = two_sided();
+  escrow.open( AccountId( 3 ), money( "1000" ), qty( 100 ) ).unwrap();
+  let seller = order( 1, 1, Side::Sell, "2.50", 4 );
+  let buyer = order( 2, 2, Side::Buy, "2.50", 4 );
+  escrow.reserve( &seller ).unwrap();
+  escrow.reserve( &buyer ).unwrap();
+  escrow.reserve( &order( 3, 3, Side::Sell, "2.50", 4 ) ).unwrap();
+  let before = escrow.clone();
+
+  let trade = Trade
+  {
+    taker : buyer.id,
+    taker_account : buyer.account,
+    taker_side : Side::Buy,
+    maker : seller.id,
+    maker_account : AccountId( 3 ),
+    price : price( "2.50" ),
+    quantity : qty( 4 ),
+  };
+  assert_eq!( escrow.settle( &trade ), Err( EscrowError::NotOwner( seller.id ) ) );
+  assert_eq!( escrow, before, "nothing moved" );
+
+  let trade = Trade { maker_account : seller.account, ..trade };
+  escrow.settle( &trade ).unwrap();
+  assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().asset.reserved(), Quantity::ZERO );
+  assert_eq!( escrow.account( AccountId( 3 ) ).unwrap().asset.reserved(), qty( 4 ), "account 3's own order is untouched" );
+}
+
+/// A reservation stays releasable however close its account sits to the
+/// ceiling: what would carry a holding's total past it is refused where it
+/// arrives.
+///
+/// # Root Cause
+///
+/// `receive` checked `available + amount` alone. Proceeds or a top-up
+/// landing beside a reservation carried `available + reserved` past the
+/// ceiling; `release` then had no room to return the reservation, and
+/// `total` failed.
+///
+/// # Why Not Caught
+///
+/// The ceiling tests each moved one half of a holding; none held a
+/// reservation while the other half grew.
+///
+/// # Fix Applied
+///
+/// `receive` refuses an amount that would carry the holding's total past
+/// the ceiling. The other three edges never grow the total.
+///
+/// # Prevention
+///
+/// A bound on a sum is checked on the sum.
+///
+/// # Pitfall
+///
+/// Through `exchange_core` this was an order its owner could not cancel. An
+/// ask's proceeds are now refused when it is reserved rather than when it
+/// fills: it keeps room for them.
+#[ test ]
+fn a_reservation_stays_releasable_at_the_ceiling()
+{
+  let mut escrow = Escrow::new();
+  escrow.open( AccountId( 1 ), Money::MAX, qty( 10 ) ).unwrap();
+  let held = order( 1, 1, Side::Buy, "1", 1 );
+  let ask = order( 2, 1, Side::Sell, "1", 1 );
+  escrow.reserve( &held ).unwrap();
+  let before = escrow.clone();
+
+  assert_eq!( escrow.open( AccountId( 1 ), money( "1" ), Quantity::ZERO ), Err( EscrowError::Arithmetic ), "a top-up" );
+  assert_eq!( escrow.reserve( &ask ), Err( EscrowError::Arithmetic ), "an ask with no room for its proceeds" );
+  assert_eq!( escrow, before );
+
+  assert_eq!( escrow.account( AccountId( 1 ) ).unwrap().cash.total(), Ok( Money::MAX ) );
+  assert_eq!( escrow.release( AccountId( 1 ), held.id ), Ok( Obligation::Cash( money( "1" ) ) ) );
+}
+
+/// A self-trade nets to zero, so an account as close to the ceiling as its
+/// bid's room allows can still settle one.
+///
+/// # Root Cause
+///
+/// `settle` credited the buyer's asset before debiting the seller's. On a
+/// self-trade both steps hit one holding, whose total passed the ceiling in
+/// between.
+///
+/// # Why Not Caught
+///
+/// No self-trade test sat near the ceiling.
+///
+/// # Fix Applied
+///
+/// The seller delivers before the buyer receives.
+///
+/// # Prevention
+///
+/// A step order harmless across two holdings is not across one.
+///
+/// # Pitfall
+///
+/// `exchange_core`'s self-match prevention keeps a self-trade from reaching
+/// `settle`; only a direct `Escrow` caller hits this.
+#[ test ]
+fn a_self_trade_at_the_ceiling_settles()
+{
+  let mut escrow = Escrow::new();
+  // One unit short of the ceiling: the bid keeps room for the unit it buys.
+  escrow.open( AccountId( 1 ), money( "10" ), Quantity::from_int( CEILING_WHOLE_UNITS - 1 ).unwrap() ).unwrap();
+  let ask = order( 1, 1, Side::Sell, "1", 1 );
+  let bid = order( 2, 1, Side::Buy, "1", 1 );
+  escrow.reserve( &ask ).unwrap();
+  escrow.reserve( &bid ).unwrap();
+  let before = *escrow.account( AccountId( 1 ) ).unwrap();
+
+  let trade = Trade
+  {
+    taker : bid.id,
+    taker_account : bid.account,
+    taker_side : Side::Buy,
+    maker : ask.id,
+    maker_account : ask.account,
+    price : price( "1" ),
+    quantity : qty( 1 ),
+  };
+  assert_eq!( escrow.settle( &trade ), Ok( () ) );
+
+  let after = escrow.account( AccountId( 1 ) ).unwrap();
+  assert_eq!( after.asset.total(), before.asset.total() );
+  assert_eq!( after.cash.total(), before.cash.total() );
+  assert_eq!( escrow.reservation_count(), 0 );
+}
+
+/// A resting order keeps room under the ceiling for what it brings in — an
+/// ask for its proceeds, a bid for the asset — so it can always settle.
+///
+/// A deposit or another order that would take the room is refused instead,
+/// and cancelling gives the room back.
+#[ test ]
+fn a_resting_order_keeps_room_for_what_it_brings_in()
+{
+  let mut escrow = Escrow::new();
+  // Exactly enough room for an ask's $4 and a bid's 2 units.
+  escrow.open( AccountId( 1 ), ( Money::MAX - money( "4" ) ).unwrap(), Quantity::from_int( CEILING_WHOLE_UNITS - 2 ).unwrap() ).unwrap();
+  let ask = order( 1, 1, Side::Sell, "2", 2 );
+  let bid = order( 2, 1, Side::Buy, "1", 2 );
+  escrow.reserve( &ask ).unwrap();
+  escrow.reserve( &bid ).unwrap();
+
+  let account = escrow.account( AccountId( 1 ) ).unwrap();
+  assert_eq!( account.cash.incoming(), money( "4" ) );
+  assert_eq!( account.asset.incoming(), qty( 2 ) );
+  let before = escrow.clone();
+
+  let minor_cash = money( "0.000001" );
+  let minor_asset = Quantity::from_minor( 1 ).unwrap();
+  assert_eq!( escrow.open( AccountId( 1 ), minor_cash, Quantity::ZERO ), Err( EscrowError::Arithmetic ) );
+  assert_eq!( escrow.open( AccountId( 1 ), Money::ZERO, minor_asset ), Err( EscrowError::Arithmetic ) );
+  let another_ask = Order { quantity : minor_asset, ..order( 3, 1, Side::Sell, "1", 1 ) };
+  assert_eq!( escrow.reserve( &another_ask ), Err( EscrowError::Arithmetic ) );
+  let another_bid = Order { quantity : minor_asset, ..order( 4, 1, Side::Buy, "1", 1 ) };
+  assert_eq!( escrow.reserve( &another_bid ), Err( EscrowError::Arithmetic ) );
+  assert_eq!( escrow, before );
+
+  escrow.release( AccountId( 1 ), ask.id ).unwrap();
+  escrow.release( AccountId( 1 ), bid.id ).unwrap();
+  let account = escrow.account( AccountId( 1 ) ).unwrap();
+  assert_eq!( account.cash.incoming(), Money::ZERO );
+  assert_eq!( account.asset.incoming(), Quantity::ZERO );
+  assert_eq!( escrow.open( AccountId( 1 ), minor_cash, minor_asset ), Ok( () ) );
 }
 
 /// A second `open` for an already-open account tops up `available` and
@@ -804,14 +1251,8 @@ fn a_second_open_tops_up_available_and_leaves_a_live_reservation_intact()
   assert_eq!( escrow.reservation_count(), 0 );
 }
 
-/// `open` on a brand-new `id` is unaffected by the merge path — it still
-/// goes through `Holding::new`, which performs no validation, so a fresh
-/// account's own first deposit has never been rejected for negativity.
-/// This is the companion `open` needs after gaining an `Err` return: the
-/// merge path can now fail (see the test above's sibling coverage of
-/// `EscrowError` via `NegativeAmount`/`Arithmetic` at the account level),
-/// so the always-succeeds fresh-account path is pinned here to keep both
-/// branches of the new `match` under test.
+/// `open` on a brand-new `id` with a non-negative deposit succeeds — the
+/// fresh-account branch, pinned beside the merge path's failures.
 #[ test ]
 fn opening_a_brand_new_account_still_always_succeeds()
 {
@@ -889,4 +1330,79 @@ fn a_second_open_failing_on_the_asset_leg_leaves_the_cash_leg_uncommitted()
     "a merge failing on its second leg changes nothing at all — not even the first \
      leg, which, in isolation, would have succeeded",
   );
+}
+
+/// A fresh account cannot start below zero — the same refusal a top-up gets.
+#[ test ]
+fn a_negative_first_deposit_is_refused()
+{
+  let mut escrow = Escrow::new();
+
+  assert_eq!( escrow.open( AccountId( 7 ), money( "-1" ), qty( 0 ) ), Err( EscrowError::NegativeAmount ) );
+  assert!( escrow.account( AccountId( 7 ) ).is_none(), "no account was created" );
+}
+
+/// One unit at price zero, `taker` against `maker`.
+fn zero_price_fill( taker : &Order, maker : &Order ) -> Trade
+{
+  Trade
+  {
+    taker : taker.id,
+    taker_account : taker.account,
+    taker_side : taker.side,
+    maker : maker.id,
+    maker_account : maker.account,
+    price : price( "0" ),
+    quantity : qty( 1 ),
+  }
+}
+
+/// A zero-price buy for 2 from account 2, half filled by the first of two
+/// zero-price sells for 1. Returns the escrow, the buy, and the unfilled sell.
+///
+/// A buy at price zero holds `Cash( 0 )` from the start, so its reservation
+/// must outlive a partial fill on its quantity, not its amount.
+fn zero_price_buy_half_filled() -> ( Escrow, Order, Order )
+{
+  let mut escrow = two_sided();
+  let buyer = order( 1, 2, Side::Buy, "0", 2 );
+  let first = order( 2, 1, Side::Sell, "0", 1 );
+  let second = order( 3, 1, Side::Sell, "0", 1 );
+  escrow.reserve( &buyer ).unwrap();
+  escrow.reserve( &first ).unwrap();
+  escrow.reserve( &second ).unwrap();
+  escrow.settle( &zero_price_fill( &buyer, &first ) ).unwrap();
+  ( escrow, buyer, second )
+}
+
+/// The unfilled remainder of a zero-price buy still rests, so it keeps its
+/// reservation.
+#[ test ]
+fn a_half_filled_zero_price_buy_keeps_its_reservation()
+{
+  let ( escrow, buyer, _ ) = zero_price_buy_half_filled();
+
+  assert_eq!( escrow.reserved_for( buyer.id ), Some( Obligation::Cash( Money::ZERO ) ), "one unit is still unfilled" );
+}
+
+/// The unfilled remainder of a zero-price buy can be cancelled.
+#[ test ]
+fn a_half_filled_zero_price_buy_can_be_cancelled()
+{
+  let ( mut escrow, buyer, _ ) = zero_price_buy_half_filled();
+
+  assert_eq!( escrow.release( AccountId( 2 ), buyer.id ), Ok( Obligation::Cash( Money::ZERO ) ), "the remainder can be cancelled" );
+}
+
+/// Filling the rest of a zero-price buy discharges its reservation and
+/// delivers every unit.
+#[ test ]
+fn a_zero_price_buy_is_discharged_once_fully_filled()
+{
+  let ( mut escrow, buyer, second ) = zero_price_buy_half_filled();
+
+  escrow.settle( &zero_price_fill( &second, &buyer ) ).unwrap();
+  assert_eq!( escrow.reserved_for( buyer.id ), None, "fully filled, fully discharged" );
+  assert_eq!( escrow.reservation_count(), 0 );
+  assert_eq!( escrow.account( AccountId( 2 ) ).unwrap().asset.available(), qty( 102 ) );
 }

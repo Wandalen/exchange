@@ -1,7 +1,7 @@
 //! Test Matrix T01 — depth aggregation: per-level summing, top-N truncation,
 //! the `BadN` guard, and independence from book mutation after the read.
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_depth::{ Depth, DepthError, LevelView, depth_top };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
@@ -23,9 +23,10 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
       instrument : InstrumentId( 1 ),
       account : AccountId( id ),
       side,
-      price : Money::parse( price ).unwrap(),
+      price : Price::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),
@@ -34,7 +35,7 @@ fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) ->
 
 fn level( price : &str, qty : i64 ) -> LevelView
 {
-  LevelView { price : Money::parse( price ).unwrap(), qty : Quantity::from_int( qty ).unwrap() }
+  LevelView { price : Price::parse( price ).unwrap(), qty : Quantity::from_int( qty ).unwrap() }
 }
 
 /// T01 — an empty book has no depth on either side, whatever `n` is asked for.
@@ -42,7 +43,7 @@ fn level( price : &str, qty : i64 ) -> LevelView
 fn empty_book_has_no_depth()
 {
   let book = Book::new();
-  assert_eq!( depth_top( &book, INSTRUMENT,5 ).unwrap(), Depth::default() );
+  assert_eq!( depth_top( &book, INSTRUMENT, 5 ).unwrap(), Depth::default() );
 }
 
 /// T01 — `n == 0` is refused; nothing else is.
@@ -50,7 +51,16 @@ fn empty_book_has_no_depth()
 fn zero_n_is_refused()
 {
   let book = Book::new();
-  assert_eq!( depth_top( &book, INSTRUMENT,0 ), Err( DepthError::BadN ) );
+  assert_eq!( depth_top( &book, INSTRUMENT, 0 ), Err( DepthError::BadN ) );
+}
+
+/// `DepthError` reads as a sentence and works as an error source, like every
+/// other error type in the family.
+#[ test ]
+fn depth_error_displays_and_is_an_error()
+{
+  assert_eq!( DepthError::BadN.to_string(), "the top zero levels has no answer" );
+  let _ : &dyn core::error::Error = &DepthError::BadN;
 }
 
 /// T01 — orders resting at the same price aggregate into one level.
@@ -61,7 +71,7 @@ fn same_price_orders_aggregate_into_one_level()
   assert!( book.insert( rest( 1, Side::Buy, "1.00", 3, 10 ) ), "fresh id, must succeed" );
   assert!( book.insert( rest( 2, Side::Buy, "1.00", 4, 20 ) ), "fresh id, must succeed" );
 
-  let depth = depth_top( &book, INSTRUMENT,5 ).unwrap();
+  let depth = depth_top( &book, INSTRUMENT, 5 ).unwrap();
   assert_eq!( depth.bids, vec![ level( "1.00", 7 ) ], "two orders at one price, one summed level" );
 }
 
@@ -73,7 +83,7 @@ fn distinct_prices_stay_distinct_levels_best_first()
   assert!( book.insert( rest( 1, Side::Buy, "1.00", 3, 10 ) ), "fresh id, must succeed" );
   assert!( book.insert( rest( 2, Side::Buy, "2.00", 4, 20 ) ), "fresh id, must succeed" );
 
-  let depth = depth_top( &book, INSTRUMENT,5 ).unwrap();
+  let depth = depth_top( &book, INSTRUMENT, 5 ).unwrap();
   assert_eq!( depth.bids, vec![ level( "2.00", 4 ), level( "1.00", 3 ) ], "higher bid first" );
 }
 
@@ -84,7 +94,7 @@ fn requesting_more_than_exists_returns_fewer_not_an_error()
   let mut book = Book::new();
   assert!( book.insert( rest( 1, Side::Buy, "1.00", 3, 10 ) ), "fresh id, must succeed" );
 
-  let depth = depth_top( &book, INSTRUMENT,5 ).unwrap();
+  let depth = depth_top( &book, INSTRUMENT, 5 ).unwrap();
   assert_eq!( depth.bids.len(), 1, "only n == 0 is an error, not n too large" );
 }
 
@@ -97,7 +107,7 @@ fn truncates_to_n_distinct_levels()
   assert!( book.insert( rest( 2, Side::Buy, "2.00", 1, 20 ) ), "fresh id, must succeed" );
   assert!( book.insert( rest( 3, Side::Buy, "1.00", 1, 30 ) ), "fresh id, must succeed" );
 
-  let depth = depth_top( &book, INSTRUMENT,2 ).unwrap();
+  let depth = depth_top( &book, INSTRUMENT, 2 ).unwrap();
   assert_eq!( depth.bids, vec![ level( "3.00", 1 ), level( "2.00", 1 ) ], "the third, worse level is dropped" );
 }
 
@@ -112,7 +122,7 @@ fn truncation_drops_every_order_behind_the_cut_price()
   assert!( book.insert( rest( 3, Side::Buy, "1.00", 1, 30 ) ), "fresh id, must succeed" );
   assert!( book.insert( rest( 4, Side::Buy, "1.00", 9, 40 ) ), "fresh id, must succeed" );
 
-  let depth = depth_top( &book, INSTRUMENT,2 ).unwrap();
+  let depth = depth_top( &book, INSTRUMENT, 2 ).unwrap();
   assert_eq!( depth.bids, vec![ level( "3.00", 1 ), level( "2.00", 1 ) ], "both orders at 1.00 are past the cut" );
 }
 
@@ -125,7 +135,7 @@ fn both_sides_reported_independently()
   assert!( book.insert( rest( 2, Side::Sell, "2.00", 5, 20 ) ), "fresh id, must succeed" );
   assert!( book.insert( rest( 3, Side::Sell, "1.50", 5, 30 ) ), "fresh id, must succeed" );
 
-  let depth = depth_top( &book, INSTRUMENT,5 ).unwrap();
+  let depth = depth_top( &book, INSTRUMENT, 5 ).unwrap();
   assert_eq!( depth.bids, vec![ level( "1.00", 5 ) ] );
   assert_eq!( depth.asks, vec![ level( "1.50", 5 ), level( "2.00", 5 ) ], "lowest ask first" );
 }
@@ -138,8 +148,25 @@ fn depth_is_a_snapshot_not_a_view()
   let mut book = Book::new();
   assert!( book.insert( rest( 1, Side::Buy, "1.00", 5, 10 ) ), "fresh id, must succeed" );
 
-  let depth = depth_top( &book, INSTRUMENT,5 ).unwrap();
+  let depth = depth_top( &book, INSTRUMENT, 5 ).unwrap();
   assert!( book.cancel( INSTRUMENT, OrderId( 1 ) ).is_some() );
 
   assert_eq!( depth.bids, vec![ level( "1.00", 5 ) ], "the live cancel must not reach the already-taken depth" );
+}
+
+/// Orders at one price can together hold more than one `Quantity` expresses;
+/// the level then reads as `Quantity::MAX`, a lower bound, rather than
+/// failing the whole query.
+#[ test ]
+fn a_level_past_the_quantity_ceiling_reads_as_the_ceiling()
+{
+  let mut book = Book::new();
+  for ( id, arrival ) in [ ( 1, 10 ), ( 2, 20 ) ]
+  {
+    let order = Order { quantity : Quantity::MAX, ..rest( id, Side::Buy, "1.00", 1, arrival ).order };
+    assert!( book.insert( Resting { order, remaining : Quantity::MAX, arrival : Sequence( arrival ) } ), "fresh id, must succeed" );
+  }
+
+  let depth = depth_top( &book, INSTRUMENT, 1 ).unwrap();
+  assert_eq!( depth.bids, vec![ LevelView { price : Price::parse( "1.00" ).unwrap(), qty : Quantity::MAX } ] );
 }

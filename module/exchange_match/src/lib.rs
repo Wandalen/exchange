@@ -1,112 +1,69 @@
 //! The crossing engine: one incoming order against a book, producing trades.
 //!
-//! Three outcomes, and all three are outcomes rather than errors:
+//! Three outcomes, none of them an error:
 //!
-//! - **Full fill** — the incoming quantity is entirely consumed; nothing rests.
-//! - **Partial fill** — some trades, and a remainder to dispose of.
-//! - **No cross** — zero trades, the whole quantity remaining. The book had
-//!   nothing at an acceptable price, or nothing it could be paid for exactly.
+//! - **Full fill** — the incoming quantity is consumed.
+//! - **Partial fill** — some trades, and a remainder for the caller.
+//! - **No cross** — no trades. Nothing on the book was at an acceptable
+//!   price, or nothing it could be paid for exactly.
 //!
-//! The third one is the one worth naming. An engine that always finds a match
-//! passes every test about matching and is catastrophically wrong; *declining*
-//! is behaviour, and it is the behaviour the smoke lane's control arm exists
-//! to observe.
+//! The third is the one worth naming: an engine that always finds a match
+//! passes every matching test and is wrong. Declining is behaviour.
 //!
-//! # Why a fill can be declined on price it *does* cross
+//! # A fill declined at a price that crosses
 //!
-//! A quantity times a price is a product at twice the scale, and
-//! exact_arith refuses to round it — [`exchange_types::notional`] returns
-//! `NotionalInexact` rather than pick a direction, because rounding a fill is
-//! how an exchange creates or destroys the fraction it rounded. That refusal is
-//! reachable on a *partial* fill even when both orders were accepted: a sell
-//! reserves the asset and is never asked for a notional at all, so a resting
-//! ask can carry a quantity whose value at its own price needs a seventh
-//! decimal. Settlement would then fail — and it fails *after* the book has
-//! already given up the resting order, which no later step can undo.
+//! [`exchange_types::notional`] refuses to round a price times a quantity,
+//! and settlement needs the amount paid exactly. A partial fill can need a
+//! seventh decimal even when both orders were accepted, and by the time
+//! settlement fails, [`Book::consume_best`] has taken the resting order off
+//! the book for good. So the loop checks first and declines such a fill
+//! instead of generating it.
 //!
-//! So the check runs here, before [`exchange_book::Book::consume_best`], and an
-//! unsettleable fill is declined instead of generated, by this crate's own
-//! `settleable` predicate.
-//!
-//! **The consequence, named rather than hidden:** two orders can now rest at
-//! prices that cross, because the only fill between them is one neither side
-//! can be paid for. A crossed book is an anomaly, and it is the deliberate
-//! trade — it is visible, and either side can cancel and recover its
-//! reservation. What it replaces was not recoverable at all. Closing it
-//! properly needs a minimum fill increment derived from the price, which is a
-//! decision this crate has not taken.
+//! It stops at that order rather than skip past it to a worse price. The
+//! cost: a taker can rest across it, and a remainder no fill can pay — 0.001
+//! at 1.0001 — stops every taker on its side until its owner cancels it. A
+//! smaller fill might have been payable, but choosing one needs a minimum
+//! fill increment derived from the price, which is not decided. An
+//! instrument whose tick times lot is exact at the money scale never meets
+//! any of this.
 //!
 //! # Self-match prevention
 //!
-//! A candidate pair sharing one account never trades — fixed, never a mode,
-//! per the family's self-match-prevention design. The check compares the
-//! incoming order's account against each candidate resting order's, in that
-//! order, before any [`Trade`] for the pair is built — never after, and
-//! ahead of the settleability check below it, since a pair this forbids from
-//! trading has no need to also be asked whether it could have settled. What
-//! happens to the passed-over side is the one configurable part —
-//! [`SelfMatchPolicy`] names the three choices — and this crate holds no
-//! state between calls, so the caller supplies it on every call rather than
-//! this crate storing one per book.
-//!
-//! # What this crate does not decide
-//!
-//! It does not decide who is next — [`exchange_book`] hands out its side
-//! best-first and this crate takes from the front. It does not decide the
-//! executed price — [`exchange_fill::Trade::executed_price`] owns that rule.
-//! It does not touch escrow: reservations move in the escrow ledger, driven
-//! by the trades this crate returns. Splitting it this way is what keeps the
-//! matching loop
-//! small enough to read in one sitting.
-//!
-//! # Determinism
-//!
-//! Nothing here reads a clock, iterates a hash container, or compares an
-//! address. The loop's only inputs are the incoming order and the book's
-//! published order, so the same accepted sequence against the same starting
-//! book produces the same trades — which is what makes a fill re-derivable
-//! from the record, and therefore auditable at all.
-//!
-//! # Extraction
-//!
-//! [`SelfMatchPolicy`] moved out to its own root crate, `exchange_stp`, and
-//! is re-exported here unchanged — see that crate's module documentation for
-//! why it keeps the real three variants rather than the source design's
-//! `Allow`/`CancelOldest`/`CancelNewest`. [`SelfMatchCancellation`] stays
-//! here: it carries this crate's own `AccountId`/`OrderId`/`Quantity`, not
-//! pure self-match vocabulary, so it belongs with the match outcome rather
-//! than the policy that caused it.
+//! A pair sharing one account never trades. The check runs before the pair's
+//! [`Trade`] is built, and before the settleability check. [`SelfMatchPolicy`]
+//! (`exchange_stp`'s, re-exported) says which side is withdrawn; the caller
+//! passes it on every call, since this crate keeps no state.
 //!
 //! # Time-in-force
 //!
-//! `incoming.tif` is read in exactly one place: [`tif_requires_full`] gates
-//! whether a partial outcome is acceptable at all. IOC needs no logic here —
-//! this function has never inserted the incoming order's remainder itself
-//! (see "What this crate does not decide" above), so "drop any remainder"
-//! was already true for every TIF; only whether a *caller* later rests that
-//! remainder differs, which is `exchange_rest`/`exchange_core`'s decision,
-//! not this crate's.
+//! `cross` never rests the incoming order, so GTC and IOC differ only in what
+//! the caller does with the remainder. A FOK order is probed against a clone
+//! of the book, and run on the real book only if the probe fills it whole;
+//! otherwise it comes back as a no-cross with the book untouched. A
+//! post-only order that [`would_take`] is refused with
+//! [`MatchError::PostOnlyWouldTake`], also untouched — `exchange_core` checks
+//! `would_take` first so the refusal is on record.
 //!
-//! FOK is different: by the time this function returns, any trade it made is
-//! real — a caller cannot un-happen a partial fill. So a FOK order is tried
-//! first against a disposable clone of `book`; only if that probe fully
-//! consumes it does the identical, deterministic sequence run again against
-//! the real `book`. An unfillable FOK comes back shaped exactly like an
-//! ordinary no-cross outcome — empty trades, full remaining, nothing
-//! cancelled — because that is what actually happened to `book`: nothing.
-//! Translating "FOK, nothing filled" into a rejection is
-//! `exchange_core`'s job, same as every other outcome this crate reports
-//! rather than judges.
+//! # What this crate does not decide
+//!
+//! Who is next — [`exchange_book`] hands out a side best first. The price —
+//! [`Trade::executed_price`]. Funds — escrow settles the trades this returns.
+//!
+//! # Determinism
+//!
+//! No clock, no hash iteration, no address comparison: the same book and
+//! incoming order give the same trades, so a fill can be re-derived from the
+//! record.
 
-use exact_kind::{ KindError, Quantity };
+use exact_arith::{ KindError, Price, Quantity };
 use exchange_book::Book;
 use exchange_conserve::{ conserve_assert, ConserveError };
 use exchange_fill::Trade;
-use exchange_id::{ AccountId, OrderId };
+use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
-use exchange_side::Side;
-use exchange_tif::tif_requires_full;
-use exchange_types::{ Price, notional };
+use exchange_side::side_accepts;
+use exchange_tif::{ tif_requires_full, tif_takes };
+use exchange_types::notional;
 
 pub use exchange_stp::SelfMatchPolicy;
 
@@ -116,17 +73,15 @@ pub struct Crossing
 {
   /// The trades generated, in the order they were generated.
   pub trades : Vec< Trade >,
-  /// What is left of the incoming order. Zero on a full fill.
+  /// What is left of the incoming order; zero on a full fill.
   ///
-  /// Still counts a self-match-cancelled remainder — `filled() + remaining`
-  /// sums to the incoming order's own submitted quantity regardless of why
-  /// anything was left over. If `cancelled` names the incoming order's own
-  /// id, this quantity was withdrawn, not left for the caller to rest — see
-  /// [`SelfMatchCancellation`].
+  /// Counts a self-match-cancelled remainder too, so `filled() + remaining`
+  /// is always the submitted quantity. If `cancelled` names the incoming
+  /// order, this was withdrawn, not left for the caller to rest.
   pub remaining : Quantity,
-  /// Every order withdrawn by self-match prevention during this call, in the
-  /// order it happened. Empty whenever no candidate pair ever shared a
-  /// self-match key.
+  /// Every order self-match prevention withdrew, in the order it happened.
+  /// Each says where it fell among `trades`; [`Crossing::steps`] interleaves
+  /// the two.
   pub cancelled : Vec< SelfMatchCancellation >,
 }
 
@@ -143,22 +98,52 @@ impl Crossing
   ///
   /// # Errors
   ///
-  /// [`KindError`] if the trades' quantities do not sum within the quantity
-  /// type — unreachable for trades this crate produced, since they are all
-  /// splits of one submitted quantity, but the sum is checked rather than
-  /// assumed because this is also usable on a caller's own collection.
+  /// [`KindError`] if the quantities do not sum within the type —
+  /// unreachable for a `Crossing` built here, whose trades split one
+  /// quantity.
   pub fn filled( &self ) -> Result< Quantity, KindError >
   {
-    self.trades.iter().try_fold( Quantity::ZERO, | sum, trade | sum.checked_add( trade.quantity ) )
+    self.trades.iter().try_fold( Quantity::ZERO, | sum, trade | sum + trade.quantity )
+  }
+
+  /// Every trade and self-match withdrawal, in the order `cross` made them —
+  /// the order to settle, release and record them in.
+  pub fn steps( &self ) -> impl Iterator< Item = CrossingStep< '_ > >
+  {
+    let mut trades = self.trades.iter();
+    let mut cancelled = self.cancelled.iter().peekable();
+    let mut done = 0;
+    core::iter::from_fn( move ||
+    {
+      if let Some( withdrawn ) = cancelled.next_if( | withdrawn | withdrawn.trades_before <= done )
+      {
+        return Some( CrossingStep::Cancelled( withdrawn ) );
+      }
+      let Some( trade ) = trades.next()
+      else
+      {
+        return cancelled.next().map( CrossingStep::Cancelled );
+      };
+      done += 1;
+      Some( CrossingStep::Trade( trade ) )
+    } )
   }
 }
 
-/// One order [`SelfMatchPolicy`] withdrew rather than let trade or rest.
+/// One thing [`cross`] did — see [`Crossing::steps`].
+#[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
+pub enum CrossingStep< 'a >
+{
+  /// A trade.
+  Trade( &'a Trade ),
+  /// A self-match withdrawal.
+  Cancelled( &'a SelfMatchCancellation ),
+}
+
+/// One order [`SelfMatchPolicy`] withdrew instead of letting it trade.
 ///
-/// Always cause self-match — see `exchange_fill::CancelCause::SelfMatch`.
-/// This crate does not construct that event itself, since it never touches
-/// escrow or the event stream (see the module documentation); it reports
-/// what happened so a caller that does can.
+/// Reported, not acted on: the caller releases its reservation and records
+/// the cancel, with cause `exchange_fill::CancelCause::SelfMatch`.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub struct SelfMatchCancellation
 {
@@ -168,29 +153,29 @@ pub struct SelfMatchCancellation
   pub account : AccountId,
   /// How much of it was withdrawn.
   pub quantity : Quantity,
+  /// How many of the crossing's trades came before it. Cancel-resting
+  /// withdraws an order and then trades behind it, so a withdrawal can
+  /// precede trades.
+  pub trades_before : usize,
 }
 
 /// Something the matching loop could not do.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum MatchError
 {
-  /// A quantity arithmetic step failed. Every quantity here is a split of the
-  /// incoming order's own quantity, so this is unreachable in practice — it
-  /// is returned rather than unwrapped because an engine that panics mid-match
-  /// leaves the book in a state no event describes.
+  /// A quantity step failed. Unreachable — every quantity here splits the
+  /// incoming one — and returned rather than unwrapped, since a panic
+  /// mid-match leaves a book no event describes.
   Quantity( KindError ),
-  /// The book refused a reduction the loop had already decided on. Means the
-  /// book and this loop disagree about what rests, which no later step could
-  /// repair.
+  /// The book refused a reduction or a self-match withdrawal the loop had
+  /// decided on: the two disagree about what rests.
   BookDesynchronized,
-  /// `exchange_conserve::conserve_assert` refused this call's own batch of
-  /// trades. Both of a trade's legs are built from the same `price`/
-  /// `quantity` pair (see [`Trade::executed_price`]), so they offset by
-  /// construction — unreachable through this function today, kept as
-  /// defense-in-depth for the day a fee or similar asymmetry enters the
-  /// family's design. See `exchange_conserve`'s own module doc, "Revision"
-  /// section.
+  /// `exchange_conserve::conserve_assert` refused this call's trades.
+  /// Unreachable while both legs of a trade come from one price and
+  /// quantity; kept for the day a fee makes them differ.
   Conservation( ConserveError ),
+  /// A post-only order would have taken liquidity. `book` is untouched.
+  PostOnlyWouldTake,
 }
 
 impl core::fmt::Display for MatchError
@@ -200,8 +185,9 @@ impl core::fmt::Display for MatchError
     match self
     {
       Self::Quantity( error ) => write!( f, "quantity arithmetic failed during matching: {error}" ),
-      Self::BookDesynchronized => write!( f, "the book refused a reduction the match loop had decided on" ),
+      Self::BookDesynchronized => write!( f, "the book refused a reduction or withdrawal the match loop had decided on" ),
       Self::Conservation( error ) => write!( f, "this batch of trades did not conserve: {error}" ),
+      Self::PostOnlyWouldTake => write!( f, "a post-only order would have taken liquidity" ),
     }
   }
 }
@@ -214,7 +200,7 @@ impl core::error::Error for MatchError
     {
       Self::Quantity( error ) => Some( error ),
       Self::Conservation( error ) => Some( error ),
-      Self::BookDesynchronized => None,
+      Self::BookDesynchronized | Self::PostOnlyWouldTake => None,
     }
   }
 }
@@ -235,72 +221,61 @@ impl From< ConserveError > for MatchError
   }
 }
 
-/// Whether `incoming` is willing to trade at `resting`'s price.
+/// Whether `incoming` would trade on arrival — the best opposite price is
+/// within its limit.
 ///
-/// A buy crosses an ask priced at or below its limit; a sell crosses a bid
-/// priced at or above. Equality crosses in both directions — an order at
-/// exactly the other side's price is a match, not a near miss.
-fn crosses( incoming : &Order, resting_price : Price ) -> bool
+/// Price only: a self-match or an unsettleable fill could still stop the
+/// trade, but for post-only the intent to take is what gets refused.
+#[ must_use ]
+pub fn would_take( book : &Book, incoming : &Order ) -> bool
 {
-  match incoming.side
-  {
-    Side::Buy => resting_price <= incoming.price,
-    Side::Sell => resting_price >= incoming.price,
-  }
+  book.best( incoming.instrument, incoming.side.opposite() )
+    .is_some_and( | best | side_accepts( incoming.side, incoming.price, best.order.price ) )
 }
 
-/// Whether every currency amount this fill implies can be expressed exactly.
-///
-/// Two amounts, not one. The trade settles at the maker's price, and a *taking
-/// buy* is additionally handed back the difference between its own limit and
-/// that price — a second notional, at a second price. Settlement computes both
-/// before it moves anything, so either being inexpressible makes the whole fill
-/// unsettleable.
+/// Whether the amount this fill pays can be expressed exactly.
 ///
 /// Checked here, before the book is touched, for the same reason the submission
 /// path reserves before it matches: `consume_best` is not undoable, so a fill
 /// generated against a notional that cannot be expressed takes a resting order
 /// off the book and gets nothing in return for it.
 ///
-/// A taking *sell* needs only the one check: the maker is the buyer then, and a
-/// maker executes at its own price, so the two notionals coincide.
-fn settleable( incoming : &Order, executed : Price, taken : Quantity ) -> bool
+/// Fix(a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for):
+/// Root cause: a taking buy's `limit × quantity` was checked too, because
+/// settlement computed it exactly. A fill paying an exact amount was declined,
+/// and the buy rested above the ask.
+/// Pitfall: settlement now rounds that product down; a check mirroring what
+/// settlement computes has to change with it.
+fn settleable( executed : Price, taken : Quantity ) -> bool
 {
-  if notional( executed, taken ).is_err()
-  {
-    return false;
-  }
-
-  match incoming.side
-  {
-    Side::Buy => notional( incoming.price, taken ).is_ok(),
-    Side::Sell => true,
-  }
+  notional( executed, taken ).is_ok()
 }
 
 /// Cross `incoming` against `book`, consuming what it matches.
 ///
-/// The book is left holding exactly what was not traded: fully consumed
-/// resting orders are removed, a partially consumed one keeps its position
-/// with a reduced remainder. The incoming order is **not** inserted — what to
-/// do with a remainder is the caller's decision, not this crate's.
+/// The book keeps what was not traded: a consumed resting order leaves, a
+/// partly consumed one keeps its place with less remaining. The incoming
+/// order is never inserted; its remainder is the caller's.
 ///
-/// `policy` resolves any candidate pair that shares a self-match key, per
-/// `docs/algorithm/002_self_match_prevention.md` — see [`SelfMatchPolicy`].
-///
-/// `incoming.tif` matters only when it is [`exchange_tif::Tif::Fok`] — see the
-/// module doc's "Time-in-force" section for why every other value needs no
-/// special handling here.
+/// `policy` resolves a pair sharing one account — see [`SelfMatchPolicy`] and
+/// `exchange_core/docs/algorithm/002_self_match_prevention.md`.
+/// `incoming.tif` matters only for [`exchange_tif::Tif::Fok`] and
+/// [`exchange_tif::Tif::PostOnly`]; see the module doc's "Time-in-force".
 ///
 /// # Errors
 ///
-/// [`MatchError`] if a quantity step fails, the book disagrees with the loop
-/// about what rests, or this call's own batch of trades fails
-/// [`exchange_conserve::conserve_assert`]. None of the three is reachable
-/// through the exchange engine's submission path — the third is checked as
-/// defense-in-depth regardless; see [`MatchError::Conservation`]'s own doc.
+/// [`MatchError::PostOnlyWouldTake`] if `incoming` is post-only and
+/// [`would_take`] holds, with `book` untouched. The other variants guard
+/// states the loop cannot reach; see each. One returned mid-loop would leave
+/// the trades before it applied to `book` and unreported, so `exchange_core`
+/// crosses a clone first.
 pub fn cross( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) -> Result< Crossing, MatchError >
 {
+  if !tif_takes( incoming.tif ) && would_take( book, incoming )
+  {
+    return Err( MatchError::PostOnlyWouldTake );
+  }
+
   if tif_requires_full( incoming.tif )
   {
     // `cross_inner` is deterministic (see the module doc's "Determinism"
@@ -342,7 +317,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       break;
     };
 
-    if !crosses( incoming, best.order.price )
+    if !side_accepts( incoming.side, incoming.price, best.order.price )
     {
       break;
     }
@@ -355,8 +330,8 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       {
         SelfMatchPolicy::CancelResting =>
         {
-          let _ = book.cancel( instrument, best.order.id );
-          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
+          withdraw( book, instrument, best.order.id )?;
+          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining, trades_before : trades.len() } );
           // The passed-over order was cancelled, not skipped, so nothing
           // ranks ahead of it that did not before — resume at whatever is
           // now the front of the book.
@@ -364,14 +339,14 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
         },
         SelfMatchPolicy::CancelIncoming =>
         {
-          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining } );
+          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining, trades_before : trades.len() } );
           break;
         },
         SelfMatchPolicy::CancelBoth =>
         {
-          let _ = book.cancel( instrument, best.order.id );
-          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining } );
-          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining } );
+          withdraw( book, instrument, best.order.id )?;
+          cancelled.push( SelfMatchCancellation { order : best.order.id, account : best.order.account, quantity : best.remaining, trades_before : trades.len() } );
+          cancelled.push( SelfMatchCancellation { order : incoming.id, account : incoming.account, quantity : remaining, trades_before : trades.len() } );
           break;
         },
       }
@@ -383,7 +358,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
     // Declining an unsettleable fill is the third documented outcome — no
     // cross — reached for a second reason. Anything else would consume the
     // resting order below and then fail to pay for it.
-    if !settleable( incoming, price, taken )
+    if !settleable( price, taken )
     {
       break;
     }
@@ -404,7 +379,7 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
       return Err( MatchError::BookDesynchronized );
     }
 
-    remaining = remaining.checked_sub( taken )?;
+    remaining = ( remaining - taken )?;
     trades.push( trade );
   }
 
@@ -413,4 +388,16 @@ fn cross_inner( book : &mut Book, incoming : &Order, policy : SelfMatchPolicy ) 
   conserve_assert( &trades )?;
 
   Ok( Crossing { trades, remaining, cancelled } )
+}
+
+/// Withdraw the self-matched resting order `id`, which the loop just read at
+/// the front of the book.
+///
+/// Cannot fail: [`Book::cancel`] checks each side's front first, and `id` is
+/// there. [`Book::insert`] refusing an id that rests on either side makes the
+/// order removed the one the loop read. A failure, ignored, would have the
+/// loop read the same order again: under cancel-resting, forever.
+fn withdraw( book : &mut Book, instrument : InstrumentId, id : OrderId ) -> Result< (), MatchError >
+{
+  book.cancel( instrument, id ).map( drop ).ok_or( MatchError::BookDesynchronized )
 }

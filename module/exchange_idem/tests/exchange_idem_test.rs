@@ -75,3 +75,22 @@ fn a_forgotten_id_can_be_inserted_again()
 
   assert_eq!( idem_insert( &mut set, OrderId( 1 ) ), Ok( () ) );
 }
+
+/// A non-default key works the same way — here, an account's own client id.
+#[ test ]
+fn a_composite_key_is_refused_on_repeat_and_scoped_by_its_parts()
+{
+  use exchange_id::{ AccountId, ClientOrderId };
+
+  let mut set : IdSet< ( AccountId, ClientOrderId ) > = IdSet::new();
+  assert_eq!( idem_insert( &mut set, ( AccountId( 1 ), ClientOrderId( 7 ) ) ), Ok( () ) );
+  assert_eq!( idem_insert( &mut set, ( AccountId( 1 ), ClientOrderId( 7 ) ) ), Err( IdemError::Duplicate ) );
+  assert_eq!( idem_insert( &mut set, ( AccountId( 2 ), ClientOrderId( 7 ) ) ), Ok( () ), "another account may reuse the value" );
+}
+
+/// The message names a key, not an order id — the set may hold any key.
+#[ test ]
+fn the_duplicate_message_does_not_assume_an_order_id()
+{
+  assert_eq!( IdemError::Duplicate.to_string(), "this key was already seen" );
+}

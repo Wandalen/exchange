@@ -31,14 +31,22 @@
 //! output and the audit record both, so a mutation with no event is a fact the
 //! record cannot reproduce.
 //!
+//! # Escrow is a port
+//!
+//! Steps 2, 4 and every release reach escrow only through [`EscrowPort`] —
+//! `reserve`, `settle`, `release` — with [`Escrow`] as the default
+//! implementation. That is what lets `tests/escrow_port_test.rs` drive the
+//! five steps against a scripted escrow instead of engineering real balance
+//! edge cases. The port's own doc names the three rules the dry run relies on.
+//!
 //! # `exchange_step` replaces `submit`
 //!
 //! The old `Exchange::submit( account, side, price, quantity )` is gone.
 //! [`Exchange::exchange_step`] drains an [`exchange_inbound`] ring and applies
 //! every [`InboundCmd`] it finds, in drain order — see that method's own doc
 //! for the full design (why it owns sequencing rather than trusting a
-//! caller-supplied id/arrival, why `Cancel` delegates to [`Exchange::cancel`]
-//! unchanged, and why `Replace` is not yet wired). Three of the four bullets
+//! caller-supplied id/arrival, why every cancel arrives through it, and why
+//! `Replace` is not yet wired). Three of the four bullets
 //! the previous revision of this doc named as "not implemented" are resolved
 //! as a direct consequence, not a separate effort:
 //!
@@ -48,7 +56,8 @@
 //! - **Multi-instrument** is real: `exchange_step` reads `instrument` off the
 //!   incoming order itself rather than a facade-wide constant. [`Book`] was
 //!   already keyed by instrument; this was the last piece pinning every
-//!   submission to one of them regardless.
+//!   submission to one of them regardless. Every instrument trades the same
+//!   asset pair, though; see the next section.
 //! - **Self-match policy** is a parameter on [`Exchange::exchange_step`]
 //!   itself, supplied per call exactly like `exchange_match::cross`'s own
 //!   `policy` parameter — never stored on `Exchange`, matching the rest of
@@ -59,9 +68,11 @@
 //!
 //! Named rather than silently absent:
 //!
-//! - **Market orders.** Only limit orders exist. A market order is a limit
-//!   order with no price bound, which changes the crossing predicate and the
-//!   reservation rule together; nothing here exercises one.
+//! - **Stop orders.** Out of v0.1. A market order needs no type of its own:
+//!   it is a limit order whose price is a cap, sent IOC or FOK.
+//! - **More than one asset pair.** Escrow holds one cash and one asset
+//!   balance per account, so [`Exchange::spec_register`] admits one pair
+//!   (hard problem 19).
 //! - **Amend and fees.** Both are specified at family grain. Fees in
 //!   particular have a decided hook position and an undecided schedule, so
 //!   implementing the hook now would be building a parameter nobody can
@@ -80,23 +91,24 @@ use std::collections::BTreeMap;
 
 pub use exact_arith::
 {
-  Backing, ConservationError, Entry, KindError, MONEY_SCALE, Money, Quantity, Report, verify,
+  Backing, ConservationError, Entry, KindError, MONEY_SCALE, Money, Price, Quantity, Report, verify,
 };
 pub use exchange_book::{ Book, Resting };
 pub use exchange_cap::BookCaps;
-use exchange_cap::{ cap_check_level, cap_check_rest, CapError };
+use exchange_cap::{ cap_check_account, cap_check_level, cap_check_rest, CapError };
 pub use exchange_depth::{ Depth, DepthError, LevelView };
 pub use exchange_escrow::{ Account, Conserved, Escrow, EscrowError, Holding };
 pub use exchange_fill::{ CancelCause, Event, EventKind, RejectReason, Trade };
 pub use exchange_halt::HaltError;
-pub use exchange_id::{ AccountId, InstrumentId, OrderId };
+pub use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
+use exchange_idem::{ IdSet, idem_insert, idem_seen };
 pub use exchange_inbound::
 {
-  BuildError, Consumer, Drain, Ends, InboundCmd, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
+  BuildError, Consumer, Drain, Ends, InboundCmd, OrderRef, Producer, RingConfig, Split, inbound_flush, inbound_overflow_reject,
   inbound_ring,
 };
 use exchange_inbound::inbound_drain;
-pub use exchange_match::{ Crossing, MatchError, SelfMatchCancellation, SelfMatchPolicy };
+pub use exchange_match::{ Crossing, CrossingStep, MatchError, SelfMatchCancellation, SelfMatchPolicy };
 pub use exchange_order::{ Amount, Obligation, Order };
 use exchange_rest::rest_place;
 pub use exchange_seq::Sequence;
@@ -104,11 +116,85 @@ use exchange_seq::seq_next;
 pub use exchange_side::Side;
 pub use exchange_snap::{ BookSnap, RestRow };
 pub use exchange_spec::{ AssetId, InstrumentSpec, SpecError };
+use exchange_spec::{ price_fits, qty_fits };
 pub use exchange_stats::BookStats;
-use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add };
+use exchange_stats::{ stats_cancel_add, stats_fill_add, stats_rest_add, stats_reject_add, stats_snapshot, stats_zero };
 pub use exchange_tif::Tif;
-use exchange_tif::tif_rests;
-pub use exchange_types::{ Price, TypeError, notional, obligation };
+use exchange_tif::{ tif_rests, tif_takes };
+pub use exchange_types::{ TypeError, notional, obligation };
+
+/// The three escrow moves [`Exchange`] makes on the matching path, and the
+/// only way that path reaches escrow — [`Escrow`] is the default
+/// implementation, not a dependency of the sequencing. Funding an account is
+/// not one of them: [`Exchange::open_account`] exists on `Exchange< Escrow >`
+/// only.
+///
+/// Each method keeps [`Escrow`]'s own name and meaning: [`Self::reserve`]
+/// before an order is visible to matching, [`Self::settle`] once per trade,
+/// [`Self::release`] on every exit that does not rest. Three rules the facade
+/// relies on and cannot check:
+///
+/// - **Deterministic, clones included.** [`Exchange::exchange_step`] runs every
+///   call against a clone first, then replays the same calls for real,
+///   `expect`ing each to succeed. An implementation that answers the replay
+///   differently from the dry run panics the facade.
+/// - **A refused call changes nothing.** A cancel calls
+///   [`Self::release`] on the real escrow and leaves the order resting when it
+///   refuses.
+/// - **`Clone` is a full, independent copy.** A dry run that writes through
+///   to shared state is not a dry run.
+///
+/// The error is [`EscrowError`] itself rather than an associated type, so the
+/// facade's translation into a [`RejectReason`] stays one exhaustive match.
+pub trait EscrowPort : Clone
+{
+  /// Reserve `order`'s whole obligation, or refuse it whole — see
+  /// [`Escrow::reserve`].
+  ///
+  /// # Errors
+  ///
+  /// [`EscrowError`] if the obligation cannot be reserved in full.
+  fn reserve( &mut self, order : &Order ) -> Result< Obligation, EscrowError >;
+
+  /// Return everything still reserved for `order` to `owner` — see
+  /// [`Escrow::release`].
+  ///
+  /// # Errors
+  ///
+  /// [`EscrowError`] if nothing is reserved for `order`, or it cannot be
+  /// returned.
+  fn release( &mut self, owner : AccountId, order : OrderId ) -> Result< Obligation, EscrowError >;
+
+  /// Move `trade`'s units between its two parties, out of their reservations
+  /// — see [`Escrow::settle`].
+  ///
+  /// # Errors
+  ///
+  /// [`EscrowError`] if either side cannot be settled, in which case nothing
+  /// moves.
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >;
+}
+
+/// Forwards to [`Escrow`]'s inherent methods — `Escrow::reserve( self, .. )`
+/// resolves to the inherent one, which path resolution prefers over the trait
+/// method of the same name.
+impl EscrowPort for Escrow
+{
+  fn reserve( &mut self, order : &Order ) -> Result< Obligation, EscrowError >
+  {
+    Escrow::reserve( self, order )
+  }
+
+  fn release( &mut self, owner : AccountId, order : OrderId ) -> Result< Obligation, EscrowError >
+  {
+    Escrow::release( self, owner, order )
+  }
+
+  fn settle( &mut self, trade : &Trade ) -> Result< (), EscrowError >
+  {
+    Escrow::settle( self, trade )
+  }
+}
 
 /// What came of a submission.
 #[ derive( Debug, Clone, PartialEq, Eq ) ]
@@ -116,6 +202,8 @@ pub struct Receipt
 {
   /// The id assigned to the submitted order.
   pub order : OrderId,
+  /// The submitter's own id for it, echoed back.
+  pub client : Option< ClientOrderId >,
   /// The trades it generated, in the order they were generated. Empty when
   /// the order crossed nothing — which is an outcome, not a failure.
   pub trades : Vec< Trade >,
@@ -183,9 +271,11 @@ pub enum ExchangeError
   Escrow( EscrowError ),
   /// Matching failed.
   Matching( MatchError ),
-  /// A cancel or a lookup named an order that is not resting — a race result
-  /// rather than a caller error, reported rather than ignored.
-  NotResting( OrderId ),
+  /// A cancel named no order the account has resting on that instrument:
+  /// never placed, already filled or cancelled, another account's, or on
+  /// another instrument. All four answer the same, so a ring producer cannot
+  /// learn which ids another account has live (ADR-003).
+  NotResting( OrderRef ),
   /// [`Exchange::spec_register`] was asked about an instrument no spec names.
   UnknownInstrument( InstrumentId ),
   /// [`Exchange::spec_register`] refused a degenerate tick or lot.
@@ -195,6 +285,23 @@ pub enum ExchangeError
   /// silently changing a live grid would strand every order already resting
   /// against the old one.
   SpecAlreadyRegistered( InstrumentId ),
+  /// [`Exchange::spec_register`] was asked to register an instrument whose
+  /// base asset is its quote asset. Escrow would hold the one asset as two
+  /// balances, cash and asset, and [`verify`] would audit them apart.
+  BaseIsQuote( InstrumentId ),
+  /// [`Exchange::spec_register`] was asked to register an instrument on an
+  /// asset pair other than the one already registered. Escrow keeps one cash
+  /// and one asset holding per account, so a second pair would share both
+  /// with the first, and [`verify`] could not tell them apart.
+  SecondAssetPair
+  {
+    /// The instrument refused.
+    id : InstrumentId,
+    /// The `( base, quote )` already registered.
+    held : ( AssetId, AssetId ),
+    /// The `( base, quote )` `id` asked for.
+    asked : ( AssetId, AssetId ),
+  },
   /// [`Exchange::depth_get`] was asked for the top zero levels.
   Depth( DepthError ),
   /// [`Exchange::halt_set`]/[`Exchange::halt_clear`] asked for a state the
@@ -211,12 +318,19 @@ impl core::fmt::Display for ExchangeError
       Self::Rejected( reason ) => write!( f, "the order was rejected: {reason:?}" ),
       Self::Escrow( error ) => write!( f, "escrow refused: {error}" ),
       Self::Matching( error ) => write!( f, "matching failed: {error}" ),
-      Self::NotResting( id ) => write!( f, "order {} is not resting", id.0 ),
+      Self::NotResting( order ) => write!( f, "{order} is not resting" ),
       Self::UnknownInstrument( id ) => write!( f, "instrument {} has no registered spec", id.0 ),
       Self::Spec( error ) => write!( f, "spec refused: {error}" ),
       Self::SpecAlreadyRegistered( id ) => write!( f, "instrument {} is already registered", id.0 ),
-      Self::Depth( DepthError::BadN ) => write!( f, "depth refused: the top zero levels has no answer" ),
-      Self::Halt( HaltError::Already ) => write!( f, "halt refused: the instrument is already in that state" ),
+      Self::BaseIsQuote( id ) => write!( f, "instrument {} trades an asset for itself", id.0 ),
+      Self::SecondAssetPair { id, held, asked } => write!
+      (
+        f,
+        "instrument {} trades asset {} for asset {}; this exchange trades asset {} for asset {}",
+        id.0, asked.0.0, asked.1.0, held.0.0, held.1.0,
+      ),
+      Self::Depth( error ) => write!( f, "depth refused: {error}" ),
+      Self::Halt( error ) => write!( f, "halt refused: {error}" ),
     }
   }
 }
@@ -230,8 +344,10 @@ impl core::error::Error for ExchangeError
       Self::Escrow( error ) => Some( error ),
       Self::Matching( error ) => Some( error ),
       Self::Spec( error ) => Some( error ),
+      Self::Depth( error ) => Some( error ),
+      Self::Halt( error ) => Some( error ),
       Self::Rejected( _ ) | Self::NotResting( _ ) | Self::UnknownInstrument( _ )
-      | Self::SpecAlreadyRegistered( _ ) | Self::Depth( _ ) | Self::Halt( _ ) => None,
+      | Self::SpecAlreadyRegistered( _ ) | Self::BaseIsQuote( _ ) | Self::SecondAssetPair { .. } => None,
     }
   }
 }
@@ -291,9 +407,8 @@ pub enum StepOutcome
   /// pipeline the removed `submit` method used to run directly — see
   /// [`Exchange::exchange_step`]'s own doc for what changed.
   Placed( Result< Receipt, ExchangeError > ),
-  /// An [`InboundCmd::Cancel`] ran through [`Exchange::cancel`] unchanged —
-  /// see [`Exchange::exchange_step`]'s own doc for why this delegates rather
-  /// than re-implementing cancellation.
+  /// An [`InboundCmd::Cancel`] was applied: the withdrawn remainder, or why
+  /// nothing was withdrawn.
   Cancelled( Result< Quantity, ExchangeError > ),
   /// An [`InboundCmd::Replace`] was drained, but this facade does not yet
   /// apply it — see [`Exchange::exchange_step`]'s own doc, "Replace is not
@@ -301,25 +416,64 @@ pub enum StepOutcome
   ReplaceNotWired,
 }
 
+/// Which of an account's two holdings a posting moves — the asset key
+/// [`verify`] nets separately.
+///
+/// Escrow's own partition, not an instrument's [`AssetId`]s: escrow keeps one
+/// cash and one asset holding per account for every instrument. That is
+/// sound only because [`Exchange::spec_register`] admits one asset pair, so
+/// `Cash` is that pair's quote and `Asset` its base. A posting keyed finer
+/// than the balance it moves would audit a separation that does not exist.
+#[ derive( Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord ) ]
+pub enum PostingAsset
+{
+  /// The currency side, moved by a trade's notional.
+  Cash,
+  /// The asset side, moved by a trade's quantity.
+  Asset,
+}
+
+impl core::fmt::Display for PostingAsset
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::Cash => write!( f, "cash" ),
+      Self::Asset => write!( f, "asset" ),
+    }
+  }
+}
+
 /// One market: a book, the balances behind it, the record of everything that
 /// happened, every instrument's own grid, and the running counters
 /// [`Exchange::exchange_step`] keeps.
+///
+/// `E` is the escrow behind it — [`Escrow`] unless a caller supplies another
+/// [`EscrowPort`] through [`Exchange::with_escrow`].
 #[ derive( Debug, Clone, Default ) ]
-pub struct Exchange
+pub struct Exchange< E = Escrow >
 {
   book : Book,
-  escrow : Escrow,
+  escrow : E,
   next_order : u64,
   next_sequence : Sequence,
   events : Vec< Event >,
   specs : BTreeMap< InstrumentId, InstrumentSpec >,
   caps : BTreeMap< InstrumentId, BookCaps >,
   stats : BookStats,
+  instrument_stats : BTreeMap< InstrumentId, BookStats >,
+  clients : IdSet< ( AccountId, ClientOrderId ) >,
 }
 
-impl Exchange
+impl Exchange< Escrow >
 {
   /// A market with no participants and an empty book.
+  ///
+  /// Only for the real [`Escrow`]: a default type parameter does not drive
+  /// inference, so a generic `new` would leave every bare `Exchange::new()`
+  /// failing with "type annotations needed". [`Exchange::with_escrow`] is
+  /// the generic constructor.
   #[ must_use ]
   pub fn new() -> Self
   {
@@ -338,15 +492,46 @@ impl Exchange
     self.escrow.open( id, cash, asset )?;
     Ok( () )
   }
+}
+
+impl< E : EscrowPort > Exchange< E >
+{
+  /// A market with no participants and an empty book, over `escrow`.
+  #[ must_use ]
+  pub fn with_escrow( escrow : E ) -> Self
+  {
+    Self
+    {
+      book : Book::default(),
+      escrow,
+      next_order : 0,
+      next_sequence : Sequence::default(),
+      events : Vec::new(),
+      specs : BTreeMap::new(),
+      caps : BTreeMap::new(),
+      stats : BookStats::default(),
+      instrument_stats : BTreeMap::new(),
+      clients : IdSet::default(),
+    }
+  }
 
   /// Register `id`'s grid and asset pair.
   ///
   /// # Errors
   ///
+  /// Checked in this order, the first that applies wins: the id, the spec on
+  /// its own (grid, then assets), then the pair against the one registered.
+  ///
   /// [`ExchangeError::SpecAlreadyRegistered`] if `id` is already registered —
   /// refused rather than overwritten, since replacing a live tick/lot grid
   /// would silently change the terms under orders already resting against the
   /// old one. [`ExchangeError::Spec`] if `tick` or `lot` is zero.
+  /// [`ExchangeError::BaseIsQuote`] if `base` is `quote`.
+  /// [`ExchangeError::SecondAssetPair`] if another instrument is
+  /// registered on a different `( base, quote )`: v0.1 trades one pair. The
+  /// rule holds per `Exchange`; two of them sharing one escrow through a
+  /// custom [`EscrowPort`] could each register a different pair, and share
+  /// its balances again.
   pub fn spec_register
   (
     &mut self,
@@ -362,14 +547,21 @@ impl Exchange
       return Err( ExchangeError::SpecAlreadyRegistered( id ) );
     }
     let spec = exchange_spec::spec_new( id, base, quote, tick, lot )?;
+    if base == quote
+    {
+      return Err( ExchangeError::BaseIsQuote( id ) );
+    }
+    if let Some( held ) = self.specs.values().next().map( | held | ( held.base, held.quote ) )
+      && held != ( base, quote )
+    {
+      return Err( ExchangeError::SecondAssetPair { id, held, asked : ( base, quote ) } );
+    }
     self.specs.insert( id, spec );
     Ok( () )
   }
 
   /// Register (or replace) `instrument`'s resting-order caps. No registered
-  /// caps means no cap enforcement for that instrument — the same
-  /// absence-means-unenforced convention [`Self::halt_set`]'s own doc
-  /// describes for halts.
+  /// caps means no cap enforcement for that instrument.
   ///
   /// Unlike [`Self::spec_register`], a cap is not a term any already-resting
   /// order was placed against — raising or lowering it only changes how much
@@ -432,18 +624,18 @@ impl Exchange
   }
 
   /// A point-in-time copy of `instrument`'s resting book, stamped with the
-  /// caller-supplied `tick` — see [`exchange_snap::snap_take`] for why `tick`
-  /// is never read from a clock here.
+  /// caller's `tick` — a step count it keeps, never read from a clock here.
   #[ must_use ]
-  pub fn snap_take( &self, instrument : InstrumentId, tick : Money ) -> BookSnap
+  pub fn snap_take( &self, instrument : InstrumentId, tick : u64 ) -> BookSnap
   {
     exchange_snap::snap_take( &self.book, instrument, tick )
   }
 
   /// Take every event recorded so far, leaving the stream empty.
   ///
-  /// The owned counterpart to [`Self::events`]'s borrowed slice — see
-  /// `exchange_event`'s own module doc for why both exist.
+  /// The owned counterpart to [`Self::events`]'s borrowed slice: a consumer
+  /// that reads the stream once takes it here rather than cloning the slice,
+  /// and draining keeps the stream from growing without bound.
   #[ must_use ]
   pub fn event_drain( &mut self ) -> Vec< Event >
   {
@@ -452,13 +644,20 @@ impl Exchange
 
   /// A copy of the running counters [`Self::exchange_step`] has kept so far.
   ///
-  /// Counts only activity processed through [`Self::exchange_step`] —
-  /// [`Self::cancel`]'s own direct, synchronous path is kept byte-for-byte
-  /// unchanged by this stage's own scope, so it does not feed these counters.
+  /// Every placement and cancel goes through [`Self::exchange_step`], so
+  /// these count all of them.
   #[ must_use ]
   pub fn stats_get( &self ) -> BookStats
   {
-    exchange_stats::stats_snapshot( &self.stats )
+    stats_snapshot( &self.stats )
+  }
+
+  /// [`Self::stats_get`], for `instrument` alone. All zero for an instrument
+  /// nothing has touched yet.
+  #[ must_use ]
+  pub fn stats_get_for( &self, instrument : InstrumentId ) -> BookStats
+  {
+    self.instrument_stats.get( &instrument ).map_or_else( stats_zero, stats_snapshot )
   }
 
   /// Drain `consumer` and apply every command it yields, in drain order, with
@@ -468,24 +667,28 @@ impl Exchange
   /// # `exchange_step` owns sequencing
   ///
   /// A [`Resting`] inside an incoming [`InboundCmd::Place`] is a *draft*, not
-  /// a finished order — its `order.id` and `arrival` are never trusted. This
+  /// a finished order — its `order.id` and `arrival` are never trusted.
+  /// `order.client` is: it is the submitter's own id, so an account's second
+  /// placement under the same one is refused as
+  /// [`RejectReason::DuplicateClientId`]. Claimed once the order is accepted
+  /// and never released — a retry of a filled or cancelled order is still a
+  /// retry. The set grows with every client-tagged order. This
   /// is the single-threaded apply side of the ring (see `exchange_inbound`'s
   /// own module doc, "Two producers without two threads on one ring"), so it
-  /// is the only place with authoritative access to [`Self::claim_order`]'s
-  /// counter and [`Self::emit`]'s sequence — exactly mirroring how the old
+  /// is the only place with authoritative access to `claim_order`'s
+  /// counter and `emit`'s sequence — exactly mirroring how the old
   /// `submit` never took a caller-supplied id either. Producers may push a
   /// placeholder id/arrival; `exchange_step` always overwrites both with its
   /// own, so global id-uniqueness and a correct, facade-authoritative total
   /// order hold regardless of what (if anything) a producer stamped on the
   /// way in.
   ///
-  /// # `Cancel` delegates, it does not re-implement
+  /// # Cancel
   ///
-  /// [`InboundCmd::Cancel`]'s own `instrument` field is never consulted —
-  /// [`Self::cancel`] already does its own authoritative, instrument-agnostic
-  /// search and is already correct and tested, so a command arriving via the
-  /// ring gets exactly the same escrow-release behaviour a direct call would,
-  /// with no second implementation to keep in sync.
+  /// The ring is the only way to cancel; there is no direct call. A
+  /// [`InboundCmd::Cancel`] withdraws an order only when its account,
+  /// instrument and id (the exchange's, or the account's client id) all match
+  /// (ADR-003).
   ///
   /// # Replace is not yet wired
   ///
@@ -520,11 +723,14 @@ impl Exchange
     match cmd
     {
       InboundCmd::Place( draft ) => StepOutcome::Placed( self.step_place( draft.order, policy ) ),
-      InboundCmd::Cancel { id, .. } =>
+      InboundCmd::Cancel { instrument, account, order } =>
       {
-        let result = self.cancel( id );
-        if result.is_ok() { stats_cancel_add( &mut self.stats, 1 ); }
-        StepOutcome::Cancelled( result )
+        let result = self.cancel_resting( instrument, account, order );
+        if let Ok( resting ) = &result
+        {
+          self.count( resting.order.instrument, stats_cancel_add, 1 );
+        }
+        StepOutcome::Cancelled( result.map( | resting | resting.remaining ) )
       },
       InboundCmd::Replace { .. } => StepOutcome::ReplaceNotWired,
     }
@@ -540,6 +746,14 @@ impl Exchange
   {
     let order = Order { id : self.claim_order(), ..draft };
 
+    // 0. A retry of an order this account already placed. First, so a retry
+    // is named as one whatever else changed since the original.
+    if let Some( client ) = order.client
+      && idem_seen( &self.clients, ( order.account, client ) )
+    {
+      return Err( self.reject_counted( &order, RejectReason::DuplicateClientId ) );
+    }
+
     // 1. Validate. Unchanged from the old `submit`'s own step 1 — see that
     // method's former `Fix(a_negative_price_is_refused_before_it_can_rest)`
     // comment (preserved in git history) for why the negative-price guard
@@ -548,16 +762,19 @@ impl Exchange
     {
       return Err( self.reject_counted( &order, RejectReason::ZeroQuantity ) );
     }
-    if order.price < Money::ZERO
+    if order.price < Price::ZERO
     {
       return Err( self.reject_counted( &order, RejectReason::NegativePrice ) );
     }
+    // No spec, no instrument: nothing to check the order's grid or halt
+    // flag against.
+    let Some( spec ) = self.specs.get( &order.instrument ).copied() else
+    {
+      return Err( self.reject_counted( &order, RejectReason::UnknownInstrument ) );
+    };
     // A halted instrument refuses every new placement outright — resting
     // orders are untouched (see `Self::halt_set`'s own doc), only new
-    // arrivals are refused. No registered spec means no halt tracking
-    // exists for this instrument, so an order against an unregistered
-    // instrument validates exactly as it already did before `exchange_halt`
-    // existed.
+    // arrivals are refused.
     //
     // Fix(halt_set_never_actually_blocked_a_placement):
     // Root cause: `Self::halt_set`/`halt_clear`/`halt_is` toggle
@@ -571,9 +788,25 @@ impl Exchange
     // Pitfall: a facade exposing a control (`halt_set`) is not the same
     // claim as the facade's own hot path consulting it — a crate whose own
     // tests all pass can still be wired to nothing.
-    if self.specs.get( &order.instrument ).is_some_and( exchange_halt::halt_is )
+    if exchange_halt::halt_is( &spec )
     {
       return Err( self.reject_counted( &order, RejectReason::Halted ) );
+    }
+    // Off the instrument's grid. Refused rather than snapped: snapping would
+    // trade at a price or size the submitter never asked for.
+    if !price_fits( &spec, order.price )
+    {
+      return Err( self.reject_counted( &order, RejectReason::PriceOffTick ) );
+    }
+    if !qty_fits( &spec, order.quantity )
+    {
+      return Err( self.reject_counted( &order, RejectReason::QuantityOffLot ) );
+    }
+    // `cross` refuses a taking post-only order too, but without an event —
+    // checked here so the refusal is on record.
+    if !tif_takes( order.tif ) && exchange_match::would_take( &self.book, &order )
+    {
+      return Err( self.reject_counted( &order, RejectReason::PostOnlyWouldTake ) );
     }
 
     // 2. Dry-run the whole operation — reserve, cross, settle every trade,
@@ -589,16 +822,14 @@ impl Exchange
     }
     let mut dry_book = self.book.clone();
     let dry_crossing = exchange_match::cross( &mut dry_book, &order, policy )?;
-    for trade in &dry_crossing.trades
+    for step in dry_crossing.steps()
     {
-      if let Err( error ) = dry_escrow.settle( trade, order.side, order.price )
+      let done = match step
       {
-        return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
-      }
-    }
-    for cancellation in &dry_crossing.cancelled
-    {
-      if let Err( error ) = dry_escrow.release( cancellation.account, cancellation.order )
+        CrossingStep::Trade( trade ) => dry_escrow.settle( trade ),
+        CrossingStep::Cancelled( cancellation ) => dry_escrow.release( cancellation.account, cancellation.order ).map( drop ),
+      };
+      if let Err( error ) = done
       {
         return Err( self.reject_counted( &order, Self::reason_for( error ) ) );
       }
@@ -636,6 +867,11 @@ impl Exchange
           return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
         }
       }
+      let current_account_rests = dry_book.account_rests( order.instrument, order.account );
+      if let Err( error ) = cap_check_account( caps, current_account_rests )
+      {
+        return Err( self.reject_counted( &order, Self::reason_for_cap( error ) ) );
+      }
     }
 
     // 3. The dry run above succeeded in full — replay it for real. Every
@@ -643,6 +879,10 @@ impl Exchange
     // pure `cross`, and nothing else touches `self.escrow`/`self.book` in
     // between.
     let reserved = self.escrow.reserve( &order ).expect( "already validated by the dry run above" );
+    if let Some( client ) = order.client
+    {
+      idem_insert( &mut self.clients, ( order.account, client ) ).expect( "checked unseen in step 0" );
+    }
     let arrival = self.emit
     (
       order.id, order.account,
@@ -651,26 +891,45 @@ impl Exchange
     let crossing = exchange_match::cross( &mut self.book, &order, policy )
       .expect( "already produced by the identical dry run above — cross is pure" );
 
-    // 4. Settle each trade in the step that generated it.
-    stats_fill_add( &mut self.stats, crossing.trades.len() as u64 );
-    for trade in &crossing.trades
-    {
-      self.escrow.settle( trade, order.side, order.price ).expect( "already validated by the dry run above" );
-      self.emit( order.id, order.account, EventKind::Trade( *trade ) );
-    }
-
-    // 4a. Release and report each self-match cancellation.
+    // 4. Settle each trade and release each self-match cancellation, in the
+    // order `cross` made them, and record each as it happens.
+    //
+    // Fix(a_self_match_withdrawal_is_recorded_before_the_trade_behind_it):
+    // Root cause: every trade was settled and recorded, then every
+    // cancellation, so a withdrawal that came first was recorded after a
+    // trade at a worse price.
+    // Pitfall: two lists from one loop lose its order unless it is kept.
+    self.count( order.instrument, stats_fill_add, crossing.trades.len() as u64 );
     let mut incoming_cancelled = false;
-    for cancellation in &crossing.cancelled
+    for step in crossing.steps()
     {
-      let released = self.escrow.release( cancellation.account, cancellation.order )
-        .expect( "already validated by the dry run above" );
-      self.emit
-      (
-        cancellation.order, cancellation.account,
-        EventKind::OrderCancelled { cause : CancelCause::SelfMatch, quantity : cancellation.quantity, released },
-      );
-      incoming_cancelled |= cancellation.order == order.id;
+      match step
+      {
+        CrossingStep::Trade( trade ) =>
+        {
+          self.escrow.settle( trade ).expect( "already validated by the dry run above" );
+          self.emit( order.id, order.account, EventKind::Trade( *trade ) );
+        },
+        CrossingStep::Cancelled( cancellation ) =>
+        {
+          let released = self.escrow.release( cancellation.account, cancellation.order )
+            .expect( "already validated by the dry run above" );
+          self.emit
+          (
+            cancellation.order, cancellation.account,
+            EventKind::OrderCancelled { cause : CancelCause::SelfMatch, quantity : cancellation.quantity, released },
+          );
+          if cancellation.order == order.id
+          {
+            incoming_cancelled = true;
+          }
+          else
+          {
+            // A resting order withdrawn here is a cancel like any other.
+            self.count( order.instrument, stats_cancel_add, 1 );
+          }
+        },
+      }
     }
 
     // 5. Rest the remainder, reservation retained — via `exchange_rest::rest_place`
@@ -760,37 +1019,44 @@ impl Exchange
         rest_place( &mut self.book, Resting { order, remaining : resting, arrival } ),
         "order id came from this exchange's own next_order counter, which never repeats",
       );
-      stats_rest_add( &mut self.stats, 1 );
+      self.count( order.instrument, stats_rest_add, 1 );
     }
 
-    Ok( Receipt { order : order.id, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
+    Ok( Receipt { order : order.id, client : order.client, trades : crossing.trades, resting, self_match_cancelled : incoming_cancelled, tif_dropped } )
+  }
+
+  /// Bump a counter for `instrument` and for the exchange as a whole.
+  fn count( &mut self, instrument : InstrumentId, add : fn( &mut BookStats, u64 ), n : u64 )
+  {
+    add( &mut self.stats, n );
+    add( self.instrument_stats.entry( instrument ).or_insert_with( stats_zero ), n );
   }
 
   /// [`Self::reject`], plus the stats counter [`Self::exchange_step`] keeps.
   fn reject_counted( &mut self, order : &Order, reason : RejectReason ) -> ExchangeError
   {
-    stats_reject_add( &mut self.stats, 1 );
+    self.count( order.instrument, stats_reject_add, 1 );
     self.reject( order, reason )
   }
 
-  /// Withdraw a resting order's remainder and return its reservation.
+  /// Withdraw a resting order's remainder and return its reservation, and the
+  /// order whole.
   ///
   /// # Errors
   ///
-  /// [`ExchangeError::NotResting`] if no such order rests — which happens
-  /// when it filled or was cancelled first, and is a defined outcome rather
-  /// than a caller error. On [`ExchangeError::Escrow`], the order is left
+  /// [`ExchangeError::NotResting`] if `account` has no order named `order`
+  /// resting on `instrument`. On [`ExchangeError::Escrow`], the order is left
   /// resting exactly as it was — cancellation only commits once the release
   /// it depends on has actually succeeded.
   ///
   /// Fix(a_cancel_removed_the_order_before_the_release_could_fail):
   /// Root cause: `book.cancel` is infallible once an order is found — it
   /// removes and returns it unconditionally — while the `escrow.release`
-  /// that followed it could still fail, most reachably with
-  /// `EscrowError::Arithmetic` when the account's `available` balance sits
-  /// close enough to the declared ceiling that crediting the reservation
-  /// back would breach it. On that failure the function returned `Err`, but
-  /// the order was already gone from the book: not filled, not cancelled,
+  /// that followed it could still fail: with `EscrowError::Arithmetic`, back
+  /// when `Escrow` let an account's total pass the ceiling, and with
+  /// whatever another [`EscrowPort`] refuses. On that failure the function
+  /// returned `Err`, but the order was already gone from the book: not
+  /// filled, not cancelled,
   /// not resting, unreachable by any public API and permanently stuck with
   /// its reservation. The same commit-before-validate shape already fixed
   /// once in `Escrow::release` itself, one level up the call stack.
@@ -799,11 +1065,11 @@ impl Exchange
   /// safe ordering — "first find it, then let it go" — right up until the
   /// second call's failure mode is traced to something the first call
   /// cannot undo.
-  pub fn cancel( &mut self, id : OrderId ) -> Result< Quantity, ExchangeError >
+  fn cancel_resting( &mut self, instrument : InstrumentId, account : AccountId, order : OrderRef ) -> Result< Resting, ExchangeError >
   {
-    let ( account, instrument ) = self.book.iter().find( | resting | resting.order.id == id )
-      .map( | resting | ( resting.order.account, resting.order.instrument ) )
-      .ok_or( ExchangeError::NotResting( id ) )?;
+    let id = order.resting_in( &self.book, instrument, account )
+      .map( | resting | resting.order.id )
+      .ok_or( ExchangeError::NotResting( order ) )?;
     let released = self.escrow.release( account, id )?;
     let resting = self.book.cancel( instrument, id )
       .expect( "just confirmed resting above, and release does not touch the book" );
@@ -814,7 +1080,7 @@ impl Exchange
       EventKind::OrderCancelled { cause : CancelCause::Request, quantity : resting.remaining, released },
     );
 
-    Ok( resting.remaining )
+    Ok( resting )
   }
 
   /// Everything that has happened, in order.
@@ -833,70 +1099,23 @@ impl Exchange
 
   /// The balances behind it.
   #[ must_use ]
-  pub fn escrow( &self ) -> &Escrow
+  pub fn escrow( &self ) -> &E
   {
     &self.escrow
   }
 
-  /// Every trade as a pair of currency postings — the buyer debited, the
-  /// seller credited — ready for [`verify`].
+  /// Every trade still in the stream, as [`postings`] reads it.
   ///
-  /// This is the bridge to `exact_arith`'s conservation auditor, and it is
-  /// worth having for one reason: the auditor was built to grade a transaction
-  /// log it knows nothing about, so running it here checks the exchange with
-  /// machinery the exchange did not write. A conservation test the exchange
-  /// authored itself would agree with the exchange by construction.
+  /// Covers only the events [`Self::event_drain`] has not taken: a drained
+  /// batch leaves this audit with the trades and is audited by passing it to
+  /// [`postings`] directly.
   ///
   /// # Errors
   ///
-  /// [`ExchangeError::Rejected`] carrying
-  /// [`RejectReason::ObligationUnrepresentable`] if a trade's own notional
-  /// cannot be expressed, which would mean it should never have executed.
-  pub fn postings( &self ) -> Result< Vec< Entry >, ExchangeError >
+  /// As [`postings`].
+  pub fn postings( &self ) -> Result< Vec< Entry< AccountId, PostingAsset > >, ExchangeError >
   {
-    let mut entries = Vec::new();
-
-    for event in &self.events
-    {
-      let EventKind::Trade( trade ) = event.kind
-      else
-      {
-        continue;
-      };
-
-      let paid = notional( trade.price, trade.quantity )
-      .map_err( | _ | ExchangeError::Rejected( RejectReason::ObligationUnrepresentable ) )?;
-
-      let ( buyer, seller ) = self.parties( &trade );
-      entries.push( Entry::new( format!( "account:{}", buyer.0 ), -paid.minor() ) );
-      entries.push( Entry::new( format!( "account:{}", seller.0 ), paid.minor() ) );
-    }
-
-    Ok( entries )
-  }
-
-  /// Which of a trade's two accounts bought, and which sold.
-  ///
-  /// Read back from the aggressor's own `OrderAccepted` event rather than from
-  /// the book, because by the time this is called both orders may be long
-  /// gone — a filled order leaves no book state at all, and postings must
-  /// still be derivable from the record alone.
-  fn parties( &self, trade : &Trade ) -> ( AccountId, AccountId )
-  {
-    let taker_bought = self.events.iter().any( | event |
-    {
-      event.order == trade.taker
-      && matches!( event.kind, EventKind::OrderAccepted { side : Side::Buy, .. } )
-    } );
-
-    if taker_bought
-    {
-      ( trade.taker_account, trade.maker_account )
-    }
-    else
-    {
-      ( trade.maker_account, trade.taker_account )
-    }
+    postings( &self.events )
   }
 
   fn claim_order( &mut self ) -> OrderId
@@ -962,9 +1181,9 @@ impl Exchange
       EscrowError::UnknownAccount( _ ) => RejectReason::UnknownAccount,
       EscrowError::Obligation( _ ) => RejectReason::ObligationUnrepresentable,
       // The account's funds were genuinely sufficient; a fixed-point ceiling
-      // was not — whether at reservation time, or when a trade's own
-      // proceeds would themselves breach one during the dry-run `settle`
-      // this function's own doc comment describes.
+      // was not. With `exchange_escrow::Escrow` that is `reserve` finding no
+      // room for what the order brings in, or a taking sell paid above its
+      // limit past the room its ask kept, in the dry-run `settle`.
       EscrowError::Arithmetic => RejectReason::ReservationUnrepresentable,
       // `AlreadyReserved` and `Obligation` stay reserve-only regardless of
       // this function's now-wider callers: the order id is freshly claimed
@@ -982,6 +1201,9 @@ impl Exchange
       // next trade or cancellation for that same order is ever considered,
       // so a later self-match release always finds a still-live,
       // correctly-shaped reservation for whatever `settle` left behind.
+      // `NotOwner` is foreclosed too: every account named comes from the
+      // order or the resting order it traded with. So is `OutsideLimit`:
+      // `cross` executes at the maker's own price, inside both limits.
       // Reported as insufficient funds rather than given a reason variant of
       // its own, because a reason no code path produces through this
       // function is a claim the code does not back.
@@ -989,12 +1211,15 @@ impl Exchange
       | EscrowError::NotReserved
       | EscrowError::NoReservation( _ )
       | EscrowError::AlreadyReserved( _ )
+      | EscrowError::NotOwner( _ )
+      | EscrowError::OutsideLimit( _ )
       | EscrowError::ObligationMismatch
       | EscrowError::NegativeAmount => RejectReason::InsufficientFunds,
     }
   }
 
-  /// [`RejectReason::RestsFull`]/[`RejectReason::LevelsFull`] translation —
+  /// [`RejectReason::RestsFull`]/[`RejectReason::LevelsFull`]/
+  /// [`RejectReason::AccountFull`] translation —
   /// its own function rather than folded into [`Self::reason_for`] since
   /// [`CapError`] and [`EscrowError`] are unrelated source types with no
   /// shared variant to combine.
@@ -1004,6 +1229,56 @@ impl Exchange
     {
       CapError::RestsFull => RejectReason::RestsFull,
       CapError::LevelsFull => RejectReason::LevelsFull,
+      CapError::AccountFull => RejectReason::AccountFull,
     }
   }
+}
+
+/// Every trade in `events` as two pairs of postings — the buyer debited the
+/// notional and credited the quantity, the seller the reverse — ready for
+/// [`verify`], which nets each [`PostingAsset`] separately.
+///
+/// This is the bridge to `exact_arith`'s conservation auditor, and it is
+/// worth having for one reason: the auditor was built to grade a transaction
+/// log it knows nothing about, so running it here checks the exchange with
+/// machinery the exchange did not write. A conservation test the exchange
+/// authored itself would agree with the exchange by construction.
+///
+/// Each trade's postings net to zero on their own, so a slice missing trades
+/// balances as well as a whole log: the audit covers exactly what it is given.
+///
+/// # Errors
+///
+/// [`ExchangeError::Rejected`] carrying
+/// [`RejectReason::ObligationUnrepresentable`] if a trade's own notional
+/// cannot be expressed, which would mean it should never have executed.
+pub fn postings( events : &[ Event ] ) -> Result< Vec< Entry< AccountId, PostingAsset > >, ExchangeError >
+{
+  let mut entries = Vec::new();
+
+  for event in events
+  {
+    let EventKind::Trade( trade ) = event.kind
+    else
+    {
+      continue;
+    };
+
+    let paid = notional( trade.price, trade.quantity )
+    .map_err( | _ | ExchangeError::Rejected( RejectReason::ObligationUnrepresentable ) )?;
+
+    // The trade names its taker's side, so neither the book nor the taker's
+    // own `OrderAccepted` (perhaps already drained) is needed.
+    let ( buyer, seller ) = match trade.taker_side
+    {
+      Side::Buy => ( trade.taker_account, trade.maker_account ),
+      Side::Sell => ( trade.maker_account, trade.taker_account ),
+    };
+    entries.push( Entry::new( buyer, PostingAsset::Cash, -paid.minor() ) );
+    entries.push( Entry::new( seller, PostingAsset::Cash, paid.minor() ) );
+    entries.push( Entry::new( buyer, PostingAsset::Asset, trade.quantity.minor() ) );
+    entries.push( Entry::new( seller, PostingAsset::Asset, -trade.quantity.minor() ) );
+  }
+
+  Ok( entries )
 }

@@ -10,8 +10,8 @@
 //! see `exchange_inbound`'s own module doc and
 //! `docs/decisions/001_two_producers_is_two_rings.md` for the full case.
 
-use exchange_id::{ InstrumentId, OrderId };
-use exchange_inbound::{ inbound_drain, inbound_ring, InboundCmd };
+use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exchange_inbound::{ inbound_drain, inbound_ring, InboundCmd, OrderRef };
 use std::thread;
 
 const INSTRUMENT : InstrumentId = InstrumentId( 1 );
@@ -30,7 +30,8 @@ fn checksum( cmds : &[ InboundCmd ] ) -> u64
   {
     let id = match cmd
     {
-      InboundCmd::Cancel { id, .. } => id.0,
+      InboundCmd::Cancel { order : OrderRef::Id( id ), .. } => id.0,
+      InboundCmd::Cancel { order : OrderRef::Client( client ), .. } => client.0,
       InboundCmd::Replace { old_id, .. } => old_id.0,
       InboundCmd::Place( resting ) => resting.order.id.0,
     };
@@ -59,14 +60,14 @@ fn run_once() -> u64
     {
       for id in 1..=50u64
       {
-        producer_a.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).unwrap();
+        producer_a.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( id ) ) } ).unwrap();
       }
     } );
     scope.spawn( move ||
     {
       for id in 101..=150u64
       {
-        producer_b.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, id : OrderId( id ) } ).unwrap();
+        producer_b.try_push( InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( OrderId( id ) ) } ).unwrap();
       }
     } );
   } );

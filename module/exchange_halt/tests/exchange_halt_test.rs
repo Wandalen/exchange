@@ -66,3 +66,12 @@ fn halt_is_agrees_with_spec_halted_is()
   halt_set( &mut spec ).unwrap();
   assert_eq!( halt_is( &spec ), exchange_spec::spec_halted_is( &spec ) );
 }
+
+/// `HaltError` reads as a sentence and works as an error source, like every
+/// other error type in the family.
+#[ test ]
+fn halt_error_displays_and_is_an_error()
+{
+  assert_eq!( HaltError::Already.to_string(), "the instrument is already in the requested state" );
+  let _ : &dyn core::error::Error = &HaltError::Already;
+}

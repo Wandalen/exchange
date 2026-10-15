@@ -1,20 +1,9 @@
-//! Test Matrix T01 — the vocabulary, and the two rules that live in it.
+//! Test Matrix T01 — `obligation`, and `notional`'s exact-or-refused rule.
 //!
-//! Beyond T01's own row this file pins the notional's exactness and the
-//! executed-price rule, because both are decisions this crate makes on behalf
-//! of the whole family and neither is observable from the matching tests:
-//! a rounded notional and an exact one produce identical trades and differ
-//! only in a total nobody sums until an audit.
-//!
-//! `Order`'s own field-exactness test moved to `exchange_order/tests/`
-//! alongside the type itself; what stays here exercises `obligation`/
-//! `notional`, which stayed in this crate (see `src/lib.rs`'s "Extraction"
-//! section). `every_side_has_exactly_one_opposite` moved to
-//! `exchange_side/tests/` in Stage 1 and is not duplicated here, and
-//! `a_trade_executes_at_the_makers_price` moved to `exchange_fill/tests/`
-//! alongside `Trade` itself in Stage 5.
+//! A rounded notional and an exact one produce identical trades and differ
+//! only in a total nobody sums until an audit, so the rule is pinned here.
 
-use exact_arith::{ Money, Quantity };
+use exact_arith::{ Money, Price, Quantity };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::{ Obligation, Order };
 use exchange_side::Side;
@@ -29,9 +18,10 @@ fn order( side : Side, price : &str, quantity : i64 ) -> Order
     instrument : InstrumentId( 1 ),
     account : AccountId( 1 ),
     side,
-    price : Money::parse( price ).unwrap(),
+    price : Price::parse( price ).unwrap(),
     quantity : Quantity::from_int( quantity ).unwrap(),
     tif : Tif::Gtc,
+    client : None,
   }
 }
 
@@ -46,7 +36,7 @@ fn t01_the_price_path_is_not_floating_point()
   let tenth = Money::parse( "0.1" ).unwrap();
   let fifth = Money::parse( "0.2" ).unwrap();
 
-  assert_eq!( tenth.checked_add( fifth ).unwrap(), Money::parse( "0.3" ).unwrap() );
+  assert_eq!( ( tenth + fifth ).unwrap(), Money::parse( "0.3" ).unwrap() );
 
   #[ allow( clippy::float_cmp ) ]
   let float_disagrees = 0.1_f64 + 0.2_f64 != 0.3_f64;
@@ -90,7 +80,7 @@ fn a_notional_needing_rounding_is_refused()
 {
   // One minor unit of quantity — 0.000001 — at a price of 0.000001 is
   // 0.000000000001, twelve places, and the currency has six.
-  let dust_price = Money::EPSILON;
+  let dust_price = Price::from_minor( 1 ).unwrap();
   let dust_quantity = Quantity::EPSILON;
 
   assert_eq!( notional( dust_price, dust_quantity ), Err( TypeError::NotionalInexact ) );
@@ -100,7 +90,7 @@ fn a_notional_needing_rounding_is_refused()
 #[ test ]
 fn a_notional_over_the_ceiling_is_refused_by_name()
 {
-  let huge = Money::from_int( 1_000_000_000 ).unwrap();
+  let huge = Price::parse( "1000000000" ).unwrap();
   let many = Quantity::from_int( 1_000_000 ).unwrap();
 
   assert_eq!( notional( huge, many ), Err( TypeError::NotionalOutOfRange ) );
@@ -110,23 +100,39 @@ fn a_notional_over_the_ceiling_is_refused_by_name()
 /// way, but not on the same line.
 ///
 /// The test above picks a quotient so large it does not even fit `Backing`'s
-/// own width, so `Backing::try_from` is what refuses it. `notional` has a
-/// second refusal a few lines later: a quotient that fits `Backing`
+/// own width. `exact_arith::price_mul_qty`, which `notional` delegates to, has
+/// a second refusal after that one: a quotient that fits `Backing`
 /// comfortably but still exceeds the currency's own declared
 /// `CEILING_MINOR_UNITS`, which `Money::from_minor` refuses on its own
-/// account, on its own `map_err`. Both happen to read `NotionalOutOfRange`
-/// today, but only the first line had a test — a copy-paste that left the
-/// second reading `NotionalInexact` instead would have shipped silently.
+/// account. Both must read `NotionalOutOfRange`; a mapping that sent the
+/// second anywhere else would ship silently without this test.
 #[ test ]
 fn a_notional_over_the_currencys_ceiling_but_within_backing_width_is_refused()
 {
   // 1_000_000_000 whole units of price (minor 10^15) times 10 whole units of
   // quantity (minor 10^7) lands the quotient at 10^16: past the 9×10^15
   // currency ceiling, but nowhere near `Backing`'s (`i64`) own ~9.2×10^18 limit.
-  let price = Money::from_int( 1_000_000_000 ).unwrap();
+  let price = Price::parse( "1000000000" ).unwrap();
   let quantity = Quantity::from_int( 10 ).unwrap();
 
   assert_eq!( notional( price, quantity ), Err( TypeError::NotionalOutOfRange ) );
+}
+
+/// A notional both inexact and out of range reads `NotionalInexact`.
+///
+/// The remainder is checked before the range, so the refusal names the
+/// rounding the caller would otherwise get, not the size. Pinned because the
+/// order lives inside `exact_arith::price_mul_qty` now, where an upstream
+/// change could flip it without touching this crate.
+#[ test ]
+fn a_notional_both_inexact_and_out_of_range_reads_inexact()
+{
+  // ( 10^15 + 1 ) x ( 10^12 + 1 ) minor units leaves a remainder of one at the
+  // currency's scale, and its quotient (about 10^21) is past `Backing`'s width.
+  let price = Price::parse( "1000000000.000001" ).unwrap();
+  let quantity = Quantity::parse( "1000000.000001" ).unwrap();
+
+  assert_eq!( notional( price, quantity ), Err( TypeError::NotionalInexact ) );
 }
 
 /// Exact notionals come back exact, at every scale the currency has.
@@ -143,7 +149,7 @@ fn an_exact_notional_survives_the_round_trip()
 
   for ( price, quantity, expected ) in cases
   {
-    let got = notional( Money::parse( price ).unwrap(), Quantity::from_int( quantity ).unwrap() ).unwrap();
+    let got = notional( Price::parse( price ).unwrap(), Quantity::from_int( quantity ).unwrap() ).unwrap();
     assert_eq!( got, Money::parse( expected ).unwrap(), "{price} x {quantity}" );
   }
 }

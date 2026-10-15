@@ -1,28 +1,12 @@
-//! Top-N book depth, read directly off [`exchange_book::Book`]'s own
-//! priority-ordered slices — never a full walk.
+//! Top-N book depth, read off [`exchange_book::Book`]'s priority-ordered
+//! sides. Closes hard problem 13 (depth) and feature 17 (`depth_top`).
 //!
-//! Without this crate, a caller wanting "what's the market look like" has to
-//! read every resting order on both sides and aggregate by hand. This crate
-//! closes hard problem 13 (depth) and feature 17 (`depth_top`).
-//!
-//! # Why this needs no full walk
-//!
-//! [`exchange_book::Book::side`] already yields each side in strict priority
-//! order — best price first, and every order at one price adjacent
-//! (`exchange_book`'s own documented invariant: "Price first, then
-//! arrival... Within one price, strictly the earlier arrival"). Reading the
-//! top `n` *distinct prices* off that iterator therefore never requires
-//! looking past the first `n` price changes, however many orders rest behind
-//! them.
-//!
-//! # `LevelView` aggregates, it doesn't enumerate
-//!
-//! One [`LevelView`] per distinct price, not per resting order — several
-//! orders resting at the same price contribute one row with their summed
-//! quantity, matching how a market-depth display is actually read.
+//! [`Book::side`](exchange_book::Book::side) yields a side best first, every
+//! order at one price adjacent, so the top `n` prices are read without
+//! looking past the first order beyond them. Each price is one [`LevelView`]
+//! with its orders' summed remainder, as a depth display is read.
 
-use exact_add::qty_saturating_add;
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Price, Quantity, qty_saturating_add };
 use exchange_book::{ Book, Resting };
 use exchange_id::InstrumentId;
 use exchange_side::Side;
@@ -32,8 +16,11 @@ use exchange_side::Side;
 pub struct LevelView
 {
   /// The price every order aggregated into this level rests at.
-  pub price : Money,
-  /// Total resting quantity across every order at `price`.
+  pub price : Price,
+  /// Total resting quantity across every order at `price`. Saturates at
+  /// `Quantity::MAX`: orders at one price can together hold more than one
+  /// `Quantity` expresses, and a depth read is a display, not a balance —
+  /// a lower bound beats failing the query.
   pub qty : Quantity,
 }
 
@@ -51,10 +38,22 @@ pub struct Depth
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub enum DepthError
 {
-  /// `n` was zero. "The top zero levels" has no sensible answer, unlike a
-  /// `n` larger than what rests, which just returns fewer rows.
+  /// `n` was zero. An `n` above what rests just returns fewer rows.
   BadN,
 }
+
+impl core::fmt::Display for DepthError
+{
+  fn fmt( &self, f : &mut core::fmt::Formatter< '_ > ) -> core::fmt::Result
+  {
+    match self
+    {
+      Self::BadN => write!( f, "the top zero levels has no answer" ),
+    }
+  }
+}
+
+impl core::error::Error for DepthError {}
 
 /// The best `n` price levels on each side of `instrument`'s book.
 ///

@@ -6,7 +6,7 @@
 //! wrong sequence is a book that fills the wrong people, and nothing
 //! downstream can notice.
 
-use exact_kind::{ Money, Quantity };
+use exact_arith::{ Price, Quantity };
 use exchange_book::{ Book, Resting };
 use exchange_id::{ AccountId, InstrumentId, OrderId };
 use exchange_order::Order;
@@ -14,9 +14,8 @@ use exchange_seq::Sequence;
 use exchange_side::Side;
 use exchange_tif::Tif;
 
-/// The one instrument every test in this file threads through `Book`'s now
-/// instrument-scoped methods — T05's own leakage test is the one place a
-/// second id is deliberately used instead.
+/// The instrument every test uses;
+/// `orders_on_one_instrument_never_leak_into_another` adds a second.
 const INSTRUMENT : InstrumentId = InstrumentId( 1 );
 
 fn rest( id : u64, side : Side, price : &str, quantity : i64, arrival : u64 ) -> Resting
@@ -35,9 +34,10 @@ fn rest_on( instrument : InstrumentId, id : u64, side : Side, price : &str, quan
       instrument,
       account : AccountId( id ),
       side,
-      price : Money::parse( price ).unwrap(),
+      price : Price::parse( price ).unwrap(),
       quantity,
       tif : Tif::Gtc,
+      client : None,
     },
     remaining : quantity,
     arrival : Sequence( arrival ),
@@ -63,6 +63,21 @@ fn t02_time_priority_within_one_price_level()
   assert!( book.insert( rest( 3, Side::Buy, "2.50", 5, 30 ) ), "fresh id in this test, must not already rest" );
 
   assert_eq!( ids( &book, Side::Buy ), vec![ 1, 2, 3 ], "earliest arrival first, whatever the insertion order" );
+}
+
+/// Orders sharing an arrival keep the order they were inserted in.
+///
+/// `exchange_inbound::inbound_apply` rests whatever arrival its producer
+/// stamped, so two can match. A later insert must not jump the queue.
+#[ test ]
+fn orders_sharing_an_arrival_keep_insertion_order()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Sell, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 2, Side::Sell, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 3, Side::Sell, "2.50", 5, 10 ) ) );
+
+  assert_eq!( ids( &book, Side::Sell ), vec![ 1, 2, 3 ], "first inserted first" );
 }
 
 /// T03 — a better price rests ahead, whenever it arrived.
@@ -141,6 +156,49 @@ fn t04_cancelling_an_absent_order_reports_rather_than_panics()
   assert_eq!( book.len(), 1, "and nothing else moved" );
 }
 
+/// Cancelling either side's best order removes it, and the level it emptied,
+/// leaving the rest of the book as it was.
+#[ test ]
+fn cancelling_the_best_order_on_either_side()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 2, Side::Buy, "1.00", 5, 20 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 4, Side::Sell, "3.00", 5, 40 ) ), "fresh id in this test, must not already rest" );
+
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 3 ) ), Some( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "the best ask" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 1 ) ), Some( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "the best bid" );
+
+  assert_eq!( ids( &book, Side::Sell ), vec![ 4 ], "the ask level keeps its next arrival" );
+  assert_eq!( ids( &book, Side::Buy ), vec![ 2 ], "the emptied bid level is gone" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Buy ), 1 );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ), 1 );
+}
+
+/// Cancelling an order that is not its side's best removes it, and the level
+/// it emptied, on either side — the check of each side's best order must not
+/// stand in the way of anything behind it.
+#[ test ]
+fn cancelling_behind_the_best_order_on_either_side()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.00", 5, 10 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 2, Side::Buy, "2.00", 5, 20 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 3, Side::Buy, "1.00", 5, 30 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 4, Side::Sell, "3.00", 5, 40 ) ), "fresh id in this test, must not already rest" );
+  assert!( book.insert( rest( 5, Side::Sell, "3.10", 5, 50 ) ), "fresh id in this test, must not already rest" );
+
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 2 ) ), Some( rest( 2, Side::Buy, "2.00", 5, 20 ) ), "second at the best bid" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 5 ) ), Some( rest( 5, Side::Sell, "3.10", 5, 50 ) ), "alone at a worse ask" );
+  assert_eq!( book.cancel( INSTRUMENT, OrderId( 3 ) ), Some( rest( 3, Side::Buy, "1.00", 5, 30 ) ), "alone at a worse bid" );
+
+  assert_eq!( ids( &book, Side::Buy ), vec![ 1 ] );
+  assert_eq!( ids( &book, Side::Sell ), vec![ 4 ] );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Buy ), 1, "the emptied worse bid level is gone" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ), 1, "the emptied worse ask level is gone" );
+}
+
 /// Cancel finds an order on either side without being told which.
 #[ test ]
 fn cancel_searches_both_sides()
@@ -174,14 +232,87 @@ fn insert_refuses_a_duplicate_order_id()
   assert_eq!( ids( &book, Side::Sell ), Vec::< u64 >::new(), "the rejected order never landed" );
 }
 
+/// Ids need not arrive in increasing order: one below the highest seated so
+/// far is still checked against what rests, and one that left may rest again.
+#[ test ]
+fn insert_refuses_a_duplicate_id_in_any_arrival_order()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 5, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 3, Side::Buy, "2.50", 5, 20 ) ), "a lower fresh id" );
+  assert!( !book.insert( rest( 3, Side::Sell, "3.00", 5, 30 ) ), "id 3 rests, below the highest id seen" );
+
+  assert!( book.cancel( INSTRUMENT, OrderId( 5 ) ).is_some() );
+  assert!( book.insert( rest( 5, Side::Buy, "2.50", 5, 40 ) ), "id 5 left the book" );
+}
+
+/// `insertable` answers as `insert` would, and counts the vacating id as
+/// gone.
+#[ test ]
+fn insertable_answers_as_insert_would()
+{
+  let mut book = Book::new();
+  assert!( book.insert( rest( 1, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( book.insert( rest( 2, Side::Buy, "2.50", 5, 20 ) ) );
+  let before = book.clone();
+
+  assert!( book.insertable( &rest( 3, Side::Sell, "3.00", 5, 30 ), None ) );
+  assert!( !book.insertable( &rest( 1, Side::Sell, "3.00", 5, 30 ), None ), "id 1 rests" );
+  assert!( book.insertable( &rest( 1, Side::Sell, "3.00", 5, 30 ), Some( OrderId( 1 ) ) ), "id 1 is leaving" );
+  assert!( !book.insertable( &rest( 2, Side::Sell, "3.00", 5, 30 ), Some( OrderId( 1 ) ) ), "id 2 is not" );
+
+  let mut nothing_left = rest( 1, Side::Buy, "2.50", 5, 30 );
+  nothing_left.remaining = Quantity::ZERO;
+  assert!( !book.insertable( &nothing_left, Some( OrderId( 1 ) ) ) );
+
+  assert_eq!( book, before, "nothing moved" );
+}
+
+/// Two books holding the same orders are equal, whatever ids came and went
+/// before.
+#[ test ]
+fn books_with_the_same_orders_are_equal_whatever_their_history()
+{
+  let mut churned = Book::new();
+  assert!( churned.insert( rest( 9, Side::Buy, "2.50", 5, 10 ) ) );
+  assert!( churned.insert( rest( 1, Side::Sell, "3.00", 5, 20 ) ) );
+  assert!( churned.cancel( INSTRUMENT, OrderId( 9 ) ).is_some() );
+
+  let mut fresh = Book::new();
+  assert!( fresh.insert( rest( 1, Side::Sell, "3.00", 5, 20 ) ) );
+
+  assert_eq!( churned, fresh );
+}
+
+/// An instrument whose last order left compares as one nothing ever rested
+/// on — whether the order was cancelled or consumed.
+///
+/// An emptied instrument keeps its slot, and equality compared the slots, so
+/// a book back to empty was not equal to a new one.
+#[ test ]
+fn an_emptied_instrument_leaves_no_trace_in_equality()
+{
+  let other = InstrumentId( 2 );
+
+  let mut cancelled = Book::new();
+  assert!( cancelled.insert( rest_on( other, 1, Side::Buy, "2.00", 5, 10 ) ) );
+  assert!( cancelled.cancel( other, OrderId( 1 ) ).is_some() );
+  assert_eq!( cancelled, Book::new() );
+
+  let mut consumed = Book::new();
+  assert!( consumed.insert( rest_on( other, 1, Side::Sell, "2.00", 5, 10 ) ) );
+  assert!( consumed.consume_best( other, Side::Sell, Quantity::from_int( 5 ).unwrap() ) );
+  assert_eq!( consumed, Book::new() );
+}
+
 /// Root Cause: `Book::insert` placed every `Resting` handed to it with no
 /// check that `remaining` was above zero, even though `Resting::remaining`'s
 /// own doc comment states the invariant "always greater than zero — a
 /// resting order with nothing left is removed rather than kept at zero."
 /// `consume_best` only ever removes a zero-remaining order from inside a
-/// `checked_sub` that just reached zero — a zero-remaining `Resting` seated
-/// directly by `insert` never passes through that arithmetic, so nothing
-/// ever evicts it.
+/// checked `remaining - taken` that just reached zero — a zero-remaining
+/// `Resting` seated directly by `insert` never passes through that arithmetic,
+/// so nothing ever evicts it.
 /// Why Not Caught: every `insert` call in this file builds its `Resting`
 /// through `rest(...)`, which always derives `remaining` from a positive
 /// `quantity` argument — none of them ever tried to seat a `Resting` whose
@@ -195,7 +326,7 @@ fn insert_refuses_a_duplicate_order_id()
 /// must enforce it, not assume it.
 /// Pitfall: a zero-remaining order that does get seated is not merely inert
 /// — it jams the book. `consume_best` subtracts `taken` from `remaining` via
-/// `checked_sub`, which underflows and returns `false` the moment `taken` is
+/// the checked `-`, which underflows and returns `false` the moment `taken` is
 /// positive against an already-zero `remaining`, so the phantom order is
 /// never evicted and sits at the front blocking every future match against
 /// that side.
@@ -208,6 +339,25 @@ fn insert_refuses_a_zero_remaining_order()
 
   assert!( !book.insert( nothing_left ), "a resting order with nothing left must never be seated" );
   assert!( book.is_empty(), "the refused insert must leave no trace" );
+}
+
+/// A resting order cannot have more left than it was placed for.
+///
+/// Seated, it would trade past its own size: `consume_best` takes from
+/// `remaining` and never looks at `order.quantity`.
+#[ test ]
+fn insert_refuses_more_remaining_than_the_order_holds()
+{
+  let mut book = Book::new();
+  let mut overfull = rest( 1, Side::Sell, "2.50", 5, 10 );
+  overfull.remaining = Quantity::from_int( 500 ).unwrap();
+
+  assert!( !book.insert( overfull ) );
+  assert!( book.is_empty() );
+
+  let mut whole = rest( 1, Side::Sell, "2.50", 5, 10 );
+  whole.remaining = whole.order.quantity;
+  assert!( book.insert( whole ), "exactly the order's quantity is fine" );
 }
 
 /// Consuming part of the best order keeps it at the front with less left.
@@ -235,6 +385,37 @@ fn a_fully_consumed_order_leaves_the_book()
   assert!( book.consume_best( INSTRUMENT, Side::Sell, Quantity::from_int( 10 ).unwrap() ) );
 
   assert_eq!( ids( &book, Side::Sell ), vec![ 2 ], "an emptied order is removed, not kept at zero" );
+}
+
+/// Takes `side`'s best order whole until the side is empty; the ids in the
+/// order they left.
+fn drain( book : &mut Book, side : Side ) -> Vec< u64 >
+{
+  let mut left = Vec::new();
+  while let Some( &best ) = book.best( INSTRUMENT, side )
+  {
+    assert!( book.consume_best( INSTRUMENT, side, best.remaining ) );
+    left.push( best.order.id.0 );
+  }
+  left
+}
+
+/// Emptying the best level hands the front to the next-best one, level after
+/// level, on both sides — the walk a large taker makes across prices.
+#[ test ]
+fn emptied_levels_hand_the_front_to_the_next_best()
+{
+  let mut book = Book::new();
+  for ( id, price ) in [ ( 1, "2.00" ), ( 2, "1.00" ), ( 3, "3.00" ) ]
+  {
+    assert!( book.insert( rest( id, Side::Sell, price, 1, id ) ) );
+    assert!( book.insert( rest( id + 10, Side::Buy, price, 1, id + 10 ) ) );
+  }
+
+  assert_eq!( drain( &mut book, Side::Sell ), vec![ 2, 1, 3 ], "asks leave lowest price first" );
+  assert_eq!( drain( &mut book, Side::Buy ), vec![ 13, 11, 12 ], "bids leave highest price first" );
+  assert_eq!( book.level_count( INSTRUMENT, Side::Sell ) + book.level_count( INSTRUMENT, Side::Buy ), 0, "no emptied level stays behind" );
+  assert!( book.is_empty() );
 }
 
 /// Consuming more than rests is refused rather than silently clamped.
@@ -354,4 +535,21 @@ fn orders_on_one_instrument_never_leak_into_another()
   // Cancelling by the right instrument works as normal.
   assert!( book.cancel( other, OrderId( 2 ) ).is_some() );
   assert_eq!( book.len(), 1 );
+}
+
+/// `account_rests` counts one account's orders across both sides of one
+/// instrument, and nothing on another instrument.
+#[ test ]
+fn account_rests_counts_both_sides_of_one_instrument()
+{
+  let mine = | resting : Resting | Resting { order : Order { account : AccountId( 9 ), ..resting.order }, ..resting };
+  let mut book = Book::new();
+  assert!( book.insert( mine( rest( 1, Side::Buy, "1.00", 1, 1 ) ) ) );
+  assert!( book.insert( mine( rest( 2, Side::Sell, "2.00", 1, 2 ) ) ) );
+  assert!( book.insert( rest( 3, Side::Buy, "1.00", 1, 3 ) ) );
+  assert!( book.insert( mine( rest_on( InstrumentId( 2 ), 4, Side::Buy, "1.00", 1, 4 ) ) ) );
+
+  assert_eq!( book.account_rests( INSTRUMENT, AccountId( 9 ) ), 2 );
+  assert_eq!( book.account_rests( INSTRUMENT, AccountId( 3 ) ), 1 );
+  assert_eq!( book.account_rests( INSTRUMENT, AccountId( 7 ) ), 0 );
 }

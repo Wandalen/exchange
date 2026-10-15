@@ -8,9 +8,9 @@
 
 use exchange_core::
 {
-  AccountId, AssetId, CancelCause, Consumer, EscrowError, Event, EventKind, Exchange, ExchangeError, InboundCmd,
-  InstrumentId, Money, Obligation, Order, OrderId, Producer, Quantity, Receipt, RejectReason, Resting,
-  SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, verify,
+  AccountId, AssetId, BookCaps, CancelCause, ClientOrderId, Consumer, DepthError, Entry, EscrowError, Event, EventKind, Exchange, ExchangeError, HaltError, InboundCmd,
+  InstrumentId, Money, Obligation, Order, OrderId, OrderRef, PostingAsset, Price, Producer, Quantity, Receipt, RejectReason, Resting,
+  SelfMatchPolicy, Sequence, Side, StepOutcome, Tif, inbound_flush, inbound_ring, postings, verify,
 };
 
 /// The one instrument every test in this suite submits against —
@@ -24,17 +24,32 @@ fn money( text : &str ) -> Money
   Money::parse( text ).unwrap()
 }
 
+fn price( text : &str ) -> Price
+{
+  Price::parse( text ).unwrap()
+}
+
 fn qty( whole : i64 ) -> Quantity
 {
   Quantity::from_int( whole ).unwrap()
 }
 
-/// An exchange with two funded participants.
+/// Registers [`INSTRUMENT`] on the finest grid `exact_arith` represents, so
+/// every price and quantity fits — the grid is not what these tests probe.
+fn instrument_register( exchange : &mut Exchange )
+{
+  let tick = Price::from_minor( 1 ).unwrap();
+  let lot = Quantity::from_minor( 1 ).unwrap();
+  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), tick, lot ).unwrap();
+}
+
+/// An exchange with two funded participants and [`INSTRUMENT`] registered.
 fn market() -> Exchange
 {
   let mut exchange = Exchange::new();
   exchange.open_account( AccountId( 1 ), money( "1000" ), qty( 100 ) ).unwrap();
   exchange.open_account( AccountId( 2 ), money( "1000" ), qty( 100 ) ).unwrap();
+  instrument_register( &mut exchange );
   exchange
 }
 
@@ -53,13 +68,13 @@ fn submit
   consumer : &mut Consumer< '_, InboundCmd >,
   account : AccountId,
   side : Side,
-  price : Money,
+  price : Price,
   quantity : Quantity,
 ) -> Result< Receipt, ExchangeError >
 {
-  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc };
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price, quantity, tif : Tif::Gtc, client : None };
   let resting = Resting { order, remaining : quantity, arrival : Sequence( 0 ) };
-  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  let pushed = inbound_flush( producer, &[ InboundCmd::Place( resting ) ] );
   assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
 
   match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
@@ -86,13 +101,32 @@ fn submit_tif
 ) -> Result< Receipt, ExchangeError >
 {
   let resting = Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) };
-  let pushed = inbound_flush( producer, [ InboundCmd::Place( resting ) ] );
+  let pushed = inbound_flush( producer, &[ InboundCmd::Place( resting ) ] );
   assert_eq!( pushed, 1, "the ring must accept a single command with headroom to spare" );
 
   match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
   {
     Some( StepOutcome::Placed( result ) ) => result,
     other => panic!( "submit_tif() only ever pushes Place — got {other:?}" ),
+  }
+}
+
+/// Push one `Cancel` through the ring and apply it: the only way to cancel.
+fn cancel
+(
+  exchange : &mut Exchange,
+  producer : &mut Producer< '_, InboundCmd >,
+  consumer : &mut Consumer< '_, InboundCmd >,
+  account : AccountId,
+  order : impl Into< OrderRef >,
+) -> Result< Quantity, ExchangeError >
+{
+  let order = order.into();
+  assert_eq!( inbound_flush( producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, account, order } ] ), 1 );
+  match exchange.exchange_step( consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
+  {
+    Some( StepOutcome::Cancelled( result ) ) => result,
+    other => panic!( "cancel() only pushes Cancel — got {other:?}" ),
   }
 }
 
@@ -110,16 +144,16 @@ fn t11_one_order_crosses_the_whole_family()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
   assert!( resting.trades.is_empty(), "there was nothing to cross" );
   assert_eq!( resting.resting, qty( 10 ), "so all of it rests" );
   assert_eq!( exchange.book().len(), 1 );
 
-  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
 
   assert_eq!( taking.trades.len(), 1 );
   assert_eq!( taking.trades[ 0 ].quantity, qty( 4 ) );
-  assert_eq!( taking.trades[ 0 ].price, money( "2.50" ) );
+  assert_eq!( taking.trades[ 0 ].price, price( "2.50" ) );
   assert_eq!( taking.trades[ 0 ].maker, resting.order );
   assert!( taking.is_complete() );
 
@@ -144,9 +178,9 @@ fn an_order_that_crosses_nothing_still_rests()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
 
-  let through = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.49" ), qty( 4 ) ).unwrap();
+  let through = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.49" ), qty( 4 ) ).unwrap();
 
   assert!( through.trades.is_empty() );
   assert_eq!( through.resting, qty( 4 ) );
@@ -166,10 +200,10 @@ fn an_unfunded_order_never_reaches_the_book()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
   let before = exchange.book().len();
 
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "500.00" ), qty( 10 ) );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "500.00" ), qty( 10 ) );
 
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::InsufficientFunds ) ) );
   assert_eq!( exchange.book().len(), before, "the book is exactly as it was" );
@@ -185,7 +219,7 @@ fn a_zero_quantity_order_is_refused()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), Quantity::ZERO );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "2.50" ), Quantity::ZERO );
 
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ZeroQuantity ) ) );
   assert_eq!( exchange.escrow().reservation_count(), 0 );
@@ -200,7 +234,7 @@ fn an_unknown_account_is_refused_by_name()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 99 ), Side::Buy, money( "2.50" ), qty( 1 ) );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 99 ), Side::Buy, price( "2.50" ), qty( 1 ) );
 
   assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::UnknownAccount ) ) );
 }
@@ -214,10 +248,10 @@ fn a_cancel_through_the_facade_returns_the_reservation()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 10 ) ).unwrap();
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "2.50" ), qty( 10 ) ).unwrap();
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), money( "25" ) );
 
-  let withdrawn = exchange.cancel( resting.order ).unwrap();
+  let withdrawn = cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), resting.order ).unwrap();
 
   assert_eq!( withdrawn, qty( 10 ) );
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.available(), money( "1000" ) );
@@ -230,8 +264,11 @@ fn a_cancel_through_the_facade_returns_the_reservation()
 fn cancelling_an_absent_order_is_reported()
 {
   let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
 
-  assert_eq!( exchange.cancel( OrderId( 42 ) ), Err( ExchangeError::NotResting( OrderId( 42 ) ) ) );
+  assert_eq!( cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), OrderId( 42 ) ), Err( ExchangeError::NotResting( OrderRef::Id( OrderId( 42 ) ) ) ) );
 }
 
 /// A filled order cannot then be cancelled — it is not resting.
@@ -243,10 +280,10 @@ fn a_filled_order_cannot_be_cancelled()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
-  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
 
-  assert!( matches!( exchange.cancel( taking.order ), Err( ExchangeError::NotResting( _ ) ) ) );
+  assert!( matches!( cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), taking.order ), Err( ExchangeError::NotResting( _ ) ) ) );
 }
 
 /// Every state change emitted exactly one event, and the positions are a gapless run.
@@ -262,10 +299,10 @@ fn the_event_stream_numbers_every_event_without_a_gap()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.50" ), Quantity::ZERO ).unwrap_err();
-  exchange.cancel( resting.order ).unwrap();
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), Quantity::ZERO ).unwrap_err();
+  cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), resting.order ).unwrap();
 
   let positions : Vec< u64 > = exchange.events().iter().map( | event | event.sequence.0 ).collect();
   assert_eq!( positions, ( 0..positions.len() as u64 ).collect::< Vec< _ > >() );
@@ -300,8 +337,8 @@ fn acceptance_records_what_it_reserved_and_cancel_records_what_it_returned()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 10 ) ).unwrap();
-  exchange.cancel( resting.order ).unwrap();
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "2.50" ), qty( 10 ) ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), resting.order ).unwrap();
 
   let reserved = exchange.events().iter().find_map( | event | match event.kind
   {
@@ -331,7 +368,7 @@ fn a_rejection_leaves_only_its_own_event_behind()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "500.00" ), qty( 100 ) ).unwrap_err();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "500.00" ), qty( 100 ) ).unwrap_err();
 
   assert!( exchange.book().is_empty() );
   assert_eq!( exchange.escrow().reservation_count(), 0 );
@@ -352,16 +389,69 @@ fn the_posting_log_balances_under_the_conservation_auditor()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 4 ) ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "3.00" ), qty( 8 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "3.00" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3.00" ), qty( 8 ) ).unwrap();
 
   let postings = exchange.postings().unwrap();
-  assert_eq!( postings.len(), 4, "two trades, two postings each" );
+  assert_eq!( postings.len(), 8, "two trades, a cash pair and an asset pair each" );
 
   let report = verify( &postings ).unwrap();
   assert!( report.is_balanced(), "{report}" );
-  assert_eq!( report.discrepancy_minor(), 0 );
+  assert_eq!( report.discrepancy_minor( &PostingAsset::Cash ), Some( 0 ) );
+  assert_eq!( report.discrepancy_minor( &PostingAsset::Asset ), Some( 0 ), "the asset side is audited, not absent" );
+}
+
+/// A trade moves cash from buyer to seller and the asset the other way.
+///
+/// The audit above cannot see either direction: a pair posted the wrong way
+/// round, or both its legs posted to one account, still nets to zero.
+#[ test ]
+fn a_trade_posts_cash_to_the_seller_and_quantity_to_the_buyer()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
+
+  let ten = Money::parse( "10" ).unwrap().minor();
+  let four = qty( 4 ).minor();
+
+  assert_eq!( exchange.postings().unwrap(),
+  [
+    Entry::new( AccountId( 2 ), PostingAsset::Cash, -ten ),
+    Entry::new( AccountId( 1 ), PostingAsset::Cash, ten ),
+    Entry::new( AccountId( 2 ), PostingAsset::Asset, four ),
+    Entry::new( AccountId( 1 ), PostingAsset::Asset, -four ),
+  ] );
+}
+
+/// Draining the stream takes its trades out of [`Exchange::postings`], and
+/// the drained batch still audits on its own.
+///
+/// Every trade's postings net to zero by themselves, so a log missing trades
+/// balances just as well as a whole one. The audit can only cover what it is
+/// given; draining hands the trades, and their audit, to the caller.
+#[ test ]
+fn a_drained_batch_audits_on_its_own()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
+  let before = exchange.postings().unwrap();
+
+  let drained = exchange.event_drain();
+
+  assert!( exchange.postings().unwrap().is_empty(), "the stream no longer holds the trade" );
+  assert_eq!( postings( &drained ).unwrap(), before );
+  assert!( verify( &before ).unwrap().is_balanced() );
 }
 
 /// A sweep across two price levels pays each its own price.
@@ -377,10 +467,10 @@ fn a_sweep_pays_each_level_its_own_price()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 4 ) ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "3.00" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "3.00" ), qty( 4 ) ).unwrap();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "3.00" ), qty( 8 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3.00" ), qty( 8 ) ).unwrap();
 
   assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.available(), money( "978" ) );
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.available(), money( "1022" ) );
@@ -400,9 +490,9 @@ fn replaying_the_same_submissions_from_empty_gives_the_same_result()
     let mut ends = ring.ends();
     let ( mut producer, mut consumer ) = ends.split();
 
-    submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.00" ), qty( 3 ) ).unwrap();
-    submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 3 ) ).unwrap();
-    let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2.00" ), qty( 5 ) ).unwrap();
+    submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.00" ), qty( 3 ) ).unwrap();
+    submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), qty( 3 ) ).unwrap();
+    let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.00" ), qty( 5 ) ).unwrap();
     let resting : Vec< _ > = exchange.book().iter().map( | r | ( r.order.id, r.remaining ) ).collect();
     ( taking.trades, resting, exchange.postings().unwrap() )
   };
@@ -426,10 +516,10 @@ fn replaying_the_same_submissions_from_empty_gives_the_same_result()
 /// `submit`'s own doc asserted `ExchangeError::Escrow` was unreachable here, so
 /// no test looked for it.
 ///
-/// **Fix Applied.** `exchange_match::settleable` checks both notionals
-/// settlement will compute — the trade price, and for a taking buy its own
-/// limit as well — before `consume_best`. An unsettleable fill breaks the loop,
-/// reaching the already-documented "no cross" outcome.
+/// **Fix Applied.** `exchange_match::settleable` checks the notional
+/// settlement will compute exactly — the trade price — before `consume_best`.
+/// An unsettleable fill breaks the loop, reaching the already-documented "no
+/// cross" outcome.
 ///
 /// **Prevention.** The check sits before the irreversible step, matching the
 /// submission path's own reserve-before-match rule. Anything that later widens
@@ -450,7 +540,7 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
   // One minor unit of asset at 0.5 — worth 0.0000005, which MONEY_SCALE = 6
   // cannot express. Accepted, because a sell reserves the asset, not a price.
   let ask = submit
-  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "0.5" ), Quantity::from_minor( 1 ).unwrap() )
+  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "0.5" ), Quantity::from_minor( 1 ).unwrap() )
   .unwrap();
   assert_eq!( exchange.book().len(), 1 );
 
@@ -459,7 +549,7 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
 
   // Crosses on price, and must still decline: the only available fill is that
   // same one minor unit.
-  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "0.5" ), qty( 1 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "0.5" ), qty( 1 ) ).unwrap();
   assert!( taking.trades.is_empty(), "an unpayable fill must not be generated" );
 
   // The ask survived. Before the fix it was consumed with nothing paid for it.
@@ -471,43 +561,70 @@ fn a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact()
   // unrecoverable before, since `cancel` on a vanished order returns
   // `NotResting` and no other release path exists.
   assert!( matches!( exchange.escrow().reserved_for( ask.order ), Some( Obligation::Asset( _ ) ) ) );
-  exchange.cancel( ask.order ).unwrap();
+  cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), ask.order ).unwrap();
   assert_eq!( exchange.escrow().reserved_for( ask.order ), None );
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().asset.available(), qty( 100 ) );
 }
 
-/// The second notional settlement computes is checked too.
+/// A taking buy that can pay for a fill exactly takes it, rather than resting
+/// above the ask.
 ///
-/// A taking buy is handed back the difference between its own limit and the
-/// maker's price, which is a notional at the *taker's* price. Checking only the
-/// trade price leaves this half reachable: 1.0 × one minor unit is exact, 1.5 ×
-/// one minor unit is not, so this fill passes the first check and fails the
-/// second.
+/// The facade side of `exchange_escrow`'s
+/// `a_partial_fill_settles_when_only_the_limit_notional_is_inexact`.
+///
+/// # Root Cause
+///
+/// `settle` computed the buy's `limit × quantity` exactly, and `settleable`
+/// mirrored it. The fill costs exactly 0.000001, but 0.5 × 0.000005 is
+/// inexact, so the fill was declined and the bid at 0.5 rested above the ask
+/// at 0.2.
+///
+/// # Why Not Caught
+///
+/// `a_taking_buys_own_limit_is_checked_not_just_the_trade_price` pinned the
+/// decline as correct. It asserted no trade and two orders on the book, not
+/// that the two crossed.
+///
+/// # Fix Applied
+///
+/// `settle` keeps `limit × unfilled` rounded down for the rest of the buy, so
+/// only the price paid has to be exact, and `settleable` checks only that.
+///
+/// # Prevention
+///
+/// A declined fill leaves the book crossed; a test of one asserts what rests.
+///
+/// # Pitfall
+///
+/// A fill whose price paid is inexact is still declined, and still leaves the
+/// book crossed — see `a_fill_whose_notional_is_inexact_leaves_the_book_and_escrow_intact`.
 #[ test ]
-fn a_taking_buys_own_limit_is_checked_not_just_the_trade_price()
+fn a_taking_buy_does_not_rest_across_an_ask_it_can_pay_for()
 {
   let mut exchange = market();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit
-  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), Quantity::from_minor( 1 ).unwrap() )
+  let ask = submit
+  ( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "0.2" ), Quantity::from_minor( 5 ).unwrap() )
   .unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "0.5" ), qty( 2 ) ).unwrap();
 
-  let asset_before = exchange.escrow().total_asset().unwrap();
-  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "1.50" ), qty( 1 ) ).unwrap();
+  assert_eq!( taking.trades.len(), 1, "the bid crossed the ask without taking it" );
+  assert_eq!( taking.trades[ 0 ].maker, ask.order );
+  assert_eq!( exchange.book().len(), 1, "only the rest of the bid is left" );
 
-  assert!( taking.trades.is_empty(), "the improvement notional is inexpressible" );
-  assert_eq!( exchange.book().len(), 2 );
-  assert_eq!( exchange.escrow().total_asset().unwrap(), asset_before );
+  // Cancelling the rest returns everything but the 0.000001 paid.
+  cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), taking.order ).unwrap();
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().cash.available(), money( "999.999999" ) );
 }
 
 /// A negative price is refused before it can rest, on both sides.
 ///
 /// # Root Cause
 ///
-/// `Price` is `Money`, which is signed, and `submit` validated only the
+/// `Price` is signed, and `submit` validated only the
 /// quantity. The two sides then failed differently, which is why one guard in
 /// escrow was not enough. A *buy* at a negative price has a negative notional,
 /// so escrow sees the sign and (since `EscrowError::NegativeAmount`) refuses
@@ -556,7 +673,7 @@ fn a_negative_price_is_refused_before_it_can_rest()
     let mut ends = ring.ends();
     let ( mut producer, mut consumer ) = ends.split();
 
-    let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), side, money( "-2.00" ), qty( 10 ) );
+    let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), side, price( "-2.00" ), qty( 10 ) );
 
     assert_eq!
     (
@@ -587,107 +704,68 @@ fn a_negative_price_is_refused_before_it_can_rest()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  let free = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, Money::ZERO, qty( 10 ) );
+  let free = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, Price::ZERO, qty( 10 ) );
   assert!( free.is_ok(), "{free:?}" );
   assert_eq!( exchange.book().len(), 1 );
 }
 
-/// An order refused for a genuinely representable-ceiling reason is reported
-/// as such, not folded into `RejectReason::InsufficientFunds` when the
-/// account's funds are, in fact, ample.
+/// An order refused for a representable-ceiling reason is reported as such,
+/// not folded into `RejectReason::InsufficientFunds` when the funds are, in
+/// fact, ample.
 ///
 /// # Root Cause
 ///
 /// `Exchange::reason_for` mapped every `EscrowError` other than
 /// `UnknownAccount`/`Obligation` to `RejectReason::InsufficientFunds`, on the
-/// documented claim that nothing else was reachable from `submit`'s call to
-/// `Escrow::reserve`. `Holding::reserve` checks `available` and `reserved`
-/// independently, and only the first of those is a funds check — the second,
-/// `reserved.checked_plus(amount)`, is a ceiling check on the account's
-/// *pooled* commitment across every one of its live orders, and it can fail
-/// on its own.
+/// claim that nothing else was reachable. `EscrowError::Arithmetic` was: a
+/// ceiling refusal, with the account's funds sufficient.
 ///
 /// # Why Not Caught
 ///
-/// Every account in the existing suite holds one reservation at a time, so
-/// `available` and `reserved` never drift far enough apart to matter. Seeing
-/// them diverge needs an account that both (a) already carries one very large
-/// reservation, and (b) separately earns fresh, genuinely spendable funds —
-/// settling as a seller — before placing a second small order: `available`
-/// comfortably covers the second order, but folding it into `reserved`
-/// alongside the first commitment does not fit the ceiling.
+/// No account in the suite came near the ceiling.
 ///
 /// # Fix Applied
 ///
-/// `reason_for` now maps `EscrowError::Arithmetic` to its own
+/// `reason_for` maps `EscrowError::Arithmetic` to its own
 /// `RejectReason::ReservationUnrepresentable` and matches every remaining
-/// `EscrowError` variant exhaustively (no wildcard), so a future variant
-/// reaching `reserve` has to be given a considered reason rather than
-/// silently inheriting the funds-shortfall bucket.
+/// variant exhaustively, so a new one needs a considered reason.
 ///
 /// # Prevention
 ///
-/// A catch-all reason is a claim that every variant it swallows is either
-/// equivalent or unreachable. That claim has an expiry date the moment a new
-/// variant is added to the error enum it swallows from — verify it again
-/// rather than assuming the bundle still holds.
+/// A catch-all reason claims every variant it swallows is equivalent or
+/// unreachable; re-check that claim whenever the enum grows.
 ///
 /// # Pitfall
 ///
-/// The two ceilings look identical from the caller's side — both refuse an
-/// order that would otherwise have gone through — but they call for different
-/// responses: a real shortfall needs more funds, a pooled-reservation ceiling
-/// needs fewer *simultaneous* live orders on the account, and conflating them
-/// sends the caller looking for the wrong fix.
+/// This first surfaced as `reserve`'s pooled `reserved` check failing beside
+/// ample `available`. Escrow now keeps room under the ceiling for what an
+/// order brings in, so that state is refused where it would start — at the
+/// ask whose proceeds have no room — and the refusal still has to read as a
+/// ceiling, not a shortfall.
 #[ test ]
-fn a_reservation_ceiling_breach_is_distinguished_from_a_funds_shortfall()
+fn a_ceiling_breach_is_distinguished_from_a_funds_shortfall()
 {
   let mut exchange = Exchange::new();
-  // Account 1 opens holding the whole-unit ceiling in cash outright, plus
-  // enough asset to sell later.
+  instrument_register( &mut exchange );
+  // Account 1 holds the whole-unit ceiling in cash, plus asset to sell.
   exchange.open_account( AccountId( 1 ), money( "9000000000" ), qty( 600 ) ).unwrap();
-  exchange.open_account( AccountId( 2 ), money( "2000" ), qty( 0 ) ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  // Order 1: a huge resting buy at $1 that reserves nearly all of account 1's
-  // cash — 500 minor units short of the whole-unit ceiling in minor units.
-  let huge = Quantity::from_minor( 8_999_999_999_999_500 ).unwrap();
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1" ), huge ).unwrap();
-
-  // Order 2: account 1 separately rests a sell for 500 of the asset, priced
-  // at $2 — above order 1's own $1 buy, so the two do not cross each other
-  // (which would otherwise trigger this account's own self-match policy).
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2" ), qty( 500 ) ).unwrap();
-
-  // Account 2 crosses it at $2, paying account 1 $1000 that account 1's
-  // original cash deposit never budgeted for — fresh, genuinely spendable
-  // funds landing in `available` on top of the huge reservation already
-  // sitting in `reserved`.
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2" ), qty( 500 ) ).unwrap();
-
-  let account_before = *exchange.escrow().account( AccountId( 1 ) ).unwrap();
-  assert_eq!( account_before.cash.reserved().minor(), 8_999_999_999_999_500, "sanity: still holding order 1's reservation" );
-  assert!
-  (
-    account_before.cash.available() > money( "0.001" ),
-    "far more than order 3 costs is genuinely spendable: {:?}", account_before.cash.available(),
-  );
-
+  let account_1_before = *exchange.escrow().account( AccountId( 1 ) ).unwrap();
   let events_before = exchange.events().len();
 
-  // Order 3: a vanishingly small buy — $0.001 — well within `available`, but
-  // `reserved` has only 500 minor units of headroom left before the ceiling.
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1000" ), Quantity::from_minor( 1 ).unwrap() );
+  // Account 1 holds the 500 it sells; its cash has no room for the $1000.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 500 ) );
 
   assert_eq!
   (
     refused,
     Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ),
-    "funds are sufficient; only the pooled reservation ceiling is breached",
+    "the asset is there; only account 1's ceiling is breached",
   );
-  assert_eq!( *exchange.escrow().account( AccountId( 1 ) ).unwrap(), account_before, "a rejected order moves nothing" );
+  assert_eq!( *exchange.escrow().account( AccountId( 1 ) ).unwrap(), account_1_before, "a rejected order moves nothing" );
   assert_eq!( exchange.events().len(), events_before + 1, "exactly the rejection event was recorded" );
   assert!
   (
@@ -721,7 +799,7 @@ fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
   // 0.3 x 0.000001 = 0.0000003 — a seventh decimal digit `Money` (scale 6)
   // cannot hold. The account has ample funds; the amount itself cannot be
   // expressed regardless.
-  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "0.3" ), Quantity::from_minor( 1 ).unwrap() );
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "0.3" ), Quantity::from_minor( 1 ).unwrap() );
 
   assert_eq!
   (
@@ -733,118 +811,129 @@ fn an_inexact_notional_is_refused_as_unrepresentable_not_as_a_shortfall()
   assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), Money::ZERO, "nothing was reserved" );
 }
 
-/// A cancel whose escrow release fails does not remove the order from the
-/// book first — the release has to actually succeed before that mutation
-/// commits, not after.
+/// A resting order stays cancellable however close its account sits to the
+/// ceiling: proceeds that would leave no room to return the order's
+/// reservation are refused instead.
 ///
 /// # Root Cause
 ///
-/// `Exchange::cancel` called the infallible, order-removing
-/// `self.book.cancel(id)` one statement before the fallible
-/// `self.escrow.release(...)` — the same commit-before-validate shape as
-/// `Escrow::release`'s own already-fixed bug, one level higher in the call
-/// stack. `escrow.release` can refuse an id `book.cancel` just confirmed
-/// rests: concretely `EscrowError::Arithmetic`, when the owning account's
-/// `available` has grown — via unrelated trades settling after this order
-/// was accepted — close enough to the representable ceiling that returning
-/// this order's own reservation would breach it. On that refusal `cancel`
-/// returned `Err`, but the order was already gone from the book, with no
-/// event and no id left for any future retry to name.
+/// Escrow checked a deposit or proceeds against `available` alone. A sale
+/// filling `available` to the ceiling beside a resting buy's reservation left
+/// `release` no room to return it, so `cancel` failed with
+/// `EscrowError::Arithmetic`. (`cancel` once also removed the order before
+/// that release, stranding it; `escrow_port_test`'s
+/// `a_cancel_whose_release_fails_leaves_the_order_resting` pins that ordering
+/// with a scripted escrow, since the real one no longer refuses a release.)
 ///
 /// # Why Not Caught
 ///
-/// Every existing cancel test releases a reservation into an account with
-/// ample headroom below the ceiling. Seeing `release` fail needs an account
-/// that reserved for one order early, then separately earned fresh,
-/// genuinely spendable funds — settling as the maker on an unrelated,
-/// higher-priced resting order — until `available` alone sits at the
-/// ceiling, with the first order's own reservation still untouched on top of
-/// it.
+/// Every cancel test released into an account with ample headroom.
 ///
 /// # Fix Applied
 ///
-/// `cancel` now looks up the resting order's account through `Book::iter`
-/// (read-only) first, calls `escrow.release` before the book is touched at
-/// all, and only removes the order once that release has actually
-/// succeeded — the same validate-before-commit ordering `Escrow::release`
-/// itself already uses internally.
+/// `Holding::receive` refuses an amount that would carry `available +
+/// reserved` past the ceiling. An ask keeps room for its proceeds, so the one
+/// here is refused when placed.
 ///
 /// # Prevention
 ///
-/// Whenever one step is infallible and irreversible and the next is
-/// fallible, the fallible step has to run first, never the reverse — so a
-/// `?` short-circuit never leaves the first step's effect stranded with
-/// nothing left to undo it.
+/// Bound the sum the later edge relies on, where the sum grows.
 ///
 /// # Pitfall
 ///
-/// The reservation itself was never corrupted by this bug — `Escrow::release`
-/// keeps the ledger entry and the account's `reserved` balance untouched on
-/// its own failure, per its own already-fixed ordering. What was lost is the
-/// *order*: once `book.cancel` had already removed it, no id remained for a
-/// future retry to name, so an otherwise perfectly intact reservation became
-/// permanently unreachable through the public API the moment the account's
-/// balance no longer had room to absorb it.
+/// Refusing the ask is the cost: an account at the ceiling cannot offer to
+/// sell until it spends or withdraws a reservation.
 #[ test ]
-fn a_cancel_that_fails_to_release_leaves_the_order_resting()
+fn a_resting_order_stays_cancellable_at_the_ceiling()
 {
   let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
   // Account 1 starts three cash units short of the whole-unit ceiling, plus
-  // enough asset to sell later.
+  // asset to sell.
   exchange.open_account( AccountId( 1 ), money( "8999999997" ), qty( 10 ) ).unwrap();
-  exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  // Order 1: a small resting buy that reserves 1 unit of cash — the
-  // reservation this test tries, and fails, to release.
-  let order_1 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
-  assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.reserved(), money( "1" ) );
+  // A small resting buy reserving 1.
+  let order_1 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1" ), qty( 1 ) ).unwrap();
 
-  // Order 2: account 1 separately rests a sell for 2 of the asset, priced
-  // above order 1's own $1 buy so the two do not cross each other (which
-  // would otherwise trigger this account's own self-match policy).
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2" ), qty( 2 ) ).unwrap();
-
-  // Account 2 crosses it at $2, paying account 1 exactly the 4 cash units
-  // that bring `available` to precisely the whole-unit ceiling — fresh,
-  // genuinely spendable funds landing on top of order 1's reservation, still
-  // sitting untouched in `reserved`.
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "2" ), qty( 2 ) ).unwrap();
+  // A sell of 2 at $2: its $4 would carry account 1's cash one unit past the
+  // ceiling.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) );
+  assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ) );
 
   let account = exchange.escrow().account( AccountId( 1 ) ).unwrap();
-  assert_eq!( account.cash.available(), money( "9000000000" ), "sanity: available sits exactly at the ceiling" );
-  assert_eq!( account.cash.reserved(), money( "1" ), "sanity: order 1's reservation is still untouched" );
-
-  // Cancelling order 1 would return its 1 unit to `available` — one more
-  // than the ceiling allows.
-  let first = exchange.cancel( order_1.order );
-  assert_eq!( first, Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
-
-  // The fix: order 1 is still resting, not silently gone. A second attempt
-  // sees the exact same order and fails the exact same way — proof nothing
-  // was stranded by the first attempt.
-  assert!
-  (
-    exchange.book().iter().any( | resting | resting.order.id == order_1.order ),
-    "order 1 must still rest after a release failure",
-  );
-  let second = exchange.cancel( order_1.order );
-  assert_eq!( second, first, "a retry sees the same order and fails the same way, not `NotResting`" );
-
-  // Escrow itself is untouched by either attempt.
-  let account = exchange.escrow().account( AccountId( 1 ) ).unwrap();
-  assert_eq!( account.cash.available(), money( "9000000000" ) );
+  assert_eq!( account.cash.available(), money( "8999999996" ), "no proceeds landed" );
   assert_eq!( account.cash.reserved(), money( "1" ) );
-  assert_eq!( exchange.escrow().reserved_for( order_1.order ), Some( Obligation::Cash( money( "1" ) ) ) );
 
-  // No cancellation event was ever recorded for order 1.
-  assert!
-  (
-    !exchange.events().iter().any( | event | matches!( event.kind, EventKind::OrderCancelled { .. } ) ),
-    "a failed release must not be reported as a completed cancellation",
-  );
+  assert_eq!( cancel( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), order_1.order ), Ok( qty( 1 ) ) );
+  assert_eq!( exchange.escrow().account( AccountId( 1 ) ).unwrap().cash.available(), money( "8999999997" ) );
+  assert_eq!( exchange.escrow().reserved_for( order_1.order ), None );
+}
+
+/// One account at the ceiling does not stop everyone else trading.
+///
+/// Account 1 cannot take proceeds, so its ask cannot be filled. Account 3's
+/// ask behind it can, and a buy crossing both is not refused for account 1's
+/// sake.
+#[ test ]
+fn a_maker_at_the_ceiling_does_not_block_a_buy_other_makers_can_fill()
+{
+  let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
+  exchange.open_account( AccountId( 1 ), money( "8999999997" ), qty( 10 ) ).unwrap();
+  exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
+  exchange.open_account( AccountId( 3 ), Money::ZERO, qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  // Account 1: an ask of 2 at $2 whose $4 of proceeds would carry its cash
+  // past the ceiling, refused before it can rest. Account 3: an ask of 2 at $3.
+  let refused = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) );
+  assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::ReservationUnrepresentable ) ) );
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Sell, price( "3" ), qty( 2 ) ).unwrap();
+
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3" ), qty( 2 ) );
+
+  let taking = taking.expect( "account 3 can fill the whole buy" );
+  assert!( taking.is_complete() );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().asset.available(), qty( 2 ) );
+  assert_eq!( exchange.escrow().account( AccountId( 3 ) ).unwrap().cash.available(), money( "6" ) );
+}
+
+/// Same, when account 1 would reach the ceiling only after its ask rests.
+///
+/// A check at placement passes the ask; the deposit after it would leave no
+/// room for its proceeds, and is refused.
+#[ test ]
+fn a_maker_reaching_the_ceiling_after_it_rests_does_not_block_a_buy()
+{
+  let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
+  exchange.open_account( AccountId( 1 ), money( "1000" ), qty( 10 ) ).unwrap();
+  exchange.open_account( AccountId( 2 ), money( "1000" ), Quantity::ZERO ).unwrap();
+  exchange.open_account( AccountId( 3 ), Money::ZERO, qty( 10 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  // Account 1: an ask of 2 at $2, with room for its $4 when placed. Account 3:
+  // an ask of 2 at $3.
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2" ), qty( 2 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Sell, price( "3" ), qty( 2 ) ).unwrap();
+  // Would take account 1 to $8999999997, $3 short of the ceiling: into the
+  // room its ask keeps for $4.
+  let deposit = exchange.open_account( AccountId( 1 ), money( "8999998997" ), Quantity::ZERO );
+  assert_eq!( deposit, Err( ExchangeError::Escrow( EscrowError::Arithmetic ) ) );
+
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "3" ), qty( 2 ) );
+
+  let taking = taking.expect( "the buy can be filled in full" );
+  assert!( taking.is_complete() );
+  assert_eq!( taking.trades[ 0 ].price, price( "2" ), "account 1's ask, at the front, filled it" );
+  assert_eq!( exchange.escrow().account( AccountId( 2 ) ).unwrap().asset.available(), qty( 2 ) );
 }
 
 /// A crossing whose second trade cannot settle commits nothing at all — not
@@ -907,6 +996,7 @@ fn a_cancel_that_fails_to_release_leaves_the_order_resting()
 fn a_crossing_whose_second_trade_cannot_settle_commits_nothing()
 {
   let mut exchange = Exchange::new();
+  instrument_register( &mut exchange );
   // Account 1 starts one cash unit short of the whole-unit ceiling, plus
   // enough asset to sell into two separate trades.
   exchange.open_account( AccountId( 1 ), money( "8999999999" ), qty( 10 ) ).unwrap();
@@ -919,14 +1009,14 @@ fn a_crossing_whose_second_trade_cannot_settle_commits_nothing()
   // Two resting buys at the same price, account 2 first — so `cross`
   // matches account 2's trade first, landing account 1's cash exactly at the
   // ceiling, and account 3's trade second, one unit past it.
-  let buy_2 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
-  let buy_3 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Buy, money( "1" ), qty( 1 ) ).unwrap();
+  let buy_2 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "1" ), qty( 1 ) ).unwrap();
+  let buy_3 = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 3 ), Side::Buy, price( "1" ), qty( 1 ) ).unwrap();
   assert_eq!( exchange.book().side( INSTRUMENT, Side::Buy ).count(), 2, "sanity: both rest before the crossing sell arrives" );
 
   let events_before = exchange.events().len();
 
   // One sell, crossing both — the crossing this bug needs.
-  let result = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1" ), qty( 2 ) );
+  let result = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1" ), qty( 2 ) );
   assert_eq!
   (
     result,
@@ -959,7 +1049,7 @@ fn a_crossing_whose_second_trade_cannot_settle_commits_nothing()
   );
 
   // A retry sees the identical, still-untouched state and fails the same way.
-  let retry = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1" ), qty( 2 ) );
+  let retry = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1" ), qty( 2 ) );
   assert_eq!( retry, result, "a retry fails the same way, not differently, from an already-corrupted state" );
 }
 
@@ -1013,8 +1103,8 @@ fn a_self_match_cancelled_order_is_not_reported_complete()
   // Account 1 rests a sell, then crosses its own resting order — the
   // hardcoded `SelfMatchPolicy::CancelIncoming` withdraws the incoming buy's
   // remainder whole, since the only liquidity it could take is its own.
-  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "2.50" ), qty( 10 ) ).unwrap();
-  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, money( "2.50" ), qty( 4 ) ).unwrap();
+  let resting = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "2.50" ), qty( 4 ) ).unwrap();
 
   assert!( taking.trades.is_empty(), "a self-cross never trades" );
   assert_eq!( taking.resting, Quantity::ZERO, "the remainder was withdrawn, not rested" );
@@ -1037,6 +1127,212 @@ fn a_self_match_cancelled_order_is_not_reported_complete()
   );
 }
 
+/// A resting order withdrawn by self-match prevention counts as a cancel;
+/// the incoming one does not, since it never rested.
+#[ test ]
+fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
+
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : price( "2.50" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
+  assert_eq!( inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] ), 1 );
+  let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
+  assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.is_empty() ) );
+
+  assert_eq!( exchange.book().len(), 1, "the resting sell was withdrawn and the buy rested instead" );
+  assert_eq!( exchange.stats_get().cancels, 1 );
+}
+
+/// A resting order withdrawn by self-match prevention is on record before the
+/// trade the incoming order then makes behind it.
+///
+/// # Root Cause
+///
+/// `exchange_match::Crossing` kept trades and self-match cancellations in two
+/// lists, and `step_place` recorded every trade, then every cancellation. A
+/// withdrawal that came first was recorded after a trade at a worse price,
+/// so the stream showed that trade while a better ask still stood.
+///
+/// # Why Not Caught
+///
+/// The self-match tests here check that a cancellation is recorded, not
+/// where.
+///
+/// # Fix Applied
+///
+/// Each cancellation records how many trades came before it, and
+/// `step_place` settles, releases and records in that order.
+///
+/// # Prevention
+///
+/// A stream documented as "in order" is checked for order.
+///
+/// # Pitfall
+///
+/// Only cancel-resting withdraws before trading; the other two policies end
+/// the loop, so their cancellations already came last.
+#[ test ]
+fn a_self_match_withdrawal_is_recorded_before_the_trade_behind_it()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let own = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  let other = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Sell, price( "2.60" ), qty( 4 ) ).unwrap();
+  let before = exchange.events().len();
+
+  let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : price( "2.60" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
+  assert_eq!( inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] ), 1 );
+  let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
+  assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.len() == 1 ) );
+
+  let recorded : Vec< ( &str, OrderId ) > = exchange.events()[ before .. ].iter().map( | event | match event.kind
+  {
+    EventKind::OrderAccepted { .. } => ( "accepted", event.order ),
+    EventKind::OrderCancelled { .. } => ( "cancelled", event.order ),
+    EventKind::Trade( trade ) => ( "trade", trade.maker ),
+    EventKind::OrderRejected { .. } => ( "rejected", event.order ),
+  } ).collect();
+  let buy = recorded[ 0 ].1;
+  assert_eq!( recorded, vec![ ( "accepted", buy ), ( "cancelled", own.order ), ( "trade", other.order ) ] );
+}
+
+/// Each instrument keeps its own counters; the exchange-wide ones are their
+/// sum.
+#[ test ]
+fn stats_are_kept_per_instrument_and_in_total()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+  let other = InstrumentId( 2 );
+  exchange.spec_register( other, AssetId( 1 ), AssetId( 2 ), price( "0.01" ), qty( 1 ) ).unwrap();
+
+  let on = | instrument, account, side, quantity | Order
+  {
+    id : OrderId( 0 ), instrument, account, side, price : price( "2.50" ), quantity : qty( quantity ), tif : Tif::Gtc,
+    client : None,
+  };
+
+  let resting = submit_tif( &mut exchange, &mut producer, &mut consumer, on( INSTRUMENT, AccountId( 1 ), Side::Sell, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 1 ), Side::Sell, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 4 ) ).unwrap();
+  submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 0 ) ).unwrap_err();
+
+  assert_eq!( inbound_flush( &mut producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( resting.order ) } ] ), 1 );
+  assert!( matches!( exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming )[ 0 ], StepOutcome::Cancelled( Ok( _ ) ) ) );
+
+  let first = exchange.stats_get_for( INSTRUMENT );
+  let second = exchange.stats_get_for( other );
+  assert_eq!( ( first.rests, first.fills, first.rejects, first.cancels ), ( 1, 0, 0, 1 ) );
+  assert_eq!( ( second.rests, second.fills, second.rejects, second.cancels ), ( 1, 1, 1, 0 ) );
+  assert_eq!( exchange.stats_get_for( InstrumentId( 9 ) ), exchange_core::BookStats::default() );
+
+  let total = exchange.stats_get();
+  assert_eq!( ( total.rests, total.fills, total.rejects, total.cancels ), ( 2, 1, 1, 1 ) );
+}
+
+/// An account at its rest cap is refused on record; another account is not,
+/// and the capped account can still take liquidity.
+#[ test ]
+fn an_account_at_its_rest_cap_cannot_rest_another_order()
+{
+  let mut exchange = market();
+  exchange.caps_set( INSTRUMENT, BookCaps { max_rests : 10, max_levels : 10, max_account_rests : 2 } );
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "3.00" ), qty( 1 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Buy, price( "1.00" ), qty( 1 ) ).unwrap();
+
+  let third = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "3.05" ), qty( 1 ) );
+  assert_eq!( third, Err( ExchangeError::Rejected( RejectReason::AccountFull ) ) );
+  assert_eq!( exchange.book().len(), 2 );
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 2 ), Side::Buy, price( "2.00" ), qty( 1 ) ).unwrap();
+  let taking = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.00" ), qty( 1 ) ).unwrap();
+  assert!( taking.is_complete(), "a fully filled order never rests, so the cap does not apply" );
+}
+
+/// A retry under the same `ClientOrderId` is refused even after the original
+/// filled; another account may use the same value; a rejected attempt does
+/// not claim it.
+#[ test ]
+fn a_retry_under_the_same_client_id_is_refused()
+{
+  let mut exchange = market();
+  exchange.open_account( AccountId( 3 ), money( "1" ), qty( 0 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let tagged = | account, side, price, client | Order
+  {
+    id : OrderId( 0 ), instrument : INSTRUMENT, account, side, price : Price::parse( price ).unwrap(), quantity : qty( 4 ), tif : Tif::Gtc,
+    client : Some( ClientOrderId( client ) ),
+  };
+
+  let first = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) ).unwrap();
+  assert_eq!( first.client, Some( ClientOrderId( 7 ) ) );
+
+  let retry = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) );
+  assert_eq!( retry, Err( ExchangeError::Rejected( RejectReason::DuplicateClientId ) ) );
+  assert_eq!( exchange.book().len(), 1, "the retry never rested a second order" );
+
+  // Another account's 7 is its own; this one fills the original completely.
+  let other = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 2 ), Side::Buy, "2.50", 7 ) ).unwrap();
+  assert!( other.is_complete() );
+
+  let after_fill = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 1 ), Side::Sell, "2.50", 7 ) );
+  assert_eq!( after_fill, Err( ExchangeError::Rejected( RejectReason::DuplicateClientId ) ), "filled is still placed" );
+
+  // A rejected attempt claims nothing: account 3 cannot afford it now, and
+  // the same id is accepted once it can.
+  let poor = submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 3 ), Side::Buy, "2.50", 9 ) );
+  assert_eq!( poor, Err( ExchangeError::Rejected( RejectReason::InsufficientFunds ) ) );
+  exchange.open_account( AccountId( 3 ), money( "100" ), qty( 0 ) ).unwrap();
+  assert!( submit_tif( &mut exchange, &mut producer, &mut consumer, tagged( AccountId( 3 ), Side::Buy, "2.50", 9 ) ).is_ok() );
+}
+
+/// A post-only order that would take is rejected on record and reserves
+/// nothing; one that would not take rests.
+#[ test ]
+fn a_post_only_order_rests_or_is_rejected_but_never_takes()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 4 ) ).unwrap();
+  let reservations = exchange.escrow().reservation_count();
+
+  let post_only = | price | Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy, price : Price::parse( price ).unwrap(), quantity : qty( 4 ), tif : Tif::PostOnly, client : None };
+
+  let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, post_only( "2.50" ) );
+  assert_eq!( taking, Err( ExchangeError::Rejected( RejectReason::PostOnlyWouldTake ) ) );
+  assert_eq!( exchange.escrow().reservation_count(), reservations, "a refused order reserves nothing" );
+  assert!( matches!
+  (
+    exchange.events().last().unwrap().kind,
+    EventKind::OrderRejected { reason : RejectReason::PostOnlyWouldTake },
+  ) );
+
+  let resting = submit_tif( &mut exchange, &mut producer, &mut consumer, post_only( "2.45" ) ).unwrap();
+  assert!( resting.trades.is_empty() );
+  assert_eq!( resting.resting, qty( 4 ) );
+  assert_eq!( exchange.book().len(), 2 );
+}
+
 /// An IOC taker that only partially fills must not rest its remainder —
 /// `exchange_match::cross` never inserts a remainder for any TIF by its own
 /// design (see that crate's module doc); whether a caller rests one is the
@@ -1050,12 +1346,13 @@ fn an_ioc_taker_never_rests_its_remainder_through_the_facade()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), qty( 4 ) ).unwrap();
 
   let taker = Order
   {
     id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
-    price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Ioc,
+    price : price( "1.00" ), quantity : qty( 10 ), tif : Tif::Ioc,
+    client : None,
   };
   let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
 
@@ -1095,13 +1392,14 @@ fn a_fok_taker_rejects_whole_against_a_thin_book_through_the_facade()
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
-  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) ).unwrap();
+  submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), qty( 4 ) ).unwrap();
   let before = exchange.book().clone();
 
   let taker = Order
   {
     id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 2 ), side : Side::Buy,
-    price : money( "1.00" ), quantity : qty( 10 ), tif : Tif::Fok,
+    price : price( "1.00" ), quantity : qty( 10 ), tif : Tif::Fok,
+    client : None,
   };
   let taking = submit_tif( &mut exchange, &mut producer, &mut consumer, taker ).unwrap();
 
@@ -1126,17 +1424,99 @@ fn a_fok_taker_rejects_whole_against_a_thin_book_through_the_facade()
 fn a_halted_instrument_refuses_placement_and_resuming_allows_it_again()
 {
   let mut exchange = market();
-  exchange.spec_register( INSTRUMENT, AssetId( 1 ), AssetId( 2 ), money( "0.05" ), qty( 1 ) ).unwrap();
   let mut ring = inbound_ring( 8 ).unwrap();
   let mut ends = ring.ends();
   let ( mut producer, mut consumer ) = ends.split();
 
   exchange.halt_set( INSTRUMENT ).unwrap();
-  let halted = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) );
+  let halted = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), qty( 4 ) );
   assert_eq!( halted, Err( ExchangeError::Rejected( RejectReason::Halted ) ) );
   assert_eq!( exchange.book().len(), 0, "a refused placement must never reach the book" );
 
   exchange.halt_clear( INSTRUMENT ).unwrap();
-  let resumed = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, money( "1.00" ), qty( 4 ) ).unwrap();
+  let resumed = submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "1.00" ), qty( 4 ) ).unwrap();
   assert_eq!( resumed.resting, qty( 4 ), "the identical order must now be accepted and rest" );
+}
+
+/// A refused halt chains its `HaltError` as the source and reads it into its
+/// own message, the way every other wrapped error in `ExchangeError` does.
+#[ test ]
+fn a_refused_halt_chains_its_halt_error()
+{
+  let mut exchange = market();
+  exchange.halt_set( INSTRUMENT ).unwrap();
+
+  let refused = exchange.halt_set( INSTRUMENT ).unwrap_err();
+  let source = core::error::Error::source( &refused ).expect( "a refused halt names its cause" );
+  assert_eq!( source.downcast_ref::< HaltError >(), Some( &HaltError::Already ) );
+  assert_eq!( refused.to_string(), format!( "halt refused: {}", HaltError::Already ) );
+}
+
+/// A refused depth query chains its `DepthError` as the source, the same as
+/// a refused halt.
+#[ test ]
+fn a_refused_depth_chains_its_depth_error()
+{
+  let exchange = market();
+
+  let refused = exchange.depth_get( INSTRUMENT, 0 ).unwrap_err();
+  let source = core::error::Error::source( &refused ).expect( "a refused depth names its cause" );
+  assert_eq!( source.downcast_ref::< DepthError >(), Some( &DepthError::BadN ) );
+  assert_eq!( refused.to_string(), format!( "depth refused: {}", DepthError::BadN ) );
+}
+
+/// An order off its instrument's tick or lot grid is rejected on record and
+/// reserves nothing; the same order on the grid rests.
+#[ test ]
+fn an_order_off_the_grid_is_rejected()
+{
+  let mut exchange = market();
+  let coarse = InstrumentId( 2 );
+  exchange.spec_register( coarse, AssetId( 1 ), AssetId( 2 ), price( "0.05" ), qty( 2 ) ).unwrap();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let sell = | price : &str, quantity | Order
+  {
+    id : OrderId( 0 ), instrument : coarse, account : AccountId( 1 ), side : Side::Sell, price : Price::parse( price ).unwrap(),
+    quantity : qty( quantity ), tif : Tif::Gtc, client : None,
+  };
+
+  let off_tick = submit_tif( &mut exchange, &mut producer, &mut consumer, sell( "1.03", 4 ) );
+  assert_eq!( off_tick, Err( ExchangeError::Rejected( RejectReason::PriceOffTick ) ) );
+  assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::PriceOffTick } ) );
+
+  let off_lot = submit_tif( &mut exchange, &mut producer, &mut consumer, sell( "1.05", 3 ) );
+  assert_eq!( off_lot, Err( ExchangeError::Rejected( RejectReason::QuantityOffLot ) ) );
+  assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::QuantityOffLot } ) );
+
+  assert_eq!( exchange.escrow().reservation_count(), 0, "a refused order reserves nothing" );
+  assert_eq!( exchange.book().len(), 0 );
+  assert_eq!( exchange.stats_get().rejects, 2 );
+
+  let on_grid = submit_tif( &mut exchange, &mut producer, &mut consumer, sell( "1.05", 4 ) ).unwrap();
+  assert_eq!( on_grid.resting, qty( 4 ) );
+}
+
+/// An order for an instrument with no registered spec is rejected on record
+/// and reserves nothing — there is no grid or halt flag to check it against.
+#[ test ]
+fn an_order_for_an_unregistered_instrument_is_rejected()
+{
+  let mut exchange = market();
+  let mut ring = inbound_ring( 8 ).unwrap();
+  let mut ends = ring.ends();
+  let ( mut producer, mut consumer ) = ends.split();
+
+  let order = Order
+  {
+    id : OrderId( 0 ), instrument : InstrumentId( 9 ), account : AccountId( 1 ), side : Side::Sell, price : price( "1.00" ),
+    quantity : qty( 4 ), tif : Tif::Gtc, client : None,
+  };
+  let refused = submit_tif( &mut exchange, &mut producer, &mut consumer, order );
+  assert_eq!( refused, Err( ExchangeError::Rejected( RejectReason::UnknownInstrument ) ) );
+  assert!( matches!( exchange.events().last().unwrap().kind, EventKind::OrderRejected { reason : RejectReason::UnknownInstrument } ) );
+  assert_eq!( exchange.escrow().reservation_count(), 0, "a refused order reserves nothing" );
+  assert_eq!( exchange.book().len(), 0 );
 }

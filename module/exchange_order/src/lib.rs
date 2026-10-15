@@ -1,55 +1,38 @@
 //! One order record — a resting order or a taker — with the account that
-//! submitted it, the instrument it trades, and its time-in-force.
+//! submitted it, the instrument it trades, its time-in-force, and the
+//! submitter's own id for it.
 //!
-//! A single-tier dependent: `exchange_id` for `InstrumentId`/`OrderId`/
-//! `AccountId`, `exchange_side` for `Side`, `exchange_tif` for `Tif`,
-//! `exact_kind` for the decimal grid. This crate has no concept of a price
-//! level or a book — that is `exchange_level`'s and `exchange_book`'s concern,
-//! not this one's.
+//! No concept of a price level or a book — that is `exchange_level`'s and
+//! `exchange_book`'s concern. Closes feature 3.
 //!
-//! `Order` moved here from `exchange_types`, which still re-exports it so
-//! existing callers are unaffected, gaining the two fields the real struct was
-//! missing against the source design: `instrument` and `tif`.
+//! # Not built: a constructor, quantity mutation, or `OrderError`
 //!
-//! # Not built: `order_new`/`order_qty_set`/`order_qty_left`/`order_is_empty`/`OrderError`
+//! Every field is `pub`, so a struct literal is the one way to build an
+//! `Order`. `quantity` is what was submitted and never changes; a resting
+//! remainder lives on `exchange_book::Resting`. A zero quantity is refused at
+//! `exchange_core`'s submission boundary, not here — see
+//! `docs/decisions/001_no_order_mutation_or_error.md`.
 //!
-//! The source design specifies a constructor and quantity-mutation helpers
-//! plus a dedicated `OrderError`. The real design never adopted any of them:
-//! every field here stays `pub`, so a plain struct literal is the one way to
-//! build an `Order` and there is no second, fallible path to keep in sync with
-//! it. Quantity never mutates on `Order` itself — `order.quantity` is what was
-//! submitted, fixed for the order's lifetime — the shrinking remainder lives
-//! on a separate wrapper (`exchange_book::Resting`, backed by
-//! `exchange_level::LevelNode`) once the order rests, since only a resting
-//! order has a remainder to track. And a zero-quantity order is refused at
-//! `exchange_core::Exchange::submit`'s boundary via `RejectReason::ZeroQuantity`,
-//! not at construction.
+//! # `Obligation` lives here too
 //!
-//! # `Obligation` moved here too
-//!
-//! The dependency tree the family builds from never assigned `Obligation` a
-//! crate of its own, and what an order commits is order-shaped, not a
-//! standalone concept. The free function that computes it,
-//! `exchange_types::obligation`, stays where it is, along with `notional`/
-//! `TypeError` — `exchange_types` now depends forward on this crate for
-//! `Order`/`Obligation` rather than the reverse, which is the shape every
-//! crate `exchange_types` sheds types to ends up in.
+//! What an order commits is order-shaped, and the family's dependency tree
+//! never gave it a crate of its own. The function computing it,
+//! `exchange_types::obligation`, stays in `exchange_types`.
 
-use exact_kind::{ Price, Quantity };
-use exchange_id::{ AccountId, InstrumentId, OrderId };
+use exact_arith::{ Money, Price, Quantity };
+use exchange_id::{ AccountId, ClientOrderId, InstrumentId, OrderId };
 use exchange_side::Side;
 use exchange_tif::Tif;
 
-/// An amount of currency — a notional, a reservation, a balance. Distinct
-/// from [`Price`] only in reading: the type is identical, but `Obligation::Cash`
-/// holds a total, not a per-unit price.
-pub type Amount = Price;
+/// An amount of currency — a notional, a reservation, a balance. A total,
+/// not a per-unit [`Price`].
+pub type Amount = Money;
 
 /// A submitted limit order.
 ///
-/// Only limit orders exist in this slice. Market, stop, iceberg and post-only
-/// are named as extensions in the family's own design documents and are not
-/// implemented, because no behaviour here needs them yet.
+/// Only limit orders exist. Post-only is a [`Tif`], not an order type. A
+/// market order needs no type: it is a limit order whose price is a cap,
+/// sent IOC or FOK. Stop and iceberg orders are not built.
 #[ derive( Debug, Clone, Copy, PartialEq, Eq ) ]
 pub struct Order
 {
@@ -67,6 +50,9 @@ pub struct Order
   pub quantity : Quantity,
   /// How long its remainder may rest once a match pass is done.
   pub tif : Tif,
+  /// The submitter's own id for it, if it gave one. `exchange_core` refuses a
+  /// second order from the same account under the same one.
+  pub client : Option< ClientOrderId >,
 }
 
 /// What an order commits until it fills or cancels.
