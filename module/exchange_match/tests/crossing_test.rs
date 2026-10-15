@@ -107,7 +107,7 @@ fn t06_the_parts_sum_to_the_submitted_quantity()
   let crossing = cross( &mut book, &incoming ).unwrap();
 
   assert_eq!( crossing.trades.len(), 2, "the third ask is priced beyond the bid" );
-  let total = crossing.filled().unwrap().checked_add( crossing.remaining ).unwrap();
+  let total = ( crossing.filled().unwrap() + crossing.remaining ).unwrap();
   assert_eq!( total, incoming.quantity, "nothing was created or lost in the split" );
 }
 

@@ -105,7 +105,7 @@ pub fn level_len( level : &Level ) -> usize
 /// resting close to it at one price are enough.
 pub fn level_qty_sum( level : &Level ) -> Result< Quantity, KindError >
 {
-  level.nodes.iter().try_fold( Quantity::ZERO, | sum, node | sum.checked_add( node.remaining ) )
+  level.nodes.iter().try_fold( Quantity::ZERO, | sum, node | sum + node.remaining )
 }
 
 /// Whether this level has no nodes left — the signal a book uses to drop the

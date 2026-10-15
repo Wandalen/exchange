@@ -292,7 +292,7 @@ impl Book
     let best = level.nodes.front_mut()
       .expect( "a level is removed the instant it empties; it never rests here with zero nodes" );
 
-    let Ok( left ) = best.remaining.checked_sub( taken )
+    let Ok( left ) = best.remaining - taken
     else
     {
       return false;

@@ -61,7 +61,9 @@ use exchange_types::{ TypeError, notional };
 /// The arithmetic a [`Holding`] needs of whatever it holds.
 ///
 /// Exists because two different things are conserved here — currency and the
-/// asset — and they are two unrelated concrete types in `exact_arith`. The
+/// asset — and `exact_arith` gives them no common surface to be generic over:
+/// both are its `Amount` of different kinds, but `Kind` is sealed, `ZERO` is
+/// per kind, and only `Money` needs the never-below-zero guard. The
 /// alternative was to write [`Holding`] twice, which is the same code with two
 /// names and two places for a bug to be fixed in one of.
 ///
@@ -85,14 +87,14 @@ impl Conserved for Money
 
   fn checked_plus( self, rhs : Self ) -> Option< Self >
   {
-    self.checked_add( rhs ).ok()
+    ( self + rhs ).ok()
   }
 
   fn checked_minus( self, rhs : Self ) -> Option< Self >
   {
     // A currency holding is never negative, and `Money` is signed, so the
     // guard is here rather than in the type.
-    let difference = self.checked_sub( rhs ).ok()?;
+    let difference = ( self - rhs ).ok()?;
     ( difference >= Self::ZERO ).then_some( difference )
   }
 }
@@ -103,14 +105,14 @@ impl Conserved for Quantity
 
   fn checked_plus( self, rhs : Self ) -> Option< Self >
   {
-    self.checked_add( rhs ).ok()
+    ( self + rhs ).ok()
   }
 
   fn checked_minus( self, rhs : Self ) -> Option< Self >
   {
     // `Quantity` refuses to go below zero itself, so this needs no guard —
     // the refusal *is* the error.
-    self.checked_sub( rhs ).ok()
+    ( self - rhs ).ok()
   }
 }
 
@@ -739,7 +741,7 @@ impl Escrow
     self.accounts.values().try_fold( Money::ZERO, | sum, account |
     {
       let total = account.cash.total()?;
-      sum.checked_add( total ).map_err( | _ | EscrowError::Arithmetic )
+      ( sum + total ).map_err( | _ | EscrowError::Arithmetic )
     } )
   }
 
@@ -753,7 +755,7 @@ impl Escrow
     self.accounts.values().try_fold( Quantity::ZERO, | sum, account |
     {
       let total = account.asset.total()?;
-      sum.checked_add( total ).map_err( | _ | EscrowError::Arithmetic )
+      ( sum + total ).map_err( | _ | EscrowError::Arithmetic )
     } )
   }
 
