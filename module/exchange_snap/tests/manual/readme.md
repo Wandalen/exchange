@@ -26,6 +26,10 @@ thread 'snap_take_copies_every_resting_order_with_its_remaining_quantity' panick
 test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
 ```
 
+A rerun against exact `41eb287` or later prints `qty` as `Qty { minor: Minor(5000000) }`:
+exact's ADR-006 made `Qty` an `Amount` of its own kind, and its `Debug` lost the
+`value: Decimal` wrapper.
+
 Reverted; see Run Record.
 
 ## M2 — row order actually matches the book's priority order
