@@ -1140,7 +1140,7 @@ fn a_self_match_cancelled_resting_order_counts_as_a_cancel()
   submit( &mut exchange, &mut producer, &mut consumer, AccountId( 1 ), Side::Sell, price( "2.50" ), qty( 10 ) ).unwrap();
 
   let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : price( "2.50" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
-  inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
+  assert_eq!( inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] ), 1 );
   let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
   assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.is_empty() ) );
 
@@ -1189,7 +1189,7 @@ fn a_self_match_withdrawal_is_recorded_before_the_trade_behind_it()
   let before = exchange.events().len();
 
   let order = Order { id : OrderId( 0 ), instrument : INSTRUMENT, account : AccountId( 1 ), side : Side::Buy, price : price( "2.60" ), quantity : qty( 4 ), tif : Tif::Gtc, client : None };
-  inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] );
+  assert_eq!( inbound_flush( &mut producer, &[ InboundCmd::Place( Resting { order, remaining : order.quantity, arrival : Sequence( 0 ) } ) ] ), 1 );
   let outcomes = exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelResting );
   assert!( matches!( outcomes[ 0 ], StepOutcome::Placed( Ok( ref r ) ) if r.trades.len() == 1 ) );
 
@@ -1227,7 +1227,7 @@ fn stats_are_kept_per_instrument_and_in_total()
   submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 4 ) ).unwrap();
   submit_tif( &mut exchange, &mut producer, &mut consumer, on( other, AccountId( 2 ), Side::Buy, 0 ) ).unwrap_err();
 
-  inbound_flush( &mut producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( resting.order ) } ] );
+  assert_eq!( inbound_flush( &mut producer, &[ InboundCmd::Cancel { instrument : INSTRUMENT, account : AccountId( 1 ), order : OrderRef::Id( resting.order ) } ] ), 1 );
   assert!( matches!( exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming )[ 0 ], StepOutcome::Cancelled( Ok( _ ) ) ) );
 
   let first = exchange.stats_get_for( INSTRUMENT );

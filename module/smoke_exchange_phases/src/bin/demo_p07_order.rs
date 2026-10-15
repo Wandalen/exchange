@@ -30,7 +30,7 @@ fn main()
   let ( mut producer, mut consumer ) = ends.split();
   let zero_order = Order { quantity : Quantity::ZERO, ..order };
   let draft = Resting { order : zero_order, remaining : Quantity::ZERO, arrival : Sequence::ZERO };
-  inbound_flush( &mut producer, &[ InboundCmd::Place( draft ) ] );
+  assert_eq!( inbound_flush( &mut producer, &[ InboundCmd::Place( draft ) ] ), 1 );
   let zq = match exchange.exchange_step( &mut consumer, SelfMatchPolicy::CancelIncoming ).into_iter().next()
   {
     Some( StepOutcome::Placed( result ) ) => result.is_err(),

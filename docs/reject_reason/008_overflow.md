@@ -4,14 +4,14 @@
 
 - **Purpose**: Name a dropped inbound publish — because the ring was full — as a reject, never a silent loss.
 - **Responsibility**: One of the nine reject-reason values.
-- **In Scope**: The ring-full case `exchange_inbound` is proposed to turn into a reject rather than a drop.
+- **In Scope**: The ring-full case `exchange_inbound` turns into a reject rather than a drop.
 - **Out of Scope**: Any book-side or escrow-side admission check — this fires before the order ever reaches the book.
 
-**Design status**: Not implemented as named — the real `RejectReason` enum (`exchange_fill/src/lib.rs:108`, extracted out of `exchange_types` this session — `exchange_types` re-exported it for a time, now retired) has a completely different variant set and does not include this concept at all. Consistent with there being zero `ring_*` dependency anywhere in the real crate family (verified via grep across all `module/*/Cargo.toml`) — there is no ring to overflow.
+**Design status**: Built, but not as a `RejectReason` value. The real `RejectReason` enum (`exchange_fill/src/lib.rs`) has no `Overflow` variant, by [decision 004](../decision/004_overflow_is_a_reject.md): a refused command never reaches the consumer, so no event can carry it. The producer gets the reject instead: `inbound_overflow_reject`'s `Err` hands the command back, and `inbound_flush`'s count short of the batch marks the unsent tail.
 
 ### Statement
 
-`Overflow` marks the reject raised when a producer's publish fails because the inbound ring is at capacity — the proposal's own pitfall tape and hard problem 24 both insist this must surface to the caller as an explicit reject, never as a silent drop that leaves the player believing an order was placed. It cannot exist before `exchange_inbound` and a ring dependency exist.
+`Overflow` marks the reject raised when a producer's publish fails because the inbound ring is at capacity — the proposal's own pitfall tape and hard problem 24 both insist this must surface to the caller as an explicit reject, never as a silent drop that leaves the player believing an order was placed.
 
 ### Sources
 
