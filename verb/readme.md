@@ -57,11 +57,11 @@ rather than assumed:
   `[workspace.dependencies]` entries to `{ version = "0.2.1" }`, and reran the full
   workspace test suite to confirm `0.2.1`'s real API still matches what the pinned
   revision expected — 109 `test result: ok` blocks, 0 failures, same as before the switch.
-  `exact_arith` stays git-pinned for now: `exact` itself was still mid-publish when this
-  migration ran, so switching it over too would have broken every normal build in the
-  window before it landed on crates.io. Whoever finishes wiring it over should repeat the
-  same two steps — confirm the version is live, then swap `git`+`rev` for `version` and
-  rerun the suite — rather than assume compatibility from the pinned revision alone.
+  `exact_arith` stayed git-pinned at first, because `exact` itself was still mid-publish
+  when this migration ran. It moved to `{ version = "0.1.0" }` the same way once that
+  release was live. Every pin is now a registry version; the current ones are in the root
+  `Cargo.toml`'s `[workspace.dependencies]`. A later bump repeats the same two steps:
+  confirm the version is live, then change the `version` and rerun the suite.
 
 Both verbs otherwise match `exact`'s own, including `publish`'s resume mechanism: a bare
 retry of `cargo publish --workspace` is not itself resumable (confirmed on `exact`'s own
