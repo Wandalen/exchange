@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>exchange — 8-minute talk</title>
+<style>
+:root{
+  --bg:#0d1117; --panel:#161b22; --line:#30363d; --grid:#21262d;
+  --fg:#e6edf3; --muted:#9aa4af;
+  --accent:#58c4f0; --accent-soft:rgba(88,196,240,.14);
+  --ok:#3fb950; --bad:#f85149; --warn:#f0b429;
+  --sans:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+/* 1rem = 1% of the 16:9 stage: 19.2px at 1920x1080, 12.8px at 1280x720 */
+html{font-size:min(1vw,1.77778vh);background:#000}
+body{margin:0;width:100vw;height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000;color:var(--fg);font-family:var(--sans);font-size:1.5rem;line-height:1.35}
+#deck{position:relative;flex:none;width:100rem;height:56.25rem;background:var(--bg);overflow:hidden}
+.slide{position:absolute;inset:0;display:none}
+.slide.active{display:block}
+pre{margin:0;font-family:var(--mono);font-size:1.25rem;line-height:1.6;white-space:pre}
+.c{color:var(--muted)}
+.tag{font-family:var(--mono);font-size:1.25rem;color:var(--accent);margin-bottom:.6rem}
+
+/* hook */
+.title{position:absolute;top:4.2rem;left:0;right:0;margin:0;text-align:center;font-size:2.4rem;font-weight:600}
+.chart{position:absolute;top:8rem;left:50%;transform:translateX(-50%);width:86rem}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.caption{position:absolute;left:0;right:0;top:46.2rem;margin:0;text-align:center;font-size:1.3rem;color:var(--muted)}
+.draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.8s ease-out forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* promises and promise cards */
+.pgrid{position:absolute;top:9rem;left:2.5rem;right:2.5rem;display:grid;grid-template-columns:repeat(4,1fr);gap:2rem}
+.pcard{position:relative;background:var(--panel);border:2px solid var(--line);border-radius:.8rem;padding:1.2rem 1.4rem;transition:opacity 300ms,border-color 300ms,background 300ms}
+.pcard.big{min-height:26rem;padding:2.2rem 2rem}
+.pcard.dim{opacity:.4}
+.pcard.cur{border-color:var(--accent);background:var(--accent-soft)}
+.phead{display:flex;align-items:baseline;gap:1rem}
+.pnum{font-family:var(--mono);font-size:1.4rem;color:var(--muted)}
+.pname{font-size:1.7rem;font-weight:700}
+.pdesc{font-size:1.2rem;line-height:1.3;color:var(--muted);margin-top:.3rem}
+.big .pnum{font-size:2.6rem;color:var(--accent)}
+.big .pname{font-size:3.2rem}
+.big .pdesc{font-size:2.1rem;margin-top:1.2rem;color:var(--fg)}
+.tick{position:absolute;top:.8rem;right:1rem;font-size:1.6rem}
+
+/* section 2 strip and side panel */
+.strip{position:absolute;top:4.2rem;left:2.5rem;right:2.5rem;height:8.6rem;display:grid;grid-template-columns:repeat(4,1fr);gap:1.6rem}
+.strip .pcard{padding:.9rem 1.2rem}
+.strip .pdesc{font-size:1.15rem}
+.main{position:absolute;top:14.2rem;bottom:3.6rem;left:2.5rem;right:2.5rem;display:grid;grid-template-columns:1fr 21rem;column-gap:2.2rem}
+.work{display:grid;grid-template-columns:50.5rem 1fr;column-gap:2.2rem;align-items:center}
+.work.claim{grid-template-columns:1fr}
+.code{background:var(--panel);border:2px solid var(--line);border-radius:.8rem;padding:1.6rem}
+.fix{margin:0 0 1.6rem;font-size:1.55rem;line-height:1.35}
+.crates{list-style:none;margin:0;padding:0;font-family:var(--mono);font-size:1.2rem;line-height:1.6;color:var(--muted)}
+.oneline{margin:0;font-size:3rem;font-weight:600}
+.proofline{margin:1.6rem 0 0;font-family:var(--mono);font-size:1.3rem;color:var(--muted)}
+.cratemap{display:flex;flex-direction:column;gap:.8rem}
+.box{flex:1;display:flex;flex-direction:column;justify-content:center;border:2px solid var(--line);border-radius:.7rem;padding:.6rem 1rem;opacity:.42;transition:opacity 300ms,border-color 300ms,background 300ms}
+.box.lit{opacity:1;border-color:var(--accent);background:var(--accent-soft)}
+.blabel{font-size:1.6rem;font-weight:700;line-height:1.2}
+.box.lit .blabel{color:var(--accent)}
+.bcrates{font-family:var(--mono);font-size:1rem;line-height:1.4;color:var(--muted);margin-top:.2rem}
+
+/* ladder (exchange and demo) */
+.ladder-title{margin:0 0 1.2rem;font-size:1.9rem;font-weight:600}
+.ladder{display:grid;grid-template-columns:11rem 1fr;column-gap:1.4rem;align-items:start}
+.rowlbl{font-family:var(--mono);font-size:1.3rem;color:var(--muted);padding-top:.7rem}
+.side{display:flex;flex-direction:column;min-height:2rem}
+.mid{grid-column:1 / -1;height:.3rem;margin:.9rem 0;background:var(--line);border-radius:.2rem}
+.level{display:grid;grid-template-columns:9rem 1fr;column-gap:1.4rem;align-items:center;min-height:7.6rem;border-bottom:1px solid var(--grid);animation:enter 300ms ease-out;transition:opacity 300ms}
+.price{font-family:var(--mono);font-size:2.2rem;text-align:right}
+.queue{display:flex;flex-wrap:wrap;gap:1rem;padding:.6rem 0}
+.entry{width:13.5rem;background:var(--panel);border:2px solid var(--line);border-radius:.6rem;padding:.5rem .9rem .7rem;animation:enter 300ms ease-out;transition:opacity 300ms}
+.entry .head{display:flex;justify-content:space-between;align-items:baseline}
+.who{font-size:1.5rem}
+.qty{font-family:var(--mono);font-size:2.2rem;font-weight:700}
+.track{height:.5rem;margin-top:.4rem;background:var(--grid);border-radius:.25rem;overflow:hidden}
+.bar{height:100%;width:0;background:var(--accent);transition:width 300ms ease}
+.out{opacity:0}
+.flash{animation:flash 300ms ease-out}
+@keyframes enter{from{opacity:0;transform:translateY(-.5rem)}to{opacity:1;transform:none}}
+@keyframes flash{from{background:rgba(88,196,240,.4)}to{background:var(--panel)}}
+.ex{position:absolute;top:6rem;left:50%;transform:translateX(-50%);width:64rem}
+
+/* demo */
+.demo-grid{position:absolute;top:4.2rem;left:2.5rem;right:2.5rem;bottom:3.6rem;display:grid;grid-template-columns:52rem 1fr;grid-template-rows:auto 1fr;column-gap:2.2rem;row-gap:1.4rem;grid-template-areas:"ladder info" "ladder bal"}
+#demo.final .demo-grid{grid-template-areas:"proof proof" "ladder bal"}
+.ladder-box{grid-area:ladder;overflow:hidden}
+.info{grid-area:info}
+.orderline{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.order{font-family:var(--mono);font-size:1.9rem;font-weight:700}
+.badge{font-family:var(--mono);font-size:1.3rem;color:var(--muted);border:2px solid var(--line);border-radius:.4rem;padding:.1rem .6rem}
+.badge.matched{color:var(--accent);border-color:var(--accent)}
+.badge.refused{color:var(--bad);border-color:var(--bad)}
+.reason{margin:.6rem 0 0;font-family:var(--mono);font-size:1.6rem;color:var(--bad)}
+.trades{list-style:none;margin:.6rem 0 0;padding:0;font-family:var(--mono);font-size:1.5rem;line-height:1.5}
+.bal{grid-area:bal;align-self:start}
+.bal table{width:100%;border-collapse:collapse}
+.bal th{font-size:1.2rem;font-weight:600;color:var(--muted);text-align:right;padding:.2rem .4rem}
+.bal td{font-family:var(--mono);font-size:1.5rem;text-align:right;padding:.5rem .4rem;border-top:1px solid var(--grid)}
+.bal th:first-child,.bal td:first-child{text-align:left}
+.bal th[colspan]{text-align:center}
+.bal td:first-child{font-family:var(--sans);font-size:1.6rem;font-weight:600}
+.bal td.changed{background:var(--accent-soft);color:var(--accent);font-weight:700}
+.proofpanel{grid-area:proof;display:none;flex-direction:column;justify-content:center;gap:1.2rem;background:var(--panel);border:2px solid var(--line);border-radius:.8rem;padding:1.6rem 2rem}
+#demo.final .proofpanel{display:flex}
+#demo.final .info{display:none}
+.pr-row{display:flex;align-items:center;gap:1.2rem;font-size:1.7rem}
+.pr-row .k{font-weight:600}
+.pr-pair{display:flex;align-items:center;justify-content:space-between;gap:1.5rem}
+.hash{display:flex;align-items:baseline;gap:.8rem;font-family:var(--mono);font-size:1.7rem}
+.hash .lbl{color:var(--muted)}
+.eq{font-size:2rem;font-weight:700}
+.eq.ok{color:var(--ok)}
+.eq.bad{color:var(--bad)}
+.corner{position:absolute;top:.9rem;left:2.5rem;font-family:var(--mono);font-size:1.2rem;color:var(--muted)}
+.msg{position:absolute;top:12rem;left:2.5rem;right:2.5rem;padding:2rem 2.4rem;border:2px solid var(--accent);border-radius:.8rem;font-family:var(--mono);font-size:1.7rem;line-height:1.4}
+
+/* alternatives, future, end */
+.alt{position:absolute;top:6.4rem;left:2.5rem;width:95rem;border-collapse:collapse;font-size:1.75rem}
+.alt th,.alt td{padding:.9rem 1rem;border-bottom:1px solid var(--line);text-align:center}
+.alt th:first-child,.alt td:first-child{text-align:left;width:40%}
+.alt th{font-size:1.5rem;font-weight:600;color:var(--muted)}
+.alt .muted{color:var(--muted)}
+.fut th,.fut td{text-align:left}
+.alt tr.hl td{background:var(--accent-soft);font-weight:700}
+.alt tr.hl td:first-child{box-shadow:inset 4px 0 0 var(--accent)}
+.foot{position:absolute;left:2.5rem;bottom:4.4rem;margin:0;font-size:1.3rem;color:var(--muted)}
+.end{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3.2rem;text-align:center}
+.end h1{margin:0;font-size:4.6rem;font-weight:700}
+.end a{font-family:var(--mono);font-size:2.6rem;color:var(--accent);text-decoration:none}
+
+/* presenter aids and progress */
+#notes{position:absolute;left:2.5rem;right:2.5rem;bottom:1.4rem;z-index:5;background:#0b0f14;border:1px solid var(--line);border-top:3px solid var(--accent);padding:1.1rem 1.6rem;font-size:1.45rem;line-height:1.45}
+#n-meta{font-family:var(--mono);font-size:1.2rem;color:var(--accent);margin-bottom:.5rem}
+#n-say{margin:0}
+#timer{position:absolute;top:.9rem;right:1.2rem;z-index:5;font-family:var(--mono);font-size:1.2rem;background:var(--panel);border:1px solid var(--line);border-radius:.4rem;padding:.3rem .8rem}
+#timer.over{color:var(--warn);border-color:var(--warn)}
+#progress{position:absolute;left:0;bottom:0;height:.45rem;width:0;background:var(--accent);transition:width 300ms ease}
+</style>
+</head>
+<body>
+<main id="deck">
+
+  <section class="slide" id="hook">
+    <h2 class="title">Vancouver Stock Exchange index</h2>
+    <div class="chart">
+      <svg viewBox="0 0 1020 440" font-family="inherit">
+        <g stroke="#21262d" stroke-width="1.5">
+          <line x1="110" x2="820" y1="275" y2="275"/>
+          <line x1="110" x2="820" y1="190" y2="190"/>
+          <line x1="110" x2="820" y1="105" y2="105"/>
+          <line x1="110" x2="820" y1="20" y2="20"/>
+        </g>
+        <g stroke="#8b949e" stroke-width="2">
+          <line x1="110" x2="110" y1="20" y2="360"/>
+          <line x1="110" x2="820" y1="360" y2="360"/>
+        </g>
+        <g fill="#9aa4af" font-size="18" text-anchor="end">
+          <text x="98" y="366">0</text>
+          <text x="98" y="281">300</text>
+          <text x="98" y="196">600</text>
+          <text x="98" y="111">900</text>
+          <text x="98" y="26">1200</text>
+        </g>
+        <g fill="#9aa4af" font-size="18" text-anchor="middle">
+          <text x="110" y="392">1982</text>
+          <text x="820" y="392">25 Nov 1983</text>
+          <text transform="translate(34 190) rotate(-90)" font-size="20">index</text>
+        </g>
+        <path class="correct" d="M110 76.67 L820 48.65" fill="none" stroke="#3fb950" stroke-width="5" stroke-dasharray="18 14"/>
+        <path class="actual draw" pathLength="1" d="M110 76.67 L820 211.27" fill="none" stroke="#f85149" stroke-width="6"/>
+        <g>
+          <circle cx="110" cy="76.67" r="7" fill="#e6edf3"/>
+          <circle cx="820" cy="211.27" r="7" fill="#f85149"/>
+          <circle cx="820" cy="48.65" r="7" fill="#3fb950"/>
+        </g>
+        <g font-size="22" fill="#e6edf3">
+          <text x="118" y="58">1000</text>
+          <text x="834" y="218">524.811</text>
+          <text x="834" y="55">1098.892</text>
+        </g>
+        <g font-size="20" font-weight="600">
+          <text x="834" y="252" fill="#f85149">reported</text>
+          <text x="834" y="88" fill="#3fb950">correct</text>
+        </g>
+      </svg>
+    </div>
+    <p class="caption">Endpoints from sources; path between them illustrative.</p>
+  </section>
+
+  <section class="slide" id="exchange">
+    <div class="ex" id="ex-ladder">
+      <p class="ladder-title">order book</p>
+      <div class="ladder">
+        <div class="rowlbl">sell orders</div><div class="side" data-side="sell"></div>
+        <div class="mid"></div>
+        <div class="rowlbl">buy orders</div><div class="side" data-side="buy"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide" id="promises">
+    <div class="pgrid" id="promise-grid"></div>
+  </section>
+
+  <section class="slide s2" id="fair">
+    <div class="main">
+      <div class="work">
+        <pre class="code">let mut level = vec![ alice, carol ];  <span class="c">// Alice arrived first</span>
+let maker = level.pop();               <span class="c">// takes the last one</span>
+<span class="c">// Carol trades first</span></pre>
+        <div class="fixcol">
+          <p class="fix">a first-in-first-out queue at each price, prices ranked best first</p>
+          <ul class="crates"><li>exchange_level</li><li>exchange_book</li></ul>
+        </div>
+      </div>
+      <div class="cratemap"></div>
+    </div>
+  </section>
+
+  <section class="slide s2" id="cents">
+    <div class="main">
+      <div class="work">
+        <pre class="code">let paid = 0.1_f64 * 3.0;   <span class="c">// 0.30000000000000004</span>
+assert_eq!( paid, 0.3 );     <span class="c">// panics</span></pre>
+        <div class="fixcol">
+          <p class="fix">exact decimals, and every trade must sum to zero across its two sides or it is refused</p>
+          <ul class="crates"><li>exact_arith</li><li>exchange_conserve</li></ul>
+        </div>
+      </div>
+      <div class="cratemap"></div>
+    </div>
+  </section>
+
+  <section class="slide s2" id="lock">
+    <div class="main">
+      <div class="work">
+        <div>
+          <div class="tag">// sketch</div>
+          <pre class="code">let trades = book.match_order( bob_order );  <span class="c">// match first</span>
+for t in &amp;trades { bob.cash -= t.cost; }     <span class="c">// pay after</span>
+<span class="c">// bob.cash == -8.00</span></pre>
+        </div>
+        <div class="fixcol">
+          <p class="fix">lock the buyer's money when the order arrives, before it can match or wait</p>
+          <ul class="crates"><li>exchange_escrow</li></ul>
+        </div>
+      </div>
+      <div class="cratemap"></div>
+    </div>
+  </section>
+
+  <section class="slide s2" id="replay">
+    <div class="main">
+      <div class="work">
+        <pre class="code">let arrival = Instant::now();  <span class="c">// who came first, by the clock</span>
+<span class="c">// run 1: Alice, Carol    run 2: Carol, Alice</span></pre>
+        <div class="fixcol">
+          <p class="fix">one intake that numbers every order on the way in and drains in a fixed order</p>
+          <ul class="crates"><li>exchange_inbound</li><li>exchange_seq</li></ul>
+          <p class="proofline">a=0xda7a45e0d20c8fed b=0xda7a45e0d20c8fed</p>
+        </div>
+      </div>
+      <div class="cratemap"></div>
+    </div>
+  </section>
+
+  <section class="slide s2" id="claim">
+    <div class="main">
+      <div class="work claim">
+        <p class="oneline">24 crates · 0 dependencies from crates.io</p>
+      </div>
+      <div class="cratemap"></div>
+    </div>
+  </section>
+
+  <section class="slide" id="alternatives">
+    <table class="alt">
+      <thead>
+        <tr><th>Promise</th><th>matchcore</th><th>orderbook-rs</th><th>limitbook</th><th>ours</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Fair</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+        <tr><td>Exact</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr>
+        <tr class="hl"><td>Covered</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td></tr>
+        <tr><td>Replayable</td><td>✅</td><td>✅</td><td class="muted">?</td><td>✅</td></tr>
+        <tr><td><em>They beat us:</em> more order types</td><td class="muted">partial</td><td>✅</td><td>❌</td><td>❌</td></tr>
+        <tr><td><em>They beat us:</em> edit an order in the book</td><td class="muted">partial</td><td>✅</td><td>❌</td><td>❌</td></tr>
+      </tbody>
+    </table>
+    <p class="foot">Surveyed 2026-10-02 — docs/research/001</p>
+  </section>
+
+  <section class="slide" id="demo">
+    <div class="corner" id="corner">recorded from exchange_core</div>
+    <div class="msg" id="demo-missing">trace.js missing — run: cargo run -q -p exchange_core --example presentation_trace &gt; docs/presentation/trace.js</div>
+    <div class="demo-grid" id="demo-grid">
+      <div class="ladder-box" id="demo-ladder">
+        <p class="ladder-title">order book</p>
+        <div class="ladder">
+          <div class="rowlbl">sell orders</div><div class="side" data-side="sell"></div>
+          <div class="mid"></div>
+          <div class="rowlbl">buy orders</div><div class="side" data-side="buy"></div>
+        </div>
+      </div>
+      <div class="info">
+        <div class="orderline"><span class="order" id="order"></span><span class="badge" id="badge"></span></div>
+        <p class="reason" id="reason" hidden></p>
+        <ul class="trades" id="trades"></ul>
+      </div>
+      <div class="bal" id="bal"></div>
+      <div class="proofpanel" id="proof"></div>
+    </div>
+  </section>
+
+  <section class="slide" id="future">
+    <table class="alt fut">
+      <thead>
+        <tr><th>What</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr class="hl"><td><strong>Restart after a crash</strong></td><td>The book can't be rebuilt from the log yet — our must-fix</td></tr>
+        <tr><td>Edit an order</td><td>Cancel works; edit doesn't yet</td></tr>
+        <tr><td>More markets</td><td>Only apples for dollars</td></tr>
+        <tr><td>Fees</td><td>We know where they'd be charged; nothing is charged</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="slide" id="end">
+    <div class="end">
+      <h1>Four promises, kept and checked.</h1>
+      <a href="https://github.com/Wandalen/exchange">https://github.com/Wandalen/exchange</a>
+    </div>
+  </section>
+
+  <aside id="notes" hidden>
+    <div id="n-meta"></div>
+    <p id="n-say"></p>
+  </aside>
+  <div id="timer" hidden></div>
+  <div id="progress"></div>
+</main>
+
+<script src="trace.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var ANIM = 300;
+
+  // Script timing: planned window per slide, in seconds, and the Say text.
+  var META = {
+    hook:         { speaker: 'A', from: 0,   to: 30,  say: "In 1982 the Vancouver Stock Exchange started a new index at 1000. It was recalculated after every trade, and every time, the last digit was cut off instead of rounded. Twenty-two months later the index read 525. The correct value was 1099. Nobody stole anything. A rounding rule did it." },
+    exchange:     { speaker: 'A', from: 30,  to: 65,  say: "That was an index, not an exchange. But on an exchange the same kind of bug moves real money. So what is an exchange? Alice has 10 apples and wants a dollar each. She posts a sell order, and it waits in the order book. Carol posts 5 more at the same price — she waits behind Alice. Bob wants 12 apples at a dollar. The exchange matches him: 10 from Alice, 2 from Carol. That's the whole job: orders in, trades out." },
+    promises:     { speaker: 'A', from: 65,  to: 90,  say: "Every exchange makes four promises. Fair: first in line trades first. Exact: no cent appears or vanishes. Covered: nobody trades money they don't have. Replayable: run the same day again, get the same trades. Let's break each one." },
+    fair:         { speaker: 'A', from: 90,  to: 130, say: "Promise one, fair. The obvious home for orders at one price is a Vec: push when they arrive, pop when they match. But pop takes the last one — Carol came after Alice and trades first. Fix: a first-in-first-out queue at every price, and the book ranks prices best first. That's the waiting line on our map." },
+    cents:        { speaker: 'A', from: 130, to: 170, say: "Promise two, exact. Put money in an f64 and 0.1 times 3 is 0.30000000000000004. Bob pays one amount, Alice receives another, and the difference is money from nowhere — Vancouver again. Fix: exact decimal numbers from our own exact_arith crate, and on every trade a check that what left one account arrived in the other. If it doesn't sum to zero, the trade is refused." },
+    lock:         { speaker: 'A', from: 170, to: 210, say: "Promise three, covered. Bob has two dollars and orders ten apples. The naive engine matches first and checks his wallet after: Alice's apples are gone, Bob is at minus eight. Fix: lock Bob's money the moment his order arrives, before it can match or wait. No money, no order. Remember this one — we'll come back to it." },
+    replay:       { speaker: 'A', from: 210, to: 255, say: "Promise four, replayable. When something goes wrong, you replay the day and you must get the same trades. Let the clock decide who was first, and two orders that arrive together come out in a different order on each run. Fix: every order gets a number at the door, through one intake that always drains in the same order. We run the same day twice and hash the result: same hash." },
+    claim:        { speaker: 'A', from: 255, to: 270, say: "That's our engine: orders in, trades out, four promises kept and checked on every trade. Twenty-four crates of Rust, no dependencies from crates.io. <em>[B's name]</em> — why build it at all?" },
+    alternatives: { speaker: 'B', from: 270, to: 310, say: "Fair question — there are open-source order books in Rust. We compared the three closest. Fair, exact, replayable: mostly solved. Covered: none of them. A general-purpose order book doesn't know about your wallet, so there's nowhere to lock money before an order waits. That's the part we had to build. And to be fair to them, they beat us twice: more kinds of orders, and editing an order already in the book." },
+    demo:         { speaker: 'B', from: 310, to: 400, say: "" },
+    future:       { speaker: 'B', from: 400, to: 450, say: "What's missing. The big one: if the server restarts, we can't rebuild the book yet, because setting up accounts and markets doesn't write to the log. That's our must-fix. Then: you can cancel an order but not edit it; there's one market, apples for dollars; and fees — we know where to charge them, we don't yet." },
+    end:          { speaker: 'B', from: 450, to: 460, say: "Four promises, kept and checked on every trade. Thank you." }
+  };
+
+  var SAY_SCENE = {
+    alice_sells: "This is our real engine, recorded. Alice posts her sell order. Her apples are locked — she can't sell them twice.",
+    carol_sells: "Carol, same price, behind Alice.",
+    bob_buys:    "Bob buys twelve. His twelve dollars were locked on arrival; now they move. Alice first, then Carol — fair.",
+    dave_broke:  "Dave has two dollars and wants ten apples. Refused at the door — the book never sees him."
+  };
+  var SAY_PROOF = "Every cent and every apple accounted for. And the whole day, run twice: same hash.";
+
+  var PROMISES = [
+    { name: 'Fair',       desc: 'first in line at a price trades first' },
+    { name: 'Exact',      desc: 'no cent appears or vanishes' },
+    { name: 'Covered',    desc: "nobody trades money they don't have" },
+    { name: 'Replayable', desc: 'the same day replays the same way' }
+  ];
+  // Which promise card is current on each section 2 slide; 'all' ticks every card.
+  var CURRENT = { fair: 0, cents: 1, lock: 2, replay: 3, claim: 'all' };
+
+  // Crate map, in pipeline order. litBy lists the slides that light the box.
+  var BOXES = [
+    { label: 'Line up',      crates: 'exchange_inbound, exchange_seq',    litBy: ['replay'] },
+    { label: 'Check',        crates: 'exchange_spec, exchange_idem',      litBy: [] },
+    { label: 'Lock money',   crates: 'exchange_escrow',                   litBy: ['lock'] },
+    { label: 'Match',        crates: 'exchange_match',                    litBy: ['fair'] },
+    { label: 'Pay out',      crates: 'exact_arith, exchange_conserve',    litBy: ['cents'] },
+    { label: 'Wait in line', crates: 'exchange_book, exchange_level',     litBy: ['fair'] }
+  ];
+
+  // Hard-coded build states for the exchange slide. Book levels: best price nearest the middle.
+  var EX_STATES = [
+    { sell: [ { price: '1.00', queue: [ { who: 'Alice', qty: '10' } ] } ], buy: [] },
+    { sell: [ { price: '1.00', queue: [ { who: 'Alice', qty: '10' }, { who: 'Carol', qty: '5' } ] } ], buy: [] },
+    { sell: [ { price: '1.00', queue: [ { who: 'Alice', qty: '10' }, { who: 'Carol', qty: '5' } ] } ],
+      buy:  [ { price: '1.00', queue: [ { who: 'Bob', qty: '12' } ] } ] },
+    { sell: [ { price: '1.00', queue: [ { who: 'Carol', qty: '3' } ] } ], buy: [] }
+  ];
+
+  var FIELDS = [ ['cash_free', 'free'], ['cash_locked', 'locked'], ['apples_free', 'free'], ['apples_locked', 'locked'] ];
+
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function fmt(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+  }
+  function fmtWin(m) { return fmt(m.from) + '–' + fmt(m.to); }
+
+  function trace() {
+    return (typeof TRACE !== 'undefined' && TRACE && Array.isArray(TRACE.scenes)) ? TRACE : null;
+  }
+
+  function scaleOf(books) {
+    var max = 1;
+    books.forEach(function (b) {
+      ['sell', 'buy'].forEach(function (side) {
+        ((b && b[side]) || []).forEach(function (lv) {
+          (lv.queue || []).forEach(function (e) { max = Math.max(max, Number(e.qty) || 0); });
+        });
+      });
+    });
+    return max;
+  }
+
+  // Keeps DOM nodes in the given order without moving nodes that are already in place,
+  // so CSS enter animations only run for new nodes.
+  function place(parent, els) {
+    var want = new Set(els);
+    var cur = parent.firstElementChild;
+    els.forEach(function (node) {
+      while (cur && cur !== node && !want.has(cur)) cur = cur.nextElementSibling;
+      if (cur === node) cur = cur.nextElementSibling;
+      else parent.insertBefore(node, cur);
+    });
+  }
+
+  function flash(node) {
+    node.classList.remove('flash');
+    void node.offsetWidth;
+    node.classList.add('flash');
+  }
+
+  function drop(node) {
+    node.classList.add('out');
+    setTimeout(function () { node.remove(); }, ANIM);
+  }
+
+  // One ladder renderer for both exchange and demo. Keyed by price and by name,
+  // so a changed quantity moves its bar and flashes instead of being rebuilt.
+  function makeLadder(root, scale) {
+    var sides = { sell: $('[data-side="sell"]', root), buy: $('[data-side="buy"]', root) };
+    var maps = { sell: new Map(), buy: new Map() };
+
+    function newEntry(who) {
+      var node = el('div', 'entry');
+      var head = el('div', 'head');
+      head.append(el('span', 'who', who), el('span', 'qty'));
+      var track = el('div', 'track');
+      track.append(el('div', 'bar'));
+      node.append(head, track);
+      return node;
+    }
+
+    function setEntry(node, qty) {
+      node.querySelector('.qty').textContent = qty;
+      node.querySelector('.bar').style.width = Math.min(100, 100 * (Number(qty) || 0) / scale) + '%';
+    }
+
+    function syncQueue(levelNode, queue) {
+      var box = levelNode.querySelector('.queue');
+      var entries = levelNode._entries;
+      var want = new Set();
+      var nodes = queue.map(function (e) {
+        want.add(e.who);
+        var node = entries.get(e.who);
+        if (!node) {
+          node = newEntry(e.who);
+          entries.set(e.who, node);
+          setEntry(node, e.qty);
+          node.dataset.qty = e.qty;
+        } else if (node.dataset.qty !== String(e.qty)) {
+          setEntry(node, e.qty);
+          node.dataset.qty = e.qty;
+          flash(node);
+        }
+        return node;
+      });
+      entries.forEach(function (node, who) {
+        if (!want.has(who)) { entries.delete(who); drop(node); }
+      });
+      place(box, nodes);
+    }
+
+    function newLevel(price) {
+      var node = el('div', 'level');
+      node.append(el('div', 'price', price), el('div', 'queue'));
+      node._entries = new Map();
+      return node;
+    }
+
+    function syncSide(side, levels) {
+      var map = maps[side];
+      var sorted = levels.slice().sort(function (a, b) { return Number(b.price) - Number(a.price); });
+      var want = new Set();
+      var nodes = sorted.map(function (lv) {
+        want.add(lv.price);
+        var node = map.get(lv.price);
+        if (!node) { node = newLevel(lv.price); map.set(lv.price, node); }
+        syncQueue(node, lv.queue || []);
+        return node;
+      });
+      map.forEach(function (node, price) {
+        if (!want.has(price)) { map.delete(price); drop(node); }
+      });
+      place(sides[side], nodes);
+    }
+
+    return {
+      render: function (book) {
+        syncSide('sell', (book && book.sell) || []);
+        syncSide('buy', (book && book.buy) || []);
+      }
+    };
+  }
+
+  var exLadder = null, demoLadder = null;
+
+  function renderBalances(bal, prev) {
+    var box = $('#bal');
+    box.textContent = '';
+    var table = el('table');
+    var head1 = el('tr'), head2 = el('tr');
+    head1.append(el('th'));
+    var cashTh = el('th', null, 'cash'); cashTh.colSpan = 2;
+    var appleTh = el('th', null, 'apples'); appleTh.colSpan = 2;
+    head1.append(cashTh, appleTh);
+    head2.append(el('th'));
+    FIELDS.forEach(function (f) { head2.append(el('th', null, f[1])); });
+    table.append(el('thead'));
+    table.firstChild.append(head1, head2);
+    var body = el('tbody');
+    Object.keys(bal).forEach(function (name) {
+      var row = el('tr');
+      row.append(el('td', null, name));
+      FIELDS.forEach(function (f) {
+        var key = f[0];
+        var now = (bal[name] || {})[key];
+        var cell = el('td', null, now == null ? '—' : now);
+        var before = prev && prev[name] ? prev[name][key] : undefined;
+        if (before !== undefined && before !== now) cell.classList.add('changed');
+        row.append(cell);
+      });
+      body.append(row);
+    });
+    table.append(body);
+    box.append(table);
+  }
+
+  function renderInfo(sc) {
+    var o = sc.order || {};
+    $('#order').textContent = o.who + ' · ' + o.side + ' ' + o.qty + ' @ ' + o.price;
+    var badge = $('#badge');
+    badge.textContent = sc.outcome;
+    badge.className = 'badge ' + sc.outcome;
+    var refused = sc.outcome === 'refused' && sc.reason;
+    var reason = $('#reason');
+    reason.textContent = refused ? '❌ ' + sc.reason : '';
+    reason.hidden = !refused;
+    var list = $('#trades');
+    list.textContent = '';
+    if (!sc.trades || !sc.trades.length) list.append(el('li', null, '—'));
+    (sc.trades || []).forEach(function (t) {
+      list.append(el('li', null, t.seller + ' → ' + t.buyer + '   ' + t.qty + ' @ ' + t.price));
+    });
+  }
+
+  function hashCell(label, value) {
+    var d = el('div', 'hash');
+    d.append(el('span', 'lbl', label), el('code', null, value || '—'));
+    return d;
+  }
+
+  function renderProof(t) {
+    var box = $('#proof');
+    box.textContent = '';
+    var p = t.replay || {};
+    var same = p.a !== undefined && p.a === p.b;
+    var row = el('div', 'pr-row');
+    row.append(el('span', 'k', 'every cent and every apple accounted for'), el('span', 'mk', t.conserved ? '✅' : '❌'));
+    var pair = el('div', 'pr-pair');
+    pair.append(hashCell('run 1', p.a), el('div', 'eq ' + (same ? 'ok' : 'bad'), same ? 'same' : 'differ'), hashCell('run 2', p.b));
+    box.append(row, pair);
+  }
+
+  function renderDemo(s) {
+    var t = trace();
+    $('#demo').classList.toggle('final', !!t && s >= t.scenes.length);
+    $('#demo-grid').hidden = !t;
+    $('#demo-missing').hidden = !!t;
+    $('#corner').hidden = !t;
+    if (!t) return;
+    if (!demoLadder) demoLadder = makeLadder($('#demo-ladder'), scaleOf(t.scenes.map(function (sc) { return sc.book; })));
+    var last = t.scenes.length;
+    var isFinal = s >= last;
+    var sc = t.scenes[Math.min(s, last - 1)];
+    demoLadder.render(sc.book);
+    renderBalances(sc.balances || {}, !isFinal && s > 0 ? t.scenes[s - 1].balances : null);
+    if (isFinal) renderProof(t); else renderInfo(sc);
+  }
+
+  function renderStep(id, s) {
+    if (id === 'exchange') {
+      if (!exLadder) exLadder = makeLadder($('#ex-ladder'), scaleOf(EX_STATES));
+      exLadder.render(EX_STATES[s]);
+    }
+    if (id === 'demo') renderDemo(s);
+  }
+
+  function card(i, p, cls) {
+    var c = el('div', 'pcard ' + cls);
+    var head = el('div', 'phead');
+    head.append(el('span', 'pnum', String(i + 1)), el('span', 'pname', p.name));
+    c.append(head, el('div', 'pdesc', p.desc));
+    return c;
+  }
+
+  function buildPromises() {
+    var grid = $('#promise-grid');
+    PROMISES.forEach(function (p, i) { grid.append(card(i, p, 'big')); });
+  }
+
+  function buildStrips() {
+    document.querySelectorAll('.s2').forEach(function (section) {
+      var id = section.id;
+      var strip = el('div', 'strip');
+      PROMISES.forEach(function (p, i) {
+        var current = CURRENT[id] === 'all' || CURRENT[id] === i;
+        var c = card(i, p, current ? 'cur' : 'dim');
+        if (id === 'claim') c.append(el('span', 'tick', '✅'));
+        strip.append(c);
+      });
+      section.prepend(strip);
+    });
+  }
+
+  function buildMaps() {
+    document.querySelectorAll('.s2').forEach(function (section) {
+      var box = $('.cratemap', section);
+      BOXES.forEach(function (b) {
+        var lit = section.id === 'claim' || b.litBy.indexOf(section.id) >= 0;
+        var d = el('div', 'box' + (lit ? ' lit' : ''));
+        d.append(el('div', 'blabel', b.label), el('div', 'bcrates', b.crates));
+        box.append(d);
+      });
+    });
+  }
+
+  var SLIDES = Array.from(document.querySelectorAll('.slide'));
+  var IDS = SLIDES.map(function (s) { return s.id; });
+  var cur = 0, step = 0, t0 = null;
+
+  function maxStep(id) {
+    if (id === 'exchange') return EX_STATES.length - 1;
+    if (id === 'demo') { var t = trace(); return t ? t.scenes.length : 0; }
+    return 0;
+  }
+
+  function sayFor(id, s) {
+    if (id === 'demo') {
+      var t = trace();
+      if (!t) return '';
+      if (s >= t.scenes.length) return SAY_PROOF;
+      return SAY_SCENE[t.scenes[s].id] || '';
+    }
+    return META[id].say;
+  }
+
+  function updateTimer() {
+    var id = IDS[cur], m = META[id];
+    var elapsed = t0 === null ? 0 : (performance.now() - t0) / 1000;
+    var timer = $('#timer');
+    timer.textContent = 'elapsed ' + fmt(elapsed) + '  ·  planned ' + fmtWin(m);
+    timer.classList.toggle('over', t0 !== null && elapsed > m.to);
+  }
+
+  function show() {
+    var id = IDS[cur];
+    SLIDES.forEach(function (s, i) { s.classList.toggle('active', i === cur); });
+    renderStep(id, step);
+
+    var m = META[id];
+    $('#n-meta').textContent = 'Speaker ' + m.speaker + '  ·  ' + fmtWin(m);
+    $('#n-say').innerHTML = sayFor(id, step);
+
+    var total = 0, before = 0;
+    IDS.forEach(function (x, i) {
+      total += maxStep(x) + 1;
+      if (i < cur) before += maxStep(x) + 1;
+    });
+    $('#progress').style.width = (100 * (before + step + 1) / total) + '%';
+
+    try { history.replaceState(null, '', '#' + id + (step ? '/' + step : '')); } catch (e) { /* file:// may refuse; the deck still works */ }
+    updateTimer();
+  }
+
+  function next() {
+    if (step < maxStep(IDS[cur])) step++;
+    else if (cur < IDS.length - 1) { cur++; step = 0; }
+    else return;
+    show();
+  }
+
+  function prev() {
+    if (step > 0) step--;
+    else if (cur > 0) { cur--; step = maxStep(IDS[cur]); }
+    else return;
+    show();
+  }
+
+  function parseHash() {
+    var raw = decodeURIComponent(location.hash.replace(/^#/, ''));
+    var parts = raw.split('/');
+    var i = IDS.indexOf(parts[0]);
+    if (i < 0) return null;
+    return { i: i, s: Number(parts[1]) || 0 };
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (t0 === null) t0 = performance.now();
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight': case 'PageDown': case ' ':
+        e.preventDefault(); next(); break;
+      case 'ArrowLeft': case 'PageUp':
+        e.preventDefault(); prev(); break;
+      case 'Home':
+        e.preventDefault(); cur = 0; step = 0; show(); break;
+      case 'n': case 'N':
+        $('#notes').hidden = !$('#notes').hidden; break;
+      case 't': case 'T':
+        $('#timer').hidden = !$('#timer').hidden; updateTimer(); break;
+    }
+    updateTimer();
+  });
+
+  window.addEventListener('hashchange', function () {
+    var h = parseHash();
+    if (!h) return;
+    cur = h.i;
+    step = Math.min(h.s, maxStep(IDS[cur]));
+    show();
+  });
+
+  buildPromises();
+  buildStrips();
+  buildMaps();
+  var h = parseHash();
+  if (h) { cur = h.i; step = Math.min(h.s, maxStep(IDS[cur])); }
+  show();
+  setInterval(updateTimer, 250);
+})();
+</script>
+</body>
+</html>
