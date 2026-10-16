@@ -27,8 +27,9 @@ Budget: 8:00. Planned speech ends at 7:40; the last 20 s are buffer.
 
 **Screen**: a line chart. The index starts at 1000 in 1982 and drifts down to
 524.811 on 25 November 1983; a second, dashed line shows the correct value,
-1098.892. No other text than the axis labels and "Vancouver Stock Exchange
-index".
+1098.892. Title "Vancouver Stock Exchange index"; the solid line labelled
+**reported**, the dashed one **correct**; axis labels; and a small caption,
+"Endpoints from sources; path between them illustrative." Nothing else.
 
 **Say**: "In 1982 the Vancouver Stock Exchange started a new index at 1000.
 It was recalculated after every trade, and every time, the last digit was cut
@@ -37,8 +38,9 @@ correct value was 1099. Nobody stole anything. A rounding rule did it."
 
 ### `exchange` — 0:30–1:05 — A
 
-**Screen**: an order book ladder that builds up step by step, sell orders on
-top, buy orders below. Steps: Alice's sell order appears; Carol's appears
+**Screen**: an order book ladder, titled **order book**, that builds up step
+by step: the side labels read **sell orders** on top and **buy orders**
+below. Steps: Alice's sell order appears; Carol's appears
 behind it at the same price; Bob's buy order arrives, 10 move from Alice and 2
 from Carol; Carol's 3 stay.
 
@@ -196,7 +198,7 @@ key. Corner label: "recorded from exchange_core".
 | `carol_sells` | Carol: sell 5 at 1.00 → waits behind Alice | "Carol, same price, behind Alice." |
 | `bob_buys` | Bob: buy 12 at 1.00 → matches 10 from Alice, 2 from Carol; Carol has 3 left | "Bob buys twelve. His twelve dollars were locked on arrival; now they move. Alice first, then Carol — fair." |
 | `dave_broke` | Dave, holding 2.00: buy 10 at 1.00 → refused, `InsufficientFunds`; the book doesn't change | "Dave has two dollars and wants ten apples. Refused at the door — the book never sees him." |
-| `proof` | Conservation: balanced. The whole day run twice: two equal hashes | "Every cent and every apple accounted for. And the whole day, run twice: same hash." |
+| `proof` | On screen: "every cent and every apple accounted for ✅" (from `conserved`), then **run 1** and **run 2** with their hashes and **same** between them (from `replay`) | "Every cent and every apple accounted for. And the whole day, run twice: same hash." |
 
 ## 5. Not built yet
 
