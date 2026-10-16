@@ -1,0 +1,23 @@
+[package]
+name = "deck_engine"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "exchange_core behind a one-line text protocol, built to wasm32 for the Ukrainian deck"
+
+[lib]
+crate-type = [ "cdylib", "rlib" ]
+
+[dependencies]
+exchange_core = { path = "../../../../module/exchange_core" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Its own workspace root: not a member of the repo's workspace, so CI and
+# `verb/test` never build it.
+[workspace]
