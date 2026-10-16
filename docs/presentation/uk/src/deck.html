@@ -1,0 +1,678 @@
+<title>Біржовий рушій exchange</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: one slide at a time over a quiet paper ground; the order book is the hero object,
+   drawn as one price ladder (asks above, bids below), with a nav rail along the bottom. */
+:root {
+  --paper: #f2f4f8;
+  --surface: #ffffff;
+  --sunk: #e8ecf3;
+  --ink: #131a2c;
+  --muted: #5a6479;
+  --line: #d6dce8;
+  --accent: #2f43cf;
+  --accent-soft: #e3e7ff;
+  --ask: #c4362c;
+  --ask-soft: #fbe6e3;
+  --bid: #0f7d59;
+  --bid-soft: #dcf2e8;
+  --warn: #a85d00;
+  --t1: #7445d6; --t1-soft: #ece4ff;
+  --t2: #b86e00; --t2-soft: #fdf0d9;
+  --t3: #0a7f9e; --t3-soft: #dcf3f9;
+  --t4: #b8327f; --t4-soft: #fbe3f0;
+  --shadow: 0 1px 2px rgba(19, 26, 44, .06), 0 6px 24px rgba(19, 26, 44, .06);
+
+  --display: "Unbounded", "Onest", system-ui, sans-serif;
+  --body: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --fs-0: clamp(12px, .78vw + 4px, 16px);
+  --fs-1: clamp(14px, .9vw + 5px, 20px);
+  --fs-2: clamp(16px, 1.15vw + 6px, 26px);
+  --fs-3: clamp(20px, 1.7vw + 6px, 36px);
+  --fs-4: clamp(26px, 2.6vw + 6px, 56px);
+  --fs-5: clamp(40px, 5.6vw, 112px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0d1220; --surface: #151b2d; --sunk: #1b2236; --ink: #e7ebf5; --muted: #97a0b8; --line: #283049;
+    --accent: #8f9cff; --accent-soft: #232a52; --ask: #ff7d71; --ask-soft: #3a1d22; --bid: #4fd3a0; --bid-soft: #10302a; --warn: #f0a640;
+    --t1: #b597ff; --t1-soft: #2c2350; --t2: #f2b04a; --t2-soft: #3a2a10; --t3: #5fcbe8; --t3-soft: #11303b; --t4: #f07cc0; --t4-soft: #3b1730;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 28px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0d1220; --surface: #151b2d; --sunk: #1b2236; --ink: #e7ebf5; --muted: #97a0b8; --line: #283049;
+  --accent: #8f9cff; --accent-soft: #232a52; --ask: #ff7d71; --ask-soft: #3a1d22; --bid: #4fd3a0; --bid-soft: #10302a; --warn: #f0a640;
+  --t1: #b597ff; --t1-soft: #2c2350; --t2: #f2b04a; --t2-soft: #3a2a10; --t3: #5fcbe8; --t3-soft: #11303b; --t4: #f07cc0; --t4-soft: #3b1730;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 28px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink); font-family: var(--body); font-size: var(--fs-1); line-height: 1.45;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+
+/* ---------- deck ---------- */
+.deck { flex: 1; min-height: 0; position: relative; }
+.slide {
+  position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: clamp(16px, 3vh, 40px);
+}
+.slide:not(.is-active) { display: none; }
+.slide > .inner { max-width: 1680px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; gap: clamp(14px, 2.2vh, 28px); }
+.slide.is-active > .inner { animation: rise .35s ease-out; }
+@keyframes rise { from { transform: translateY(8px); opacity: .6; } to { transform: none; opacity: 1; } }
+
+.eyebrow { font-family: var(--mono); font-size: var(--fs-0); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.h-slide { font-family: var(--display); font-weight: 700; font-size: var(--fs-4); line-height: 1.08; letter-spacing: -.01em; }
+.lede { font-size: var(--fs-2); color: var(--muted); max-width: 62ch; }
+
+/* ---------- title ---------- */
+.title-grid { flex: 1; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(20px, 4vw, 72px); align-items: center; }
+.wordmark { font-family: var(--display); font-weight: 700; font-size: var(--fs-5); line-height: .95; letter-spacing: -.03em; }
+.wordmark .tick { color: var(--accent); }
+.title-sub { font-family: var(--display); font-weight: 500; font-size: var(--fs-3); line-height: 1.2; margin-top: .6em; max-width: 20ch; }
+.title-thesis { font-size: var(--fs-2); color: var(--muted); margin-top: 1em; max-width: 36ch; }
+.facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 1.6em; }
+.fact { display: flex; flex-direction: column; }
+.fact b { font-family: var(--mono); font-size: var(--fs-3); font-weight: 700; font-variant-numeric: tabular-nums; }
+.fact span { font-size: var(--fs-0); color: var(--muted); }
+.title-meta { margin-top: 1.6em; font-family: var(--mono); font-size: var(--fs-0); color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.title-meta a { color: var(--accent); }
+.keyhint { font-size: var(--fs-0); color: var(--muted); }
+kbd { font-family: var(--mono); font-size: .85em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 .4em; background: var(--surface); }
+
+/* ---------- glossary slide ---------- */
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: clamp(18px, 3vw, 56px); align-items: start; flex: 1; }
+.terms { display: grid; gap: clamp(12px, 2vh, 22px); }
+.term { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 14px; align-items: baseline; padding-bottom: clamp(10px, 1.6vh, 18px); border-bottom: 1px solid var(--line); }
+.term dt { font-family: var(--display); font-weight: 500; font-size: var(--fs-2); }
+.term dd { margin: 0; color: var(--muted); }
+.term dd b { color: var(--ink); font-weight: 600; }
+.promises { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.promise { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.promise .n { font-family: var(--mono); font-size: var(--fs-0); color: var(--accent); }
+.promise b { font-family: var(--display); font-weight: 500; font-size: var(--fs-2); }
+.promise span { color: var(--muted); font-size: var(--fs-0); }
+.promise .where { font-family: var(--mono); font-size: calc(var(--fs-0) * .92); color: var(--muted); margin-top: auto; padding-top: 6px; }
+
+/* ---------- order book ladder ---------- */
+.book { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px 10px; display: flex; flex-direction: column; min-width: 0; }
+.book-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 0 2px 8px; border-bottom: 1px solid var(--line); }
+.book-head b { font-family: var(--display); font-weight: 500; font-size: var(--fs-1); }
+.book-head span { font-size: var(--fs-0); color: var(--muted); }
+.ladder { display: flex; flex-direction: column; padding-top: 6px; --u: 24px; }
+.lrow { display: grid; grid-template-columns: 5.6em minmax(0, 1fr) 3.2em; align-items: center; gap: 10px; min-height: clamp(30px, 4.6vh, 46px); padding: 2px 6px; border-radius: 8px; }
+.lrow + .lrow { margin-top: 3px; }
+.lrow.ask { background: var(--ask-soft); }
+.lrow.bid { background: var(--bid-soft); }
+.lrow.idle { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.lrow .px { font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums; font-size: var(--fs-1); }
+.lrow.ask .px { color: var(--ask); }
+.lrow.bid .px { color: var(--bid); }
+.lrow.idle .px { color: var(--muted); font-weight: 400; }
+.lrow .sum { font-family: var(--mono); font-size: var(--fs-0); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.track { display: flex; gap: 4px; min-width: 0; overflow: hidden; align-items: center; }
+.side-tag { font-family: var(--mono); font-size: calc(var(--fs-0) * .9); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; padding: 6px 6px 2px; display: flex; justify-content: space-between; }
+.side-tag.ask-tag { color: var(--ask); }
+.side-tag.bid-tag { color: var(--bid); }
+.spread { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: var(--fs-0); color: var(--muted); padding: 6px 6px; }
+.spread::before, .spread::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+
+.chip {
+  --c: var(--t1); --cs: var(--t1-soft);
+  position: relative; flex: 0 0 auto; width: calc(var(--u) * var(--q)); min-width: 3.1em; height: clamp(22px, 3.3vh, 34px);
+  display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 6px;
+  border-radius: 7px; background: var(--cs); color: var(--c); border: 1.5px solid var(--c);
+  font-family: var(--mono); font-size: var(--fs-0); font-weight: 700; white-space: nowrap; overflow: hidden;
+  transition: width .45s ease, opacity .3s;
+}
+.chip[data-t="2"] { --c: var(--t2); --cs: var(--t2-soft); }
+.chip[data-t="3"] { --c: var(--t3); --cs: var(--t3-soft); }
+.chip[data-t="4"] { --c: var(--t4); --cs: var(--t4-soft); }
+.chip .who { font-family: var(--body); font-weight: 700; }
+.chip .tg { font-weight: 500; opacity: .75; font-size: .82em; }
+.chip.new { animation: chip-in .5s ease-out both; animation-delay: var(--d2, .35s); }
+.chip.gone { opacity: .38; border-style: dashed; animation: chip-gone .6s ease-out both; animation-delay: var(--d1, .2s); }
+.chip.gone .q { text-decoration: line-through; }
+.chip.hit { animation: chip-hit .9s ease-out both; animation-delay: var(--d1, .2s); }
+.chip .delta { position: absolute; right: 3px; top: 1px; font-size: .7em; line-height: 1; color: var(--ink); opacity: .8; }
+button.chip { cursor: pointer; }
+button.chip.sel { box-shadow: 0 0 0 3px var(--accent); }
+@keyframes chip-in { from { transform: translateX(14px) scale(.9); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes chip-gone { from { opacity: 1; border-style: solid; } to { opacity: .38; } }
+@keyframes chip-hit { 0% { box-shadow: 0 0 0 0 var(--c); } 30% { box-shadow: 0 0 0 5px var(--cs); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* ---------- demo / sandbox stage ---------- */
+.stage { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1.05fr); gap: clamp(12px, 1.4vw, 24px); align-items: start; min-height: 0; }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+.panel-title { font-family: var(--mono); font-size: var(--fs-0); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+
+.scn-list { display: flex; flex-direction: column; gap: 4px; }
+.scn {
+  display: grid; grid-template-columns: 1.6em minmax(0, 1fr); gap: 8px; align-items: baseline; text-align: left;
+  background: transparent; border: 0; border-radius: 9px; padding: 7px 10px; cursor: pointer; color: var(--muted); font-size: var(--fs-1);
+}
+.scn .k { font-family: var(--mono); font-size: var(--fs-0); }
+.scn:hover { background: var(--sunk); color: var(--ink); }
+.scn[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+.scn[aria-pressed="true"] .k { color: var(--accent); }
+
+.seg { display: flex; flex-wrap: wrap; gap: 4px; background: var(--sunk); border-radius: 10px; padding: 3px; }
+.seg button { flex: 1 1 auto; border: 0; background: transparent; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: var(--fs-0); font-weight: 600; color: var(--muted); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.seg.buy-sell button[data-v="buy"][aria-pressed="true"] { color: var(--bid); }
+.seg.buy-sell button[data-v="sell"][aria-pressed="true"] { color: var(--ask); }
+
+.rule { font-size: var(--fs-1); line-height: 1.4; }
+.say { font-size: var(--fs-1); line-height: 1.45; font-weight: 500; min-height: 5.8em; }
+.stepper { display: flex; align-items: center; gap: 8px; }
+.btn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 8px 14px; cursor: pointer; font-weight: 600; font-size: var(--fs-0);
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:disabled { opacity: .4; cursor: default; border-color: var(--line); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.big { font-size: var(--fs-1); padding: 10px 18px; }
+.dots { display: flex; gap: 5px; flex: 1; justify-content: center; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.dots i.on { background: var(--accent); }
+.dots i.done { background: var(--muted); }
+
+.incoming { display: flex; flex-direction: column; gap: 6px; border-radius: 14px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); min-height: 5.4em; }
+.incoming.flash { animation: card-in .35s ease-out; }
+@keyframes card-in { from { transform: translateY(-6px); opacity: .3; } to { transform: none; opacity: 1; } }
+.inc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.inc-head .tag { font-family: var(--mono); font-size: var(--fs-0); color: var(--muted); }
+.inc-order { font-size: var(--fs-2); font-weight: 600; }
+.inc-order .side-buy { color: var(--bid); }
+.inc-order .side-sell { color: var(--ask); }
+.badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: var(--fs-0); font-weight: 600; background: var(--sunk); color: var(--ink); }
+.badge.ok { background: var(--bid-soft); color: var(--bid); }
+.badge.bad { background: var(--ask-soft); color: var(--ask); }
+.badge.mid { background: var(--accent-soft); color: var(--accent); }
+.outcome { display: flex; flex-wrap: wrap; gap: 6px; }
+.person { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.person::before { content: ""; width: .62em; height: .62em; border-radius: 50%; background: var(--pc, var(--t1)); }
+.person[data-t="2"] { --pc: var(--t2); }
+.person[data-t="3"] { --pc: var(--t3); }
+.person[data-t="4"] { --pc: var(--t4); }
+
+.bal { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.bal th { font-size: calc(var(--fs-0) * .92); color: var(--muted); font-weight: 500; text-align: right; padding: 0 6px 6px; white-space: nowrap; }
+.bal th:first-child { text-align: left; padding-left: 0; }
+.bal td { font-family: var(--mono); font-size: var(--fs-0); text-align: right; padding: 6px; border-top: 1px solid var(--line); white-space: nowrap; }
+.bal td:first-child { font-family: var(--body); text-align: left; padding-left: 0; font-size: var(--fs-1); }
+.bal td.lock { color: var(--muted); }
+.bal td.lock.has { color: var(--warn); font-weight: 700; }
+.bal td.chg { animation: cell .9s ease-out both; animation-delay: var(--d3, .55s); }
+.bal td .dl { display: block; font-size: .78em; line-height: 1; color: var(--accent); }
+@keyframes cell { 0% { background: transparent; } 25% { background: var(--accent-soft); } 100% { background: transparent; } }
+.ico { width: 1em; height: 1em; vertical-align: -.12em; }
+.tape { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 34vh; overflow-y: auto; }
+.tape li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr); gap: 8px; font-size: var(--fs-0); line-height: 1.35; animation: card-in .3s ease-out both; }
+.tape li .sq { font-family: var(--mono); color: var(--muted); }
+.tape li.trade { font-weight: 600; }
+.tape li.trade .sq { color: var(--bid); }
+.tape li.rej .sq, .tape li.cxl .sq { color: var(--ask); }
+.tape .empty { color: var(--muted); display: block; }
+.foot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: var(--fs-0); color: var(--muted); }
+.foot .ok { color: var(--bid); font-weight: 600; }
+.engine-badge { font-family: var(--mono); font-size: calc(var(--fs-0) * .92); border-radius: 999px; padding: 3px 10px; border: 1px solid var(--line); color: var(--muted); }
+.engine-badge.wasm { border-color: var(--accent); color: var(--accent); }
+
+/* sandbox form */
+.form { display: grid; gap: 10px; }
+.field { display: grid; gap: 4px; }
+.field > span { font-size: var(--fs-0); color: var(--muted); }
+.who-seg button { display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
+.who-seg button::before { content: ""; width: .6em; height: .6em; border-radius: 50%; background: var(--pc, var(--t1)); }
+.who-seg button[data-v="2"] { --pc: var(--t2); } .who-seg button[data-v="3"] { --pc: var(--t3); } .who-seg button[data-v="4"] { --pc: var(--t4); }
+.num { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.num input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 10px; font-family: var(--mono); font-size: var(--fs-1); text-align: center; }
+.num button { border: 0; background: var(--sunk); padding: 0 12px; cursor: pointer; font-family: var(--mono); font-weight: 700; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+select.sel { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--surface); }
+.cost { font-size: var(--fs-0); color: var(--muted); }
+.selected-order { font-size: var(--fs-0); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.replay { font-family: var(--mono); font-size: var(--fs-0); display: grid; gap: 2px; }
+.replay .ok { color: var(--bid); font-weight: 700; font-family: var(--body); }
+.replay .bad { color: var(--ask); font-weight: 700; font-family: var(--body); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- engine / bugs / next ---------- */
+.arch { display: grid; grid-template-columns: minmax(0, .95fr) auto minmax(0, 2fr) auto minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.arch-box { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.arch-box.core { border: 1.5px solid var(--accent); box-shadow: var(--shadow); }
+.arch-cap { font-family: var(--mono); font-size: var(--fs-0); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.arch-box.core .arch-cap { color: var(--accent); }
+.arch-note { font-size: var(--fs-0); color: var(--muted); }
+.lane { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 9px; background: var(--sunk); font-size: var(--fs-0); }
+.lane .thr { font-weight: 600; }
+.lane .rg { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); color: var(--accent); }
+.arch-arrow { align-self: center; justify-self: center; font-family: var(--mono); font-size: var(--fs-3); color: var(--muted); }
+.arch-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-top: auto; }
+.arch-steps .st { background: var(--sunk); border-radius: 9px; padding: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.arch-steps .st.tx { background: var(--accent-soft); }
+.arch-steps .st b { font-family: var(--display); font-weight: 500; font-size: var(--fs-0); }
+.arch-steps .st code { font-family: var(--mono); font-size: calc(var(--fs-0) * .82); color: var(--muted); overflow-wrap: anywhere; }
+.tx-bracket { grid-column: 2 / 5; height: 12px; border: 2px solid var(--accent); border-top: 0; border-radius: 0 0 10px 10px; }
+.tx-label { grid-column: 2 / 5; text-align: center; font-size: var(--fs-0); font-weight: 600; color: var(--accent); }
+.outbox { background: var(--sunk); border-radius: 9px; padding: 10px; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-0); color: var(--muted); }
+.outbox b { font-family: var(--display); font-weight: 500; font-size: var(--fs-1); color: var(--ink); }
+.outbox .mono { color: var(--accent); font-weight: 700; }
+.arch-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px clamp(16px, 2.4vw, 40px); }
+.arch-facts b { font-family: var(--mono); font-size: var(--fs-3); font-weight: 700; display: block; font-variant-numeric: tabular-nums; }
+.arch-facts span { color: var(--muted); font-size: var(--fs-0); }
+.dec { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 20px); }
+.dc { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: clamp(12px, 1.8vh, 20px); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dc .crate { font-family: var(--mono); font-size: calc(var(--fs-0) * .88); color: var(--muted); }
+.dc b { font-family: var(--display); font-weight: 500; font-size: var(--fs-2); line-height: 1.2; }
+.dc p { color: var(--muted); font-size: var(--fs-0); line-height: 1.5; }
+.dc .proof { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: calc(var(--fs-0) * .9); color: var(--accent); }
+.stats-line { display: flex; flex-wrap: wrap; gap: 8px 32px; }
+.stats-line div b { font-family: var(--mono); font-size: var(--fs-3); font-weight: 700; display: block; font-variant-numeric: tabular-nums; }
+.stats-line div span { color: var(--muted); font-size: var(--fs-0); }
+
+.next-list { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.row-next { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.4fr) auto; gap: 18px; align-items: baseline; padding: clamp(12px, 2vh, 20px) 18px; }
+.row-next + .row-next { border-top: 1px solid var(--line); }
+.row-next b { font-family: var(--display); font-weight: 500; font-size: var(--fs-2); }
+.row-next p { color: var(--muted); }
+.row-next.first { background: var(--accent-soft); }
+.end { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: clamp(14px, 3vh, 32px); }
+.end .big { font-family: var(--display); font-weight: 700; font-size: var(--fs-5); line-height: 1; letter-spacing: -.02em; }
+.end .big em { font-style: normal; color: var(--accent); }
+
+/* ---------- nav, notes, script ---------- */
+.nav {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line); background: var(--surface);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); position: relative; z-index: 5;
+}
+.brand { font-family: var(--display); font-weight: 700; font-size: var(--fs-0); }
+.brand .tick { color: var(--accent); }
+.sections { flex: 1; display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.sections button { flex: 1 1 0; min-width: 0; border: 0; background: transparent; cursor: pointer; padding: 4px 2px 0; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: calc(var(--fs-0) * .88); }
+.sections button::before { content: ""; height: 3px; border-radius: 2px; background: var(--line); }
+.sections button.done::before { background: var(--muted); }
+.sections button[aria-current="true"] { color: var(--ink); font-weight: 600; }
+.sections button[aria-current="true"]::before { background: var(--accent); }
+.sections button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.navbtns { display: flex; gap: 6px; align-items: center; }
+.iconbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; height: 34px; min-width: 34px; padding: 0 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: var(--fs-0); font-weight: 600; }
+.iconbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.timer { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.timer.over { color: var(--ask); }
+.counter { font-family: var(--mono); font-size: var(--fs-0); color: var(--muted); min-width: 3.4em; text-align: center; }
+
+.notes {
+  position: absolute; left: 0; right: 0; bottom: 100%; max-height: 42vh; overflow-y: auto; background: var(--surface); border-top: 1px solid var(--line);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, .12);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 16px;
+}
+.notes .nt { max-width: 1100px; margin: 0 auto; display: grid; gap: 8px; }
+.notes .nt-head { display: flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: var(--fs-0); color: var(--muted); }
+.notes p { font-size: var(--fs-2); line-height: 1.45; }
+.notes .alt { font-size: var(--fs-0); color: var(--muted); }
+
+.script { position: fixed; inset: 0; z-index: 20; background: var(--paper); overflow-y: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: calc(24px + env(safe-area-inset-top, 0px)) calc(40px + env(safe-area-inset-bottom, 0px)); }
+.script .sc-inner { max-width: 760px; margin: 0 auto; display: grid; gap: 22px; }
+.script header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.script h2 { font-family: var(--display); font-weight: 700; font-size: var(--fs-3); }
+.script .seg-t { display: grid; gap: 6px; }
+.script .seg-t .tm { font-family: var(--mono); font-size: var(--fs-0); color: var(--accent); }
+.script .seg-t p { font-size: var(--fs-1); line-height: 1.6; }
+.script .meta { color: var(--muted); font-size: var(--fs-0); }
+
+/* ---------- narrow screens ---------- */
+@media (max-width: 1100px) {
+  .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .stage > .col:first-child { grid-column: 1 / -1; }
+  .arch { grid-template-columns: minmax(0, 1fr); }
+  .arch-arrow { transform: rotate(90deg); }
+  .dec, .arch-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  body { overflow: hidden; }
+  .title-grid, .two, .stage, .dec { grid-template-columns: minmax(0, 1fr); }
+  .arch-steps { grid-template-columns: minmax(0, 1fr); }
+  .tx-bracket { display: none; }
+  .tx-label { grid-column: auto; text-align: left; }
+  .promises { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row-next { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .sections, .brand, .hide-narrow { display: none; }
+  .nav { justify-content: space-between; }
+  .term { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+.still .chip, .bal.still td { animation: none !important; }
+.foot .bad { color: var(--ask); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-apple" viewBox="0 0 16 16"><path d="M8 4.6c1.1-.9 2.6-1 3.7-.3 1.6 1 1.9 3.3 1.1 5.6-.7 2-2 3.6-3.2 3.6-.7 0-1-.4-1.6-.4s-.9.4-1.6.4C5.2 13.5 3.9 11.9 3.2 9.9 2.4 7.6 2.7 5.3 4.3 4.3c1.1-.7 2.6-.6 3.7.3z" fill="currentColor"/><path d="M8 4.4c0-1.2.6-2.3 1.8-2.9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-ring" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-dasharray="2.4 1.3"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-next" viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<main class="deck" id="deck">
+
+  <!-- 1. title -->
+  <section class="slide is-active" data-id="title" data-label="Вступ">
+    <div class="inner">
+      <div class="title-grid">
+        <div>
+          <div class="eyebrow">Rust Bootcamp · захист проєкту</div>
+          <h1 class="wordmark">exchange<span class="tick">_</span></h1>
+          <p class="title-sub">Рушій зведення біржових заявок на Rust</p>
+          <p class="title-thesis">Заявки заходять, угоди виходять. Жодна копійка не з’являється і не зникає.</p>
+          <div class="facts">
+            <div class="fact"><b>24</b><span>крейти у workspace</span></div>
+            <div class="fact"><b>0</b><span>runtime-залежностей з crates.io</span></div>
+            <div class="fact"><b>327</b><span>тестів</span></div>
+          </div>
+          <div class="title-meta">
+            <a href="https://github.com/Wandalen/exchange" target="_blank" rel="noopener">github.com/Wandalen/exchange</a>
+            <span>edition 2024 · MIT</span>
+          </div>
+        </div>
+        <div class="book" id="title-book" aria-label="Приклад стакану"></div>
+      </div>
+      <p class="keyhint"><kbd>→</kbd> далі · <kbd>←</kbd> назад · <kbd>N</kbd> нотатки · <kbd>S</kbd> текст виступу · <kbd>T</kbd> таймер · <kbd>F</kbd> на весь екран</p>
+    </div>
+  </section>
+
+  <!-- 2. what an exchange is -->
+  <section class="slide" data-id="exchange" data-label="Біржа">
+    <div class="inner">
+      <div class="eyebrow">Чотири слова, яких достатньо</div>
+      <h2 class="h-slide">Що робить біржа</h2>
+      <div class="two">
+        <dl class="terms">
+          <div class="term"><dt>Заявка</dt><dd><b>Купити або продати</b> стільки-то яблук не дорожче (або не дешевше) за таку-то ціну.</dd></div>
+          <div class="term"><dt>Стакан</dt><dd>Заявки, які ще не знайшли пари. <b>Продавці зверху, покупці знизу</b>, між ними спред.</dd></div>
+          <div class="term"><dt>Черга</dt><dd>Спершу <b>краща ціна</b>. За однакової ціни <b>хто раніше прийшов</b>.</dd></div>
+          <div class="term"><dt>Угода</dt><dd>Ціни перетнулись. Угода йде <b>за ціною того, хто чекав</b> у стакані.</dd></div>
+        </dl>
+        <div class="book" id="gloss-book" aria-label="Стакан з поясненнями"></div>
+      </div>
+      <div class="promises">
+        <div class="promise"><span class="n">01</span><b>Чесно</b><span>Хто перший у черзі, той перший торгує</span><span class="where">exchange_level · exchange_book</span></div>
+        <div class="promise"><span class="n">02</span><b>Точно</b><span>Копійка не з’являється і не зникає</span><span class="where">exact_arith · exchange_conserve</span></div>
+        <div class="promise"><span class="n">03</span><b>Покрито</b><span>Без грошей заявки немає</span><span class="where">exchange_escrow</span></div>
+        <div class="promise"><span class="n">04</span><b>Відтворювано</b><span>Той самий день дає ті самі угоди</span><span class="where">exchange_inbound · exchange_seq</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. scripted demo -->
+  <section class="slide" data-id="demo" data-label="Правила">
+    <div class="inner">
+      <div class="stage" id="demo">
+        <div class="col">
+          <div class="panel">
+            <div class="panel-title"><span>Сценарій</span><span>клавіші 1–5</span></div>
+            <div class="scn-list" id="scn-list"></div>
+          </div>
+          <div class="seg" id="variant-seg" hidden></div>
+          <div class="panel">
+            <p class="rule" id="scn-rule"></p>
+          </div>
+          <p class="say" id="scn-say" aria-live="polite"></p>
+          <div class="stepper">
+            <button class="btn" id="step-prev" aria-label="Попередній крок"><svg class="ico"><use href="#i-prev"/></svg></button>
+            <div class="dots" id="step-dots"></div>
+            <button class="btn primary" id="step-next">Далі <svg class="ico"><use href="#i-next"/></svg></button>
+          </div>
+        </div>
+        <div class="col">
+          <div class="incoming" id="demo-inc"></div>
+          <div class="book" id="demo-book"></div>
+        </div>
+        <div class="col">
+          <div class="panel"><div class="panel-title"><span>Рахунки</span><span><svg class="ico"><use href="#i-lock"/></svg> заблоковано</span></div><div id="demo-bal"></div></div>
+          <div class="panel"><div class="panel-title"><span>Журнал подій кроку</span></div><ul class="tape" id="demo-tape"></ul></div>
+          <div class="foot" id="demo-foot"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. sandbox -->
+  <section class="slide" data-id="sandbox" data-label="Пісочниця">
+    <div class="inner">
+      <div class="stage" id="sandbox">
+        <div class="col">
+          <div class="panel">
+            <div class="panel-title"><span>Нова заявка</span></div>
+            <form class="form" id="sb-form" autocomplete="off">
+              <div class="field"><span>Хто</span><div class="seg who-seg" id="sb-who"></div></div>
+              <div class="seg buy-sell" id="sb-side">
+                <button type="button" data-v="buy">Купити</button><button type="button" data-v="sell">Продати</button>
+              </div>
+              <div class="row2">
+                <label class="field"><span>Ціна, ₴</span>
+                  <span class="num"><button type="button" data-d="-0.1" aria-label="Ціна мінус 0,10">−</button><input id="sb-price" inputmode="decimal" value="10.20"><button type="button" data-d="0.1" aria-label="Ціна плюс 0,10">+</button></span>
+                </label>
+                <label class="field"><span>Кількість</span>
+                  <span class="num"><button type="button" data-q="-1" aria-label="Мінус 1">−</button><input id="sb-qty" inputmode="numeric" value="10"><button type="button" data-q="1" aria-label="Плюс 1">+</button></span>
+                </label>
+              </div>
+              <div class="field"><span>Час життя</span><div class="seg" id="sb-tif">
+                <button type="button" data-v="gtc">GTC</button><button type="button" data-v="ioc">IOC</button><button type="button" data-v="fok">FOK</button><button type="button" data-v="post">Post-only</button>
+              </div></div>
+              <label class="field"><span>Self-trade (налаштування оператора)</span>
+                <select class="sel" id="sb-stp">
+                  <option value="incoming">Скасувати нову заявку</option>
+                  <option value="resting">Скасувати ту, що чекає</option>
+                  <option value="both">Скасувати обидві</option>
+                </select>
+              </label>
+              <p class="cost" id="sb-cost"></p>
+              <button class="btn primary big" type="submit" id="sb-place">Виставити заявку</button>
+            </form>
+          </div>
+          <div class="panel">
+            <div class="panel-title"><span>Оператор</span></div>
+            <div class="actions">
+              <button class="btn" id="sb-halt" type="button">Зупинити торги</button>
+              <button class="btn" id="sb-replay" type="button">Прогнати день ще раз</button>
+              <button class="btn" id="sb-reset" type="button">Почати спочатку</button>
+            </div>
+            <div class="replay" id="sb-replay-out"></div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="incoming" id="sb-inc"></div>
+          <div class="book" id="sb-book"></div>
+          <div class="selected-order" id="sb-selected"></div>
+        </div>
+        <div class="col">
+          <div class="panel"><div class="panel-title"><span>Рахунки</span><span><svg class="ico"><use href="#i-lock"/></svg> заблоковано</span></div><div id="sb-bal"></div></div>
+          <div class="panel"><div class="panel-title"><span>Журнал подій</span><span id="sb-count"></span></div><ul class="tape" id="sb-tape"></ul></div>
+          <div class="foot" id="sb-foot"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. architecture -->
+  <section class="slide" data-id="arch" data-label="Архітектура">
+    <div class="inner">
+      <div class="eyebrow">ring · exchange_inbound · exchange_core</div>
+      <h2 class="h-slide">Багато потоків, один записувач</h2>
+      <div class="arch">
+        <div class="arch-box">
+          <div class="arch-cap">Виробники</div>
+          <div class="lane"><span class="thr">потік 1</span><span class="rg"><svg class="ico"><use href="#i-ring"/></svg>ring_spsc</span></div>
+          <div class="lane"><span class="thr">потік 2</span><span class="rg"><svg class="ico"><use href="#i-ring"/></svg>ring_spsc</span></div>
+          <div class="lane"><span class="thr">потік N</span><span class="rg"><svg class="ico"><use href="#i-ring"/></svg>ring_spsc</span></div>
+          <p class="arch-note">Кожен виробник має своє lock-free кільце: без м’ютексів і без read-modify-write.</p>
+        </div>
+        <div class="arch-arrow" aria-hidden="true">→</div>
+        <div class="arch-box core">
+          <div class="arch-cap">exchange_step · один записувач</div>
+          <p class="arch-note">Зливає кільця в наперед заданому порядку. Номер заявки й час прибуття ставить рушій, а не клієнт.</p>
+          <div class="arch-steps">
+            <div class="st"><b>Перевірка</b><code>exchange_spec</code></div>
+            <div class="st tx"><b>Блокування</b><code>exchange_escrow</code></div>
+            <div class="st tx"><b>Зведення</b><code>exchange_match</code></div>
+            <div class="st tx"><b>Розрахунок</b><code>exchange_conserve</code></div>
+            <div class="st"><b>Залишок</b><code>exchange_book</code></div>
+            <div class="tx-bracket" aria-hidden="true"></div>
+            <div class="tx-label">спершу на клонах стакану й ескроу, потім commit</div>
+          </div>
+        </div>
+        <div class="arch-arrow" aria-hidden="true">→</div>
+        <div class="arch-box">
+          <div class="arch-cap">Що виходить</div>
+          <div class="outbox"><b>Журнал подій</b><span class="mono">#41 · #42 · #43 · #44</span><span>кожна зміна стану — одна подія, номери без пропусків</span></div>
+          <div class="outbox"><b>Аудит</b><span class="mono">Σ ₴ = 0 · Σ шт. = 0</span><span>кожна угода в подвійному записі</span></div>
+        </div>
+      </div>
+      <div class="arch-facts">
+        <div><b>2</b><span>release-записи на весь обмін у SPSC-кільці; курсори на окремих 64-байтних кеш-лініях</span></div>
+        <div><b>+37%</b><span>ring_spsc проти rtrb: 334 проти 244 млн записів/с (Raspberry Pi 5, 16 384 слоти)</span></div>
+        <div><b>loom</b><span>перебирає всі переплетення потоків, а не сподівається на вдалий прогін</span></div>
+        <div><b>0,9 мс</b><span>прохід по 40 000 рівнів стакану на VecDeque; на Vec було 452 мс</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. engineering decisions -->
+  <section class="slide" data-id="decisions" data-label="Рішення">
+    <div class="inner">
+      <div class="eyebrow">Чому це не пет-проєкт</div>
+      <h2 class="h-slide">Інженерні рішення</h2>
+      <div class="dec">
+        <article class="dc">
+          <span class="crate">ring_spsc · ring_cursor · ring_align</span>
+          <b>Lock-free вхід</b>
+          <p>Ні м’ютексів, ні read-modify-write: увесь обмін — два Release-записи, по одному з кожного боку. Курсори виробника і споживача лежать на різних кеш-лініях, тож ядра не заважають одне одному.</p>
+          <span class="proof">loom-модель · +37% до rtrb</span>
+        </article>
+        <article class="dc">
+          <span class="crate">exchange_inbound · exchange_seq</span>
+          <b>Повний порядок без годинника</b>
+          <p>Кожен виробник має своє кільце, а рушій зливає їх у наперед заданому порядку, а не за принципом «хто швидший». Переповнене кільце повертає команду відправнику, а не губить її мовчки.</p>
+          <span class="proof">два прогони → один хеш</span>
+        </article>
+        <article class="dc">
+          <span class="crate">exchange_core</span>
+          <b>Транзакція без коду відкату</b>
+          <p>Блокування, зведення й розрахунок спершу виконуються на клонах стакану й ескроу. На справжньому стані повторюються ті самі чисті функції, тож половина угоди неможлива. FOK так само пробується на клоні книги.</p>
+          <span class="proof">ціна рішення: клон стакану на кожну заявку</span>
+        </article>
+        <article class="dc">
+          <span class="crate">exchange_escrow · trait EscrowPort</span>
+          <b>Ескроу як бухгалтерія</b>
+          <p>Кожен баланс — це «вільно», «заблоковано» і «очікується». Резерв береться за лімітом ще до стакану, різниця ціни повертається в момент угоди, а «очікується» тримає місце під майбутні надходження.</p>
+          <span class="proof">рушій тестується з підставним ескроу</span>
+        </article>
+        <article class="dc">
+          <span class="crate">exact_arith · Decimal&lt;const SCALE&gt;</span>
+          <b>Гроші на рівні типів</b>
+          <p>Гроші плюс кількість або два різні масштаби не компілюються. Значення — це Copy без heap, а режим округлення є параметром кожної операції: Exact для суми угоди, Down для залишку резерву.</p>
+          <span class="proof">compile_fail-тести · заборона f32/f64</span>
+        </article>
+        <article class="dc">
+          <span class="crate">exchange_fill · exchange_conserve</span>
+          <b>Журнал і подвійний запис</b>
+          <p>Кожна зміна стану — рівно одна подія з номером без пропусків, тож втрату видно арифметикою. З подій будуються проводки, і кожна угода сходиться в нуль за гривнями й за яблуками.</p>
+          <span class="proof">verify(&amp;postings).is_balanced()</span>
+        </article>
+      </div>
+      <div class="stats-line">
+        <div><b>3</b><span>репозиторії родини: ring, exact, exchange</span></div>
+        <div><b>0</b><span>runtime-залежностей з crates.io</span></div>
+        <div><b>deny</b><span>unsafe у workspace; дозволений лише в короткому списку крейтів кілець</span></div>
+        <div><b>327</b><span>тестів у exchange</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. what's missing -->
+  <section class="slide" data-id="next" data-label="Далі">
+    <div class="inner">
+      <div class="eyebrow">Чесно про межі v0.1</div>
+      <h2 class="h-slide">Чого ще немає</h2>
+      <div class="next-list">
+        <div class="row-next first"><b>Відновлення після збою</b><p>Стакан і рахунки ще не відновлюються з журналу: адмінські дії (<code>open_account</code>, <code>spec_register</code>) не пишуть подій.</p><span class="badge bad">наступний пріоритет</span></div>
+        <div class="row-next"><b>Зміна заявки</b><p>Скасування працює. Команда <code>Replace</code> доходить до рушія, але поки відповідає <code>ReplaceNotWired</code>.</p><span class="badge">заплановано</span></div>
+        <div class="row-next"><b>Комісії</b><p>Відомо, де їх стягувати. Тарифів ще немає, тож нічого не стягується.</p><span class="badge">заплановано</span></div>
+        <div class="row-next"><b>Більше ринків і стоп-заявки</b><p>Поки одна пара, яблука за гривні. Ринкова заявка — це лімітна з ціною-стелею та IOC або FOK.</p><span class="badge">поза v0.1</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. end -->
+  <section class="slide" data-id="end" data-label="Питання">
+    <div class="inner">
+      <div class="end">
+        <div class="eyebrow">exchange · Rust Bootcamp</div>
+        <p class="big">Дякуємо!<br><em>Питання?</em></p>
+        <p class="lede">Чотири обіцянки: чесна черга, точні гроші, покриття до угоди, відтворюваний день. Кожна перевіряється на кожній угоді.</p>
+        <div class="title-meta"><a href="https://github.com/Wandalen/exchange" target="_blank" rel="noopener">github.com/Wandalen/exchange</a><span>Пісочниця відкрита: спробуйте поставити заявку самі</span></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="nav" aria-label="Навігація слайдами">
+  <div class="notes" id="notes" hidden></div>
+  <span class="brand">exchange<span class="tick">_</span></span>
+  <div class="sections" id="sections"></div>
+  <div class="navbtns">
+    <span class="engine-badge hide-narrow" id="engine-badge">рушій…</span>
+    <button class="iconbtn timer hide-narrow" id="timer" title="Таймер (T)">0:00</button>
+    <button class="iconbtn" id="notes-btn" aria-pressed="false" title="Нотатки (N)">N</button>
+    <button class="iconbtn" id="script-btn" title="Текст виступу (S)">Текст</button>
+    <button class="iconbtn" id="prev" aria-label="Назад"><svg class="ico"><use href="#i-prev"/></svg></button>
+    <span class="counter" id="counter">1/8</span>
+    <button class="iconbtn" id="next" aria-label="Далі"><svg class="ico"><use href="#i-next"/></svg></button>
+  </div>
+</nav>
+
+<div class="script" id="script" hidden>
+  <div class="sc-inner">
+    <header><h2>Текст виступу · ~3:00</h2><button class="btn" id="script-close">Закрити</button></header>
+    <p class="meta">Близько 420 слів у спокійному темпі. Час біля кожного блоку означає, коли його починати. Демо на слайді «Правила» гортайте клавішею <kbd>→</kbd> прямо під час розповіді.</p>
+    <div id="script-body"></div>
+  </div>
+</div>
+
+<script type="application/octet-stream" id="wasm-b64">__WASM_B64__</script>
+<script>
+/*__ENGINE_JS__*/
+</script>
+<script>
+/*__SCENARIOS__*/
+</script>
+<script>
+/*__APP_JS__*/
+</script>
